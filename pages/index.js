@@ -9,7 +9,7 @@ export default function Home() {
   const router = useRouter();
   const [profiles, setProfiles] = useState([]);
   const [user, setUser] = useState(null);
-  const [selectedCounty, setSelectedCounty] = useState('');
+  const [selectedWard, setSelectedWard] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [searchLocation, setSearchLocation] = useState('');
   const [filteredLocations, setFilteredLocations] = useState([]);
@@ -36,18 +36,18 @@ export default function Home() {
   useEffect(() => {
     if (!searchLocation || !Nairobi) return setFilteredLocations([]);
     const matches = [];
-    Object.keys(Nairobi).forEach((county) => {
-      Nairobi[county].forEach((area) => {
+    Object.keys(Nairobi).forEach((ward) => {
+      Nairobi[ward].forEach((area) => {
         if (area.toLowerCase().includes(searchLocation.toLowerCase())) {
-          matches.push({ county, area });
+          matches.push({ ward, area });
         }
       });
     });
     setFilteredLocations(matches);
   }, [searchLocation]);
 
-  const handleLocationSelect = (county, area) => {
-    setSelectedCounty(county);
+  const handleLocationSelect = (ward, area) => {
+    setSelectedWard(ward);
     setSelectedArea(area);
     setSearchLocation(area);
     setFilteredLocations([]);
@@ -56,14 +56,19 @@ export default function Home() {
   const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
 
   let filteredProfiles = profiles.filter((p) => {
-    if (!searchLocation) return true;
-    return [p.county, p.city, p.ward, p.area, ...(p.nearby || [])]
-      .join(' ')
-      .toLowerCase()
-      .includes(searchLocation.toLowerCase());
+    if (!searchLocation && !selectedWard && !selectedArea) return true;
+    const wardMatch = selectedWard ? p.ward === selectedWard : true;
+    const areaMatch = selectedArea ? p.area === selectedArea : true;
+    const searchMatch = searchLocation
+      ? [p.county, p.city, p.ward, p.area, ...(p.nearby || [])]
+          .join(' ')
+          .toLowerCase()
+          .includes(searchLocation.toLowerCase())
+      : true;
+    return wardMatch && areaMatch && searchMatch;
   });
 
-  if (!searchLocation) {
+  if (!searchLocation && !selectedWard && !selectedArea) {
     const membershipGroups = ['VVIP', 'VIP', 'Prime', 'Regular'];
     let selectedGroup = [];
     for (const m of membershipGroups) {
@@ -115,8 +120,8 @@ export default function Home() {
     setUser(null);
   };
 
-  const counties = Nairobi ? Object.keys(Nairobi) : [];
-  const areas = selectedCounty && Nairobi ? Nairobi[selectedCounty] : [];
+  const wards = Nairobi ? Object.keys(Nairobi) : [];
+  const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
 
   return (
     <div className={styles.container}>
@@ -156,19 +161,31 @@ export default function Home() {
         </div>
       </header>
       <div className={styles.search}>
-        <select value={selectedCounty} onChange={(e) => setSelectedCounty(e.target.value)} className={styles.select}>
-          <option value="">Select County</option>
-          {counties.map((c) => (
-            <option key={c} value={c}>
-              {c}
+        <select
+          value={selectedWard}
+          onChange={(e) => {
+            setSelectedWard(e.target.value);
+            setSelectedArea(''); // Reset area when ward changes
+          }}
+          className={styles.select}
+        >
+          <option value="">Select Ward</option>
+          {wards.map((ward) => (
+            <option key={ward} value={ward}>
+              {ward}
             </option>
           ))}
         </select>
-        <select value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)} className={styles.select}>
+        <select
+          value={selectedArea}
+          onChange={(e) => setSelectedArea(e.target.value)}
+          className={styles.select}
+          disabled={!selectedWard}
+        >
           <option value="">Select Area</option>
-          {areas.map((a) => (
-            <option key={a} value={a}>
-              {a}
+          {areas.map((area) => (
+            <option key={area} value={area}>
+              {area}
             </option>
           ))}
         </select>
@@ -184,10 +201,10 @@ export default function Home() {
             {filteredLocations.map((loc, idx) => (
               <div
                 key={idx}
-                onClick={() => handleLocationSelect(loc.county, loc.area)}
+                onClick={() => handleLocationSelect(loc.ward, loc.area)}
                 className={styles.dropdownItem}
               >
-                {loc.county} - {loc.area}
+                {loc.ward} - {loc.area}
               </div>
             ))}
           </div>
