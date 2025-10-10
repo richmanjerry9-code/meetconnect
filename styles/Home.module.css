@@ -47,26 +47,37 @@
   background: #555;
 }
 
-.search {
+.locationSearchContainer {
   display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 10px; /* Space below header */
 }
 
-.select {
-  padding: 10px;
+.locationBar {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.smallSelect {
+  padding: 6px;
   border: 1px solid #e91e63;
   border-radius: 5px;
-  font-size: 1rem;
+  font-size: 0.9rem;
+  width: 120px; /* Shrunk size */
+}
+
+.smallSearchInput {
+  padding: 6px;
+  border: 1px solid #e91e63;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  width: 150px; /* Shrunk size */
 }
 
 .searchInput {
-  padding: 10px;
-  border: 1px solid #e91e63;
-  border-radius: 5px;
-  font-size: 1rem;
-  flex-grow: 1;
+  display: none; /* Hide the original stretched version */
 }
 
 .dropdown {
@@ -218,7 +229,7 @@
   .profiles {
     grid-template-columns: 1fr;
   }
-  .select, .searchInput {
+  .smallSelect, .smallSearchInput {
     max-width: 100%;
   }
   .modalContent {
@@ -238,9 +249,10 @@
     font-size: 0.9rem;
     padding: 8px 16px;
   }
-  .select, .searchInput {
+  .smallSelect, .smallSearchInput {
     font-size: 0.9rem;
-    padding: 8px;
+    padding: 6px;
+    width: 100px; /* Further adjust for small screens */
   }
   .profileImage, .placeholderImage {
     width: 80px;

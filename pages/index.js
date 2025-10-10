@@ -56,7 +56,6 @@ export default function Home() {
   const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
 
   let filteredProfiles = profiles.filter((p) => {
-    if (!searchLocation && !selectedWard && !selectedArea) return true;
     const wardMatch = selectedWard ? p.ward === selectedWard : true;
     const areaMatch = selectedArea ? p.area === selectedArea : true;
     const searchMatch = searchLocation
@@ -160,41 +159,43 @@ export default function Home() {
           )}
         </div>
       </header>
-      <div className={styles.search}>
-        <select
-          value={selectedWard}
-          onChange={(e) => {
-            setSelectedWard(e.target.value);
-            setSelectedArea(''); // Reset area when ward changes
-          }}
-          className={styles.select}
-        >
-          <option value="">Select Ward</option>
-          {wards.map((ward) => (
-            <option key={ward} value={ward}>
-              {ward}
-            </option>
-          ))}
-        </select>
-        <select
-          value={selectedArea}
-          onChange={(e) => setSelectedArea(e.target.value)}
-          className={styles.select}
-          disabled={!selectedWard}
-        >
-          <option value="">Select Area</option>
-          {areas.map((area) => (
-            <option key={area} value={area}>
-              {area}
-            </option>
-          ))}
-        </select>
+      <div className={styles.locationSearchContainer}>
+        <div className={styles.locationBar}>
+          <select
+            value={selectedWard}
+            onChange={(e) => {
+              setSelectedWard(e.target.value);
+              setSelectedArea(''); // Reset area when ward changes
+            }}
+            className={styles.smallSelect}
+          >
+            <option value="">Select Ward</option>
+            {wards.map((ward) => (
+              <option key={ward} value={ward}>
+                {ward}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedArea}
+            onChange={(e) => setSelectedArea(e.target.value)}
+            className={styles.smallSelect}
+            disabled={!selectedWard}
+          >
+            <option value="">Select Area</option>
+            {areas.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </select>
+        </div>
         <input
           type="text"
           placeholder="Search location..."
           value={searchLocation}
           onChange={(e) => setSearchLocation(e.target.value)}
-          className={styles.searchInput}
+          className={styles.smallSearchInput}
         />
         {filteredLocations.length > 0 && (
           <div className={styles.dropdown}>
