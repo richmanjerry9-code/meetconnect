@@ -2,19 +2,18 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
-import styles from '../styles/Admin.module.css';
 
 const ADMIN_PASSWORD = '447962Pa$$word';
 
 const parseCSV = (text) => {
-  const lines = text.split('\n').filter(Boolean);
-  const headers = lines[0].split(',').map((h) => h.trim());
-  return lines.slice(1).map((line) => {
-    const values = line.split(',').map((v) => v.trim());
-    const obj = {};
-    headers.forEach((h, i) => (obj[h] = values[i] || (h === 'membership' ? 'Regular' : '')));
-    if (!obj.membership) obj.membership = 'Regular';
-    return obj;
+  const lines = text.split('\n').filter(line => line.trim() !== '');
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const values = line.split(',').map(v => v.trim());
+    return headers.reduce((obj, h, i) => {
+      obj[h] = values[i] || '';
+      return obj;
+    }, {});
   });
 };
 
@@ -26,7 +25,6 @@ export default function AdminPanel() {
   const [uploadFile, setUploadFile] = useState(null);
   const [currentViewers, setCurrentViewers] = useState(0);
   const [allVisits, setAllVisits] = useState([]);
-
   const [form, setForm] = useState({
     username: '', email: '', phone: '', role: 'User', membership: 'Regular',
     name: '', gender: '', age: '', nationality: '', county: '', ward: '',
@@ -46,10 +44,9 @@ export default function AdminPanel() {
     const updatedVisits = [...storedVisits, newVisit];
     localStorage.setItem('visits', JSON.stringify(updatedVisits));
     setAllVisits(updatedVisits);
-    setCurrentViewers((prev) => prev + 1);
-    const handleUnload = () => setCurrentViewers((prev) => Math.max(prev - 1, 0));
-    window.addEventListener('beforeunload', handleUnload);
-    return () => window.removeEventListener('beforeunload', handleUnload);
+    setCurrentViewers(prev => prev + 1);
+    window.addEventListener('beforeunload', () => setCurrentViewers(prev => Math.max(prev - 1, 0)));
+    return () => window.removeEventListener('beforeunload', () => {});
   }, [refresh]);
 
   const handleLogin = () => {
@@ -65,27 +62,25 @@ export default function AdminPanel() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox' && name === 'services') {
-      const updated = checked
-        ? [...form.services, value]
-        : form.services.filter((s) => s !== value);
-      setForm({ ...form, services: updated });
-    } else if (type === 'checkbox' && name === 'nearby') {
-      const updated = checked
-        ? [...form.nearby, value]
-        : form.nearby.filter((n) => n !== value);
-      setForm({ ...form, nearby: updated.slice(0, 4) });
-    } else {
-      setForm({ ...form, [name]: value });
-    }
+    setForm(prev => {
+      if (type === 'checkbox' && name === 'services') {
+        const services = checked ? [...prev.services, value] : prev.services.filter(s => s !== value);
+        return { ...prev, services };
+      } else if (type === 'checkbox' && name === 'nearby') {
+        const nearby = checked ? [...prev.nearby, value].slice(0, 4) : prev.nearby.filter(n => n !== value);
+        return { ...prev, nearby };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleProfilePic = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => setForm({ ...form, profilePic: reader.result });
-    reader.readAsDataURL(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => setForm(prev => ({ ...prev, profilePic: e.target.result }));
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSave = () => {
@@ -94,27 +89,13 @@ export default function AdminPanel() {
       return;
     }
     const existing = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const duplicate = existing.find(
-      (u) => u.username === form.username && u.username !== form.username
-    );
-    if (duplicate) {
+    if (existing.find(u => u.username === form.username)) {
       alert('Username already exists!');
       return;
     }
-    const updatedUser = { ...form };
-    const index = existing.findIndex((u) => u.username === form.username && form.username !== '');
-    if (index >= 0) {
-      if (existing[index].role === 'Admin' && form.role !== 'Admin') {
-        alert('Cannot downgrade Admin role!');
-        return;
-      }
-      existing[index] = updatedUser;
-    } else {
-      existing.push(updatedUser);
-    }
-    localStorage.setItem('profiles', JSON.stringify(existing));
-    alert('✅ Profile saved successfully!');
-    setUsers(existing);
+    const newUsers = [...existing, form];
+    localStorage.setItem('profiles', JSON.stringify(newUsers));
+    setUsers(newUsers);
     setForm({
       username: '', email: '', phone: '', role: 'User', membership: 'Regular',
       name: '', gender: '', age: '', nationality: '', county: '', ward: '',
@@ -124,16 +105,10 @@ export default function AdminPanel() {
   };
 
   const handleDelete = (username) => {
-    const existing = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const user = existing.find((u) => u.username === username);
-    if (user?.role === 'Admin') {
-      alert('Cannot delete admin!');
-      return;
-    }
     if (!confirm('Delete this profile?')) return;
-    const filtered = existing.filter((u) => u.username !== username);
-    localStorage.setItem('profiles', JSON.stringify(filtered));
-    setUsers(filtered);
+    const newUsers = users.filter(u => u.username !== username);
+    localStorage.setItem('profiles', JSON.stringify(newUsers));
+    setUsers(newUsers);
     setRefresh(!refresh);
   };
 
@@ -142,15 +117,10 @@ export default function AdminPanel() {
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = parseCSV(e.target.result);
-      const existing = JSON.parse(localStorage.getItem('profiles') || '[]');
-      const newUsers = data.filter(
-        (newUser) => !existing.some((u) => u.username === newUser.username)
-      );
-      const allUsers = [...existing, ...newUsers];
-      localStorage.setItem('profiles', JSON.stringify(allUsers));
-      alert('Bulk upload complete!');
+      const newUsers = [...users, ...data];
+      localStorage.setItem('profiles', JSON.stringify(newUsers));
+      setUsers(newUsers);
       setUploadFile(null);
-      setUsers(allUsers);
       setRefresh(!refresh);
     };
     reader.readAsText(uploadFile);
@@ -161,22 +131,20 @@ export default function AdminPanel() {
 
   if (!loggedIn) {
     return (
-      <div className={styles.container}>
+      <div style={{ padding: '20px', fontFamily: 'Arial', background: '#f0f0f0', textAlign: 'center' }}>
         <Head>
-          <title>Meetconnect Admin Login</title>
-          <meta name="description" content="Admin login for Meetconnect management" />
+          <title>Admin Login</title>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="robots" content="noindex, nofollow" />
         </Head>
-        <h1 className={styles.title}>Admin Login</h1>
+        <h1>Admin Login</h1>
         <input
           type="password"
-          placeholder="Admin password"
           value={passwordInput}
           onChange={(e) => setPasswordInput(e.target.value)}
-          className={styles.input}
+          style={{ padding: '10px', margin: '10px', width: '200px' }}
         />
-        <button onClick={handleLogin} className={styles.button}>
+        <button onClick={handleLogin} style={{ padding: '10px 20px', background: '#4CAF50', color: 'white', border: 'none' }}>
           Login
         </button>
       </div>
@@ -184,196 +152,125 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className={styles.container}>
+    <div style={{ padding: '20px', fontFamily: 'Arial', background: '#f0f0f0' }}>
       <Head>
-        <title>Meetconnect Admin Panel</title>
-        <meta name="description" content="Admin dashboard for managing Meetconnect profiles" />
+        <title>Admin Panel</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="noindex, nofollow" />
       </Head>
-      <h1 className={styles.title}>Admin Panel</h1>
-      <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
+      <h1>Admin Panel</h1>
+      <button onClick={handleLogout} style={{ padding: '10px 20px', background: '#f44336', color: 'white', border: 'none' }}>
         Logout
       </button>
-      <div className={styles.stats}>
-        <div className={styles.statCard}>Total Profiles: {users.length}</div>
-        <div className={styles.statCard}>Users: {users.filter((u) => u.role === 'User').length}</div>
-        <div className={styles.statCard}>Admins: {users.filter((u) => u.role === 'Admin').length}</div>
-        <div className={styles.statCard}>Current Viewers: {currentViewers}</div>
-        <div className={styles.statCard}>All-Time Visits: {allVisits.length}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', margin: '20px 0' }}>
+        <div style={{ background: '#fff', padding: '10px' }}>Total Profiles: {users.length}</div>
+        <div style={{ background: '#fff', padding: '10px' }}>Users: {users.filter(u => u.role === 'User').length}</div>
+        <div style={{ background: '#fff', padding: '10px' }}>Admins: {users.filter(u => u.role === 'Admin').length}</div>
+        <div style={{ background: '#fff', padding: '10px' }}>Current Viewers: {currentViewers}</div>
+        <div style={{ background: '#fff', padding: '10px' }}>All-Time Visits: {allVisits.length}</div>
       </div>
-      <div className={styles.formContainer}>
-        <h2>Create / Edit Profile</h2>
-        <input name="username" placeholder="Username" value={form.username} onChange={handleChange} className={styles.input} />
-        <input name="email" placeholder="Email (optional)" value={form.email} onChange={handleChange} className={styles.input} />
-        <input name="phone" placeholder="Phone" value={form.phone} onChange={handleChange} className={styles.input} />
-        <select name="role" value={form.role} onChange={handleChange} className={styles.input}>
+      <div style={{ background: '#fff', padding: '20px', marginBottom: '20px' }}>
+        <h2>Create Profile</h2>
+        <input name="username" placeholder="Username" value={form.username} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <input name="email" placeholder="Email" value={form.email} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <input name="phone" placeholder="Phone" value={form.phone} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <select name="role" value={form.role} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }}>
           <option>User</option>
           <option>Admin</option>
         </select>
-        <select name="membership" value={form.membership} onChange={handleChange} className={styles.input}>
-          <option>VVIP</option>
-          <option>VIP</option>
-          <option>Prime</option>
+        <select name="membership" value={form.membership} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }}>
           <option>Regular</option>
+          <option>VIP</option>
+          <option>VVIP</option>
         </select>
-        <input name="name" placeholder="Full Name" value={form.name} onChange={handleChange} className={styles.input} />
-        <select name="gender" value={form.gender} onChange={handleChange} className={styles.input}>
+        <input name="name" placeholder="Name" value={form.name} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <select name="gender" value={form.gender} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }}>
           <option value="">Select Gender</option>
           <option>Male</option>
           <option>Female</option>
         </select>
-        <input name="age" type="number" placeholder="Age" value={form.age} onChange={handleChange} className={styles.input} />
-        <input name="nationality" placeholder="Nationality" value={form.nationality} onChange={handleChange} className={styles.input} />
-        <input name="county" placeholder="County" value={form.county} onChange={handleChange} className={styles.input} />
-        <select name="ward" value={form.ward} onChange={handleChange} className={styles.input}>
+        <input name="age" type="number" placeholder="Age" value={form.age} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <input name="nationality" placeholder="Nationality" value={form.nationality} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <input name="county" placeholder="County" value={form.county} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <select name="ward" value={form.ward} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }}>
           <option value="">Select Ward</option>
-          {wards.map((w) => (
-            <option key={w}>{w}</option>
-          ))}
+          {wards.map(w => <option key={w}>{w}</option>)}
         </select>
         {form.ward && (
-          <select name="area" value={form.area} onChange={handleChange} className={styles.input}>
+          <select name="area" value={form.area} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }}>
             <option value="">Select Area</option>
-            {areasForWard.map((a) => (
-              <option key={a}>{a}</option>
-            ))}
+            {areasForWard.map(a => <option key={a}>{a}</option>)}
           </select>
         )}
-        {form.ward && (
-          <div className={styles.checkboxGroup}>
-            <label>Nearby Places (max 4)</label>
-            {areasForWard.map((place) => (
-              <div key={place}>
-                <input
-                  type="checkbox"
-                  name="nearby"
-                  value={place}
-                  checked={form.nearby.includes(place)}
-                  onChange={handleChange}
-                />
-                <span>{place}</span>
-              </div>
-            ))}
+        {form.ward && areasForWard.map(place => (
+          <div key={place} style={{ margin: '5px 0' }}>
+            <input type="checkbox" name="nearby" value={place} checked={form.nearby.includes(place)} onChange={handleChange} />
+            <span>{place}</span>
           </div>
+        ))}
+        {servicesList.map(service => (
+          <div key={service} style={{ margin: '5px 0' }}>
+            <input type="checkbox" name="services" value={service} checked={form.services.includes(service)} onChange={handleChange} />
+            <span>{service}</span>
+          </div>
+        ))}
+        {form.services.includes('Other Services') && (
+          <input name="otherServices" placeholder="Other Services" value={form.otherServices} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
         )}
-        <div className={styles.checkboxGroup}>
-          <label>Services Offered</label>
-          {servicesList.map((s) => (
-            <div key={s}>
-              <input
-                type="checkbox"
-                name="services"
-                value={s}
-                checked={form.services.includes(s)}
-                onChange={handleChange}
-              />
-              <span>{s}</span>
-            </div>
-          ))}
-          {form.services.includes('Other Services') && (
-            <input
-              name="otherServices"
-              placeholder="Other Services"
-              value={form.otherServices}
-              onChange={handleChange}
-              className={styles.input}
-            />
-          )}
-        </div>
-        <input
-          name="incallRate"
-          type="number"
-          placeholder="Incalls Rate (KSh/hr)"
-          value={form.incallRate}
-          onChange={handleChange}
-          className={styles.input}
-        />
-        <input
-          name="outcallRate"
-          type="number"
-          placeholder="Outcalls Rate (KSh/hr)"
-          value={form.outcallRate}
-          onChange={handleChange}
-          className={styles.input}
-        />
-        <label className={styles.profilePic}>
-          <div>
-            {form.profilePic ? (
-              <Image
-                src={form.profilePic}
-                alt="Profile"
-                layout="responsive"
-                width={100}
-                height={100}
-                style={{ objectFit: 'cover' }}
-              />
-            ) : (
-              <span>Click to add pic</span>
-            )}
+        <input name="incallRate" type="number" placeholder="Incall Rate" value={form.incallRate} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <input name="outcallRate" type="number" placeholder="Outcall Rate" value={form.outcallRate} onChange={handleChange} style={{ padding: '10px', margin: '5px 0', width: '200px' }} />
+        <label style={{ display: 'block', margin: '5px 0' }}>
+          <input type="file" accept="image/*" onChange={handleProfilePic} style={{ display: 'none' }} />
+          <div style={{ width: '120px', height: '120px', border: '2px dashed #000', textAlign: 'center', lineHeight: '120px' }}>
+            {form.profilePic ? <Image src={form.profilePic} alt="Profile" width={120} height={120} /> : 'Upload Pic'}
           </div>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleProfilePic}
-            style={{ display: 'none' }}
-          />
         </label>
-        <button type="button" onClick={handleSave} className={styles.button}>
-          Save Profile
+        <button onClick={handleSave} style={{ padding: '10px 20px', background: '#4CAF50', color: 'white', border: 'none' }}>
+          Save
         </button>
       </div>
-      <div className={styles.formContainer}>
+      <div style={{ background: '#fff', padding: '20px', marginBottom: '20px' }}>
         <h2>Bulk Upload</h2>
         <input type="file" accept=".csv" onChange={(e) => setUploadFile(e.target.files[0])} />
-        <button type="button" onClick={handleUpload} className={styles.button}>
-          Upload CSV
+        <button onClick={handleUpload} style={{ padding: '10px 20px', background: '#4CAF50', color: 'white', border: 'none' }}>
+          Upload
         </button>
       </div>
-      <div className={styles.formContainer}>
+      <div style={{ background: '#fff', padding: '20px' }}>
         <h2>All Users</h2>
-        <div className={styles.tableWrapper}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Username</th>
-                <th>Email</th>
-                <th>Phone</th>
-                <th>Role</th>
-                <th>Membership</th>
-                <th>Name</th>
-                <th>County</th>
-                <th>Ward</th>
-                <th>Actions</th>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#ddd' }}>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Username</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Email</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Phone</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Role</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Membership</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Name</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>County</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Ward</th>
+              <th style={{ padding: '10px', border: '1px solid #ccc' }}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.username}>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.username}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.email || 'N/A'}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.phone}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.role}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.membership || 'Regular'}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.name}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.county}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>{u.ward}</td>
+                <td style={{ padding: '10px', border: '1px solid #ccc' }}>
+                  <button onClick={() => setForm(u)} style={{ padding: '5px 10px', background: '#2196F3', color: 'white', border: 'none' }}>Edit</button>
+                  <button onClick={() => handleDelete(u.username)} style={{ padding: '5px 10px', background: '#f44336', color: 'white', border: 'none', marginLeft: '5px' }}>Delete</button>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.username}>
-                  <td>{u.username}</td>
-                  <td>{u.email || 'N/A'}</td>
-                  <td>{u.phone}</td>
-                  <td>{u.role}</td>
-                  <td>{u.membership || 'Regular'}</td>
-                  <td>{u.name}</td>
-                  <td>{u.county}</td>
-                  <td>{u.ward}</td>
-                  <td>
-                    <button className={styles.actionButton} onClick={() => setForm({ ...u })}>
-                      Edit
-                    </button>
-                    <button
-                      className={`${styles.actionButton} ${styles.delete}`}
-                      onClick={() => handleDelete(u.username)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
