@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
+import styles from '../styles/Admin.module.css';
 
 const ADMIN_PASSWORD = '447962Pa$$word';
 
@@ -47,19 +49,8 @@ export default function AdminPanel() {
   });
 
   const servicesList = [
-    'Dinner Date',
-    'Travel Companion',
-    'Lesbian Show',
-    'Rimming',
-    'Raw BJ',
-    'BJ',
-    'GFE',
-    'COB – Cum On Body',
-    'CIM – Cum In Mouth',
-    '3 Some',
-    'Anal',
-    'Massage',
-    'Other Services',
+    'Dinner Date', 'Travel Companion', 'Lesbian Show', 'Rimming', 'Raw BJ', 'BJ',
+    'GFE', 'COB – Cum On Body', 'CIM – Cum In Mouth', '3 Some', 'Anal', 'Massage', 'Other Services',
   ];
 
   useEffect(() => {
@@ -140,24 +131,9 @@ export default function AdminPanel() {
     alert('✅ Profile saved successfully!');
     setUsers(existing);
     setForm({
-      username: '',
-      email: '',
-      phone: '',
-      role: 'User',
-      membership: 'Regular',
-      name: '',
-      gender: '',
-      age: '',
-      nationality: '',
-      county: '',
-      ward: '',
-      area: '',
-      nearby: [],
-      services: [],
-      otherServices: '',
-      incallRate: '',
-      outcallRate: '',
-      profilePic: null,
+      username: '', email: '', phone: '', role: 'User', membership: 'Regular',
+      name: '', gender: '', age: '', nationality: '', county: '', ward: '',
+      area: '', nearby: [], services: [], otherServices: '', incallRate: '', outcallRate: '', profilePic: null,
     });
     setRefresh(!refresh);
   };
@@ -200,16 +176,22 @@ export default function AdminPanel() {
 
   if (!loggedIn) {
     return (
-      <div style={{ padding: 20, fontFamily: 'Poppins, sans-serif' }}>
+      <div className={styles.container}>
+        <Head>
+          <title>Meetconnect Admin Login</title>
+          <meta name="description" content="Admin login for Meetconnect management" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <meta name="robots" content="noindex, nofollow" />
+        </Head>
         <h1>Admin Login</h1>
         <input
-          type='password'
-          placeholder='Admin password'
+          type="password"
+          placeholder="Admin password"
           value={passwordInput}
           onChange={(e) => setPasswordInput(e.target.value)}
-          style={inputStyle}
+          className={styles.input}
         />
-        <button onClick={handleLogin} style={btnStyle}>
+        <button onClick={handleLogin} className={styles.button}>
           Login
         </button>
       </div>
@@ -217,122 +199,125 @@ export default function AdminPanel() {
   }
 
   return (
-    <div style={{ padding: 20, fontFamily: 'Poppins, sans-serif', background: '#f8f4ff', minHeight: '100vh' }}>
-      <h1 style={{ color: '#6a0dad' }}>Admin Panel</h1>
-      <button
-        onClick={handleLogout}
-        style={{ ...btnStyle, background: '#e91e63', marginBottom: 20 }}
-      >
+    <div className={styles.container}>
+      <Head>
+        <title>Meetconnect Admin Panel</title>
+        <meta name="description" content="Admin dashboard for managing Meetconnect profiles" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+      <h1 className={styles.title}>Admin Panel</h1>
+      <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
         Logout
       </button>
-      <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
-        <div style={statCardStyle}>Total Profiles: {users.length}</div>
-        <div style={statCardStyle}>Users: {users.filter((u) => u.role === 'User').length}</div>
-        <div style={statCardStyle}>Admins: {users.filter((u) => u.role === 'Admin').length}</div>
-        <div style={statCardStyle}>Current Viewers: {currentViewers}</div>
-        <div style={statCardStyle}>All-Time Visits: {allVisits.length}</div>
+      <div className={styles.stats}>
+        <div className={styles.statCard}>Total Profiles: {users.length}</div>
+        <div className={styles.statCard}>Users: {users.filter((u) => u.role === 'User').length}</div>
+        <div className={styles.statCard}>Admins: {users.filter((u) => u.role === 'Admin').length}</div>
+        <div className={styles.statCard}>Current Viewers: {currentViewers}</div>
+        <div className={styles.statCard}>All-Time Visits: {allVisits.length}</div>
       </div>
-      <div style={formContainerStyle}>
-        <h2 style={{ color: '#6a0dad' }}>Create / Edit Profile</h2>
-        <input name='username' placeholder='Username' value={form.username} onChange={handleChange} style={inputStyle} />
-        <input name='email' placeholder='Email (optional)' value={form.email} onChange={handleChange} style={inputStyle} />
-        <input name='phone' placeholder='Phone' value={form.phone} onChange={handleChange} style={inputStyle} />
-        <select name='role' value={form.role} onChange={handleChange} style={inputStyle}>
+      <div className={styles.formContainer}>
+        <h2>Create / Edit Profile</h2>
+        <input name="username" placeholder="Username" value={form.username} onChange={handleChange} className={styles.input} />
+        <input name="email" placeholder="Email (optional)" value={form.email} onChange={handleChange} className={styles.input} />
+        <input name="phone" placeholder="Phone" value={form.phone} onChange={handleChange} className={styles.input} />
+        <select name="role" value={form.role} onChange={handleChange} className={styles.input}>
           <option>User</option>
           <option>Admin</option>
         </select>
-        <select name='membership' value={form.membership} onChange={handleChange} style={inputStyle}>
+        <select name="membership" value={form.membership} onChange={handleChange} className={styles.input}>
           <option>VVIP</option>
           <option>VIP</option>
           <option>Prime</option>
           <option>Regular</option>
         </select>
-        <input name='name' placeholder='Full Name' value={form.name} onChange={handleChange} style={inputStyle} />
-        <select name='gender' value={form.gender} onChange={handleChange} style={inputStyle}>
-          <option value=''>Select Gender</option>
+        <input name="name" placeholder="Full Name" value={form.name} onChange={handleChange} className={styles.input} />
+        <select name="gender" value={form.gender} onChange={handleChange} className={styles.input}>
+          <option value="">Select Gender</option>
           <option>Male</option>
           <option>Female</option>
         </select>
-        <input name='age' type='number' placeholder='Age' value={form.age} onChange={handleChange} style={inputStyle} />
-        <input name='nationality' placeholder='Nationality' value={form.nationality} onChange={handleChange} style={inputStyle} />
-        <input name='county' placeholder='County' value={form.county} onChange={handleChange} style={inputStyle} />
-        <select name='ward' value={form.ward} onChange={handleChange} style={inputStyle}>
-          <option value=''>Select Ward</option>
+        <input name="age" type="number" placeholder="Age" value={form.age} onChange={handleChange} className={styles.input} />
+        <input name="nationality" placeholder="Nationality" value={form.nationality} onChange={handleChange} className={styles.input} />
+        <input name="county" placeholder="County" value={form.county} onChange={handleChange} className={styles.input} />
+        <select name="ward" value={form.ward} onChange={handleChange} className={styles.input}>
+          <option value="">Select Ward</option>
           {wards.map((w) => (
             <option key={w}>{w}</option>
           ))}
         </select>
         {form.ward && (
-          <select name='area' value={form.area} onChange={handleChange} style={inputStyle}>
-            <option value=''>Select Area</option>
+          <select name="area" value={form.area} onChange={handleChange} className={styles.input}>
+            <option value="">Select Area</option>
             {areasForWard.map((a) => (
               <option key={a}>{a}</option>
             ))}
           </select>
         )}
-        {form.area && (
-          <div style={{ textAlign: 'left', margin: '10px 0' }}>
+        {form.ward && (
+          <div className={styles.checkboxGroup}>
             <label>Nearby Places (max 4)</label>
             {areasForWard.map((place) => (
               <div key={place}>
                 <input
-                  type='checkbox'
-                  name='nearby'
+                  type="checkbox"
+                  name="nearby"
                   value={place}
                   checked={form.nearby.includes(place)}
                   onChange={handleChange}
                 />
-                <span style={{ marginLeft: 5 }}>{place}</span>
+                <span>{place}</span>
               </div>
             ))}
           </div>
         )}
-        <div style={{ textAlign: 'left', margin: '10px 0' }}>
+        <div className={styles.checkboxGroup}>
           <label>Services Offered</label>
           {servicesList.map((s) => (
             <div key={s}>
               <input
-                type='checkbox'
-                name='services'
+                type="checkbox"
+                name="services"
                 value={s}
                 checked={form.services.includes(s)}
                 onChange={handleChange}
               />
-              <span style={{ marginLeft: 5 }}>{s}</span>
+              <span>{s}</span>
             </div>
           ))}
           {form.services.includes('Other Services') && (
             <input
-              name='otherServices'
-              placeholder='Other Services'
+              name="otherServices"
+              placeholder="Other Services"
               value={form.otherServices}
               onChange={handleChange}
-              style={inputStyle}
+              className={styles.input}
             />
           )}
         </div>
         <input
-          name='incallRate'
-          type='number'
-          placeholder='Incalls Rate (KSh/hr)'
+          name="incallRate"
+          type="number"
+          placeholder="Incalls Rate (KSh/hr)"
           value={form.incallRate}
           onChange={handleChange}
-          style={inputStyle}
+          className={styles.input}
         />
         <input
-          name='outcallRate'
-          type='number'
-          placeholder='Outcalls Rate (KSh/hr)'
+          name="outcallRate"
+          type="number"
+          placeholder="Outcalls Rate (KSh/hr)"
           value={form.outcallRate}
           onChange={handleChange}
-          style={inputStyle}
+          className={styles.input}
         />
-        <label style={{ display: 'block', margin: '10px 0', cursor: 'pointer' }}>
-          <div style={profilePicStyle}>
+        <label className={styles.profilePic}>
+          <div>
             {form.profilePic ? (
               <Image
                 src={form.profilePic}
-                alt='Profile'
+                alt="Profile"
                 width={120}
                 height={120}
                 style={{ objectFit: 'cover' }}
@@ -342,119 +327,68 @@ export default function AdminPanel() {
             )}
           </div>
           <input
-            type='file'
-            accept='image/*'
+            type="file"
+            accept="image/*"
             onChange={handleProfilePic}
             style={{ display: 'none' }}
           />
         </label>
-        <button type='button' onClick={handleSave} style={btnStyle}>
+        <button type="button" onClick={handleSave} className={styles.button}>
           Save Profile
         </button>
       </div>
-      <div style={formContainerStyle}>
-        <h2 style={{ color: '#6a0dad' }}>Bulk Upload</h2>
-        <input type='file' accept='.csv' onChange={(e) => setUploadFile(e.target.files[0])} />
-        <button type='button' onClick={handleUpload} style={{ ...btnStyle, marginTop: 10 }}>
+      <div className={styles.formContainer}>
+        <h2>Bulk Upload</h2>
+        <input type="file" accept=".csv" onChange={(e) => setUploadFile(e.target.files[0])} />
+        <button type="button" onClick={handleUpload} className={styles.button}>
           Upload CSV
         </button>
       </div>
-      <div style={formContainerStyle}>
-        <h2 style={{ color: '#6a0dad' }}>All Users</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Username</th>
-              <th style={thStyle}>Email</th>
-              <th style={thStyle}>Phone</th>
-              <th style={thStyle}>Role</th>
-              <th style={thStyle}>Membership</th>
-              <th style={thStyle}>Name</th>
-              <th style={thStyle}>County</th>
-              <th style={thStyle}>Ward</th>
-              <th style={thStyle}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.username}>
-                <td style={tdStyle}>{u.username}</td>
-                <td style={tdStyle}>{u.email || 'N/A'}</td>
-                <td style={tdStyle}>{u.phone}</td>
-                <td style={tdStyle}>{u.role}</td>
-                <td style={tdStyle}>{u.membership || 'Regular'}</td>
-                <td style={tdStyle}>{u.name}</td>
-                <td style={tdStyle}>{u.county}</td>
-                <td style={tdStyle}>{u.ward}</td>
-                <td style={tdStyle}>
-                  <button style={actionBtn} onClick={() => setForm({ ...u })}>
-                    Edit
-                  </button>
-                  <button
-                    style={{ ...actionBtn, background: '#e91e63' }}
-                    onClick={() => handleDelete(u.username)}
-                  >
-                    Delete
-                  </button>
-                </td>
+      <div className={styles.formContainer}>
+        <h2>All Users</h2>
+        <div className={styles.tableWrapper}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Role</th>
+                <th>Membership</th>
+                <th>Name</th>
+                <th>County</th>
+                <th>Ward</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.username}>
+                  <td>{u.username}</td>
+                  <td>{u.email || 'N/A'}</td>
+                  <td>{u.phone}</td>
+                  <td>{u.role}</td>
+                  <td>{u.membership || 'Regular'}</td>
+                  <td>{u.name}</td>
+                  <td>{u.county}</td>
+                  <td>{u.ward}</td>
+                  <td>
+                    <button className={styles.actionButton} onClick={() => setForm({ ...u })}>
+                      Edit
+                    </button>
+                    <button
+                      className={`${styles.actionButton} ${styles.delete}`}
+                      onClick={() => handleDelete(u.username)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 }
-
-const inputStyle = {
-  display: 'block',
-  width: '100%',
-  padding: 8,
-  margin: '8px 0',
-  borderRadius: 8,
-  border: '1px solid #6a0dad',
-};
-const btnStyle = {
-  background: '#6a0dad',
-  color: '#fff',
-  padding: '8px 15px',
-  borderRadius: 8,
-  border: 'none',
-  cursor: 'pointer',
-};
-const statCardStyle = {
-  flex: 1,
-  background: '#fff',
-  padding: 20,
-  borderRadius: 10,
-  boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-  textAlign: 'center',
-  fontWeight: 'bold',
-};
-const formContainerStyle = {
-  background: '#fff',
-  padding: 20,
-  borderRadius: 10,
-  marginBottom: 20,
-  boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-};
-const thStyle = { padding: 10, borderBottom: '1px solid #ccc', textAlign: 'left' };
-const tdStyle = { padding: 10, borderBottom: '1px solid #eee' };
-const actionBtn = {
-  marginRight: 5,
-  padding: '4px 8px',
-  border: 'none',
-  borderRadius: 5,
-  background: '#6a0dad',
-  color: '#fff',
-  cursor: 'pointer',
-};
-const profilePicStyle = {
-  width: 120,
-  height: 120,
-  background: '#f3e6ff',
-  border: '2px dashed #6a0dad',
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'center',
-};
