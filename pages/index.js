@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
+import styles from '../styles/Home.module.css';
 
 export default function Home() {
   const router = useRouter();
@@ -117,45 +119,51 @@ export default function Home() {
   const areas = selectedCounty && Nairobi ? Nairobi[selectedCounty] : [];
 
   return (
-    <div style={{ minHeight: '100vh', fontFamily: 'Poppins,sans-serif', padding: 20, background: 'linear-gradient(to bottom right,#fff5f7,#ffe6ee)' }}>
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 50 }}>
-        <h1 style={{ color: '#e91e63', fontWeight: 'bold', fontSize: 32, cursor: 'pointer' }} onClick={() => router.push('/')}>
+    <div className={styles.container}>
+      <Head>
+        <title>Meetconnect - Find Your Match</title>
+        <meta name="description" content="Connect with people in Nairobi on Meetconnect" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="index, follow" />
+      </Head>
+      <header className={styles.header}>
+        <h1 onClick={() => router.push('/')} className={styles.title}>
           MeetConnect ❤️
         </h1>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div className={styles.authButtons}>
           {!user && (
             <>
-              <button onClick={() => setShowRegister(true)} style={btnStyle}>
+              <button onClick={() => setShowRegister(true)} className={styles.button}>
                 Register
               </button>
-              <button onClick={() => setShowLogin(true)} style={{ ...btnStyle, background: '#ff80ab' }}>
+              <button onClick={() => setShowLogin(true)} className={`${styles.button} ${styles.login}`}>
                 Login
               </button>
             </>
           )}
           {user && (
             <>
-              <button onClick={() => router.push('/profile-setup')} style={btnStyle}>
+              <button onClick={() => router.push('/profile-setup')} className={styles.button}>
                 My Profile
               </button>
-              <button onClick={handleLogout} style={{ ...btnStyle, background: '#555' }}>
+              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
                 Logout
               </button>
             </>
           )}
         </div>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 15, marginTop: 20, position: 'relative' }}>
-        <select style={selectStyle} value={selectedCounty} onChange={(e) => setSelectedCounty(e.target.value)}>
-          <option value=''>Select County</option>
+      </header>
+      <div className={styles.search}>
+        <select value={selectedCounty} onChange={(e) => setSelectedCounty(e.target.value)} className={styles.select}>
+          <option value="">Select County</option>
           {counties.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
           ))}
         </select>
-        <select style={selectStyle} value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)}>
-          <option value=''>Select Area</option>
+        <select value={selectedArea} onChange={(e) => setSelectedArea(e.target.value)} className={styles.select}>
+          <option value="">Select Area</option>
           {areas.map((a) => (
             <option key={a} value={a}>
               {a}
@@ -163,21 +171,19 @@ export default function Home() {
           ))}
         </select>
         <input
-          type='text'
-          placeholder='Search location...'
+          type="text"
+          placeholder="Search location..."
           value={searchLocation}
           onChange={(e) => setSearchLocation(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid #e91e63', width: 200 }}
+          className={styles.searchInput}
         />
         {filteredLocations.length > 0 && (
-          <div style={{ position: 'absolute', top: 50, left: '50%', transform: 'translateX(-50%)', background: '#fff', border: '1px solid #e91e63', borderRadius: 8, width: 220, maxHeight: 150, overflowY: 'auto', zIndex: 10 }}>
+          <div className={styles.dropdown}>
             {filteredLocations.map((loc, idx) => (
               <div
                 key={idx}
                 onClick={() => handleLocationSelect(loc.county, loc.area)}
-                style={{ padding: '6px 10px', cursor: 'pointer' }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = '#ffe6ee')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+                className={styles.dropdownItem}
               >
                 {loc.county} - {loc.area}
               </div>
@@ -185,14 +191,14 @@ export default function Home() {
           </div>
         )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', justifyContent: 'center', gap: 20, marginTop: 30 }}>
+      <div className={styles.profiles}>
         {searchLocation ? (
           <>
-            {groupedProfiles.VIP.length > 0 && <h2 style={{ gridColumn: '1/-1', color: '#e91e63' }}>VIP Profiles</h2>}
+            {groupedProfiles.VIP.length > 0 && <h2 className={styles.sectionTitle}>VIP Profiles</h2>}
             {groupedProfiles.VIP.map((p, i) => (
               <ProfileCard key={i} p={p} router={router} />
             ))}
-            {groupedProfiles.Prime.length > 0 && <h2 style={{ gridColumn: '1/-1', color: '#e91e63' }}>Prime Profiles</h2>}
+            {groupedProfiles.Prime.length > 0 && <h2 className={styles.sectionTitle}>Prime Profiles</h2>}
             {groupedProfiles.Prime.map((p, i) => (
               <ProfileCard key={i} p={p} router={router} />
             ))}
@@ -205,61 +211,61 @@ export default function Home() {
             <ProfileCard key={i} p={p} router={router} />
           ))
         )}
-        {filteredProfiles.length === 0 && <p style={{ textAlign: 'center', color: '#777', gridColumn: '1/-1' }}>No profiles found.</p>}
+        {filteredProfiles.length === 0 && <p className={styles.noProfiles}>No profiles found.</p>}
       </div>
       {showLogin && (
-        <Modal title='Login' onClose={() => setShowLogin(false)}>
+        <Modal title="Login" onClose={() => setShowLogin(false)}>
           <form onSubmit={handleLogin}>
             <input
-              type='email'
-              placeholder='Email'
+              type="email"
+              placeholder="Email"
               value={loginForm.email}
               onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              style={inputStyle}
+              className={styles.input}
               required
             />
             <input
-              type='password'
-              placeholder='Password'
+              type="password"
+              placeholder="Password"
               value={loginForm.password}
               onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              style={inputStyle}
+              className={styles.input}
               required
             />
-            <button type='submit' style={btnStyle}>
+            <button type="submit" className={styles.button}>
               Login
             </button>
           </form>
         </Modal>
       )}
       {showRegister && (
-        <Modal title='Register' onClose={() => setShowRegister(false)}>
+        <Modal title="Register" onClose={() => setShowRegister(false)}>
           <form onSubmit={handleRegister}>
             <input
-              type='text'
-              placeholder='Full Name'
+              type="text"
+              placeholder="Full Name"
               value={registerForm.name}
               onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
-              style={inputStyle}
+              className={styles.input}
               required
             />
             <input
-              type='email'
-              placeholder='Email'
+              type="email"
+              placeholder="Email"
               value={registerForm.email}
               onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
-              style={inputStyle}
+              className={styles.input}
               required
             />
             <input
-              type='password'
-              placeholder='Password'
+              type="password"
+              placeholder="Password"
               value={registerForm.password}
               onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-              style={inputStyle}
+              className={styles.input}
               required
             />
-            <button type='submit' style={btnStyle}>
+            <button type="submit" className={styles.button}>
               Register
             </button>
           </form>
@@ -269,10 +275,6 @@ export default function Home() {
   );
 }
 
-const inputStyle = { width: '100%', padding: 10, margin: '10px 0', borderRadius: 8, border: '1px solid #e91e63' };
-const btnStyle = { padding: '8px 15px', background: '#e91e63', color: '#fff', borderRadius: 8, border: 'none', cursor: 'pointer' };
-const selectStyle = { padding: 8, borderRadius: 8, border: '1px solid #e91e63' };
-
 function ProfileCard({ p, router }) {
   const handleClick = () => {
     if (!p.username || p.username.trim() === '') {
@@ -280,69 +282,44 @@ function ProfileCard({ p, router }) {
       alert('This profile lacks a username. Please update it in Profile Setup.');
       return;
     }
-    console.log('Navigating to /view-profile/' + p.username);
     router.push(`/view-profile/${encodeURIComponent(p.username)}`);
   };
 
   return (
-    <div
-      style={{
-        background: 'white',
-        borderRadius: 15,
-        padding: 15,
-        textAlign: 'center',
-        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
-        cursor: 'pointer',
-        transition: 'transform 0.3s',
-      }}
-      onClick={handleClick}
-      onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
-      onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-    >
+    <div className={styles.profileCard} onClick={handleClick}>
       {p.profilePic ? (
         <Image
           src={p.profilePic}
           alt={p.name || 'Profile'}
+          layout="responsive"
           width={100}
           height={100}
-          style={{ borderRadius: '50%', objectFit: 'cover', marginBottom: 8 }}
+          className={styles.profileImage}
         />
       ) : (
-        <div style={{ width: 100, height: 100, borderRadius: '50%', background: '#ffe6ee', margin: '0 auto 8px' }} />
+        <div className={styles.placeholderImage} />
       )}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 5 }}>
-        <h3 style={{ margin: 0, color: '#e91e63' }}>{p.name}</h3>
+      <div className={styles.profileInfo}>
+        <h3>{p.name}</h3>
         {p.membership && p.membership !== 'Regular' && (
-          <span
-            style={{
-              fontSize: 10,
-              padding: '2px 5px',
-              background:
-                p.membership === 'VVIP' ? '#ff4500' : p.membership === 'VIP' ? '#ffd700' : p.membership === 'Prime' ? '#ff80ab' : '#aaa',
-              borderRadius: 5,
-              color: '#fff',
-            }}
-          >
+          <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>
             {p.membership}
           </span>
         )}
       </div>
-      <p style={{ fontSize: 13, color: '#555' }}>{p.area || p.city || 'Nairobi'}</p>
+      <p className={styles.location}>{p.area || p.city || 'Nairobi'}</p>
       {p.services && (
-        <div style={{ marginTop: 4 }}>
+        <div className={styles.services}>
           {p.services.map((s, idx) => (
-            <span
-              key={idx}
-              style={{ display: 'inline-block', margin: '2px 4px', padding: '2px 5px', background: '#ffe6ee', borderRadius: 5, fontSize: 11 }}
-            >
+            <span key={idx} className={styles.serviceTag}>
               {s}
             </span>
           ))}
         </div>
       )}
       {p.phone && (
-        <p style={{ marginTop: 6 }}>
-          <a href={`tel:${p.phone}`} style={{ color: '#e91e63', textDecoration: 'underline' }}>
+        <p>
+          <a href={`tel:${p.phone}`} className={styles.phoneLink}>
             {p.phone}
           </a>
         </p>
@@ -353,26 +330,10 @@ function ProfileCard({ p, router }) {
 
 function Modal({ children, title, onClose }) {
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        background: 'rgba(0,0,0,0.3)',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 999,
-      }}
-    >
-      <div style={{ background: '#fff', padding: 20, borderRadius: 10, width: 300, position: 'relative' }}>
-        <h2 style={{ marginTop: 0, color: '#e91e63' }}>{title}</h2>
-        <span
-          onClick={onClose}
-          style={{ position: 'absolute', top: 10, right: 15, cursor: 'pointer', fontWeight: 'bold' }}
-        >
+    <div className={styles.modal}>
+      <div className={styles.modalContent}>
+        <h2>{title}</h2>
+        <span onClick={onClose} className={styles.close}>
           X
         </span>
         {children}

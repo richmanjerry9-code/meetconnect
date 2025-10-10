@@ -28,24 +28,9 @@ export default function AdminPanel() {
   const [allVisits, setAllVisits] = useState([]);
 
   const [form, setForm] = useState({
-    username: '',
-    email: '',
-    phone: '',
-    role: 'User',
-    membership: 'Regular',
-    name: '',
-    gender: '',
-    age: '',
-    nationality: '',
-    county: '',
-    ward: '',
-    area: '',
-    nearby: [],
-    services: [],
-    otherServices: '',
-    incallRate: '',
-    outcallRate: '',
-    profilePic: null,
+    username: '', email: '', phone: '', role: 'User', membership: 'Regular',
+    name: '', gender: '', age: '', nationality: '', county: '', ward: '',
+    area: '', nearby: [], services: [], otherServices: '', incallRate: '', outcallRate: '', profilePic: null,
   });
 
   const servicesList = [
@@ -183,7 +168,7 @@ export default function AdminPanel() {
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <meta name="robots" content="noindex, nofollow" />
         </Head>
-        <h1>Admin Login</h1>
+        <h1 className={styles.title}>Admin Login</h1>
         <input
           type="password"
           placeholder="Admin password"
@@ -318,8 +303,9 @@ export default function AdminPanel() {
               <Image
                 src={form.profilePic}
                 alt="Profile"
-                width={120}
-                height={120}
+                layout="responsive"
+                width={100}
+                height={100}
                 style={{ objectFit: 'cover' }}
               />
             ) : (
