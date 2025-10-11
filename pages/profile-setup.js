@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
+import { db } from '../firebase';
+import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
 
 export default function ProfileSetup() {
   const router = useRouter();
@@ -15,7 +17,7 @@ export default function ProfileSetup() {
     orientation: '',
     age: '',
     nationality: '',
-    county: '',
+    county: 'Nairobi', // Fixed to Nairobi
     town: 'Nairobi',
     ward: '',
     area: '',
@@ -50,19 +52,25 @@ export default function ProfileSetup() {
       return;
     }
     setUser(logged);
-    const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const existingProfile = profiles.find((p) => p.email === logged.email);
-    if (existingProfile) {
-      setForm({
-        ...existingProfile,
-        nearby: existingProfile.nearby || [],
-        services: existingProfile.services || [],
-      });
-      setProfilePic(existingProfile.profilePic || null);
-    } else {
-      const defaultUsername = logged.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
-      setForm((prev) => ({ ...prev, username: defaultUsername, email: logged.email }));
-    }
+
+    const fetchExistingProfile = async () => {
+      const querySnapshot = await getDocs(collection(db, 'profiles'));
+      const profiles = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const existingProfile = profiles.find((p) => p.email === logged.email);
+      if (existingProfile) {
+        setForm({
+          ...existingProfile,
+          nearby: existingProfile.nearby || [],
+          services: existingProfile.services || [],
+        });
+        setProfilePic(existingProfile.profilePic || null);
+      } else {
+        const defaultUsername = logged.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
+        setForm((prev) => ({ ...prev, username: defaultUsername, email: logged.email }));
+      }
+    };
+
+    fetchExistingProfile();
   }, [router]);
 
   const handleChange = (e) => {
@@ -96,25 +104,40 @@ export default function ProfileSetup() {
     setForm({ ...form, nearby });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!form.username || form.username.trim() === '') {
       alert('Username is required!');
       return;
     }
-    const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const duplicate = profiles.find((p) => p.username === form.username && p.email !== user.email);
-    if (duplicate) {
-      alert('Username already taken! Choose another.');
+
+    if (form.age < 18) {
+      alert('You must be 18 or older to register!');
       return;
     }
-    const newProfile = { ...form, profilePic, email: user.email };
-    const existingIndex = profiles.findIndex((p) => p.email === user.email);
-    if (existingIndex >= 0) profiles[existingIndex] = newProfile;
-    else profiles.push(newProfile);
-    localStorage.setItem('profiles', JSON.stringify(profiles));
-    alert('Profile saved!');
-    router.push('/');
+
+    try {
+      const querySnapshot = await getDocs(collection(db, 'profiles'));
+      const profiles = querySnapshot.docs.map((doc) => doc.data());
+      const duplicate = profiles.find(
+        (p) => p.username === form.username && p.email !== user.email
+      );
+      if (duplicate) {
+        alert('Username already taken! Choose another.');
+        return;
+      }
+
+      const newProfile = { ...form, profilePic, email: user.email, createdAt: Date.now() };
+
+      await setDoc(doc(db, 'profiles', user.email), newProfile);
+
+      alert('Profile saved!');
+      router.push('/');
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      alert('Error saving profile. Try again.');
+    }
   };
 
   const wards = Nairobi ? Object.keys(Nairobi) : [];
@@ -152,14 +175,17 @@ export default function ProfileSetup() {
           </div>
           <input type='file' accept='image/*' onChange={handleProfilePic} style={{ display: 'none' }} />
         </label>
+
         <input name='username' placeholder='Username (unique)' value={form.username} onChange={handleChange} required style={inputStyle} />
         <input name='name' placeholder='Name' value={form.name} onChange={handleChange} required style={inputStyle} />
         <input name='phone' placeholder='Phone' value={form.phone} onChange={handleChange} required style={inputStyle} />
+
         <select name='gender' value={form.gender} onChange={handleChange} required style={inputStyle}>
           <option value=''>Select Gender</option>
           <option value='Male'>Male</option>
           <option value='Female'>Female</option>
         </select>
+
         <select name='orientation' value={form.orientation} onChange={handleChange} required style={inputStyle}>
           <option value=''>Sexual Orientation</option>
           <option value='Straight'>Straight</option>
@@ -167,9 +193,18 @@ export default function ProfileSetup() {
           <option value='Gay'>Gay</option>
           <option value='Bisexual'>Bisexual</option>
         </select>
+
         <input name='age' type='number' placeholder='Age (18+)' min='18' value={form.age} onChange={handleChange} required style={inputStyle} />
+
         <input name='nationality' placeholder='Nationality' value={form.nationality} onChange={handleChange} required style={inputStyle} />
-        <input name='county' placeholder='County' value={form.county} onChange={handleChange} required style={inputStyle} />
+
+        <input
+          name='county'
+          value='Nairobi'
+          readOnly
+          style={{ ...inputStyle, backgroundColor: '#f8f8f8', cursor: 'not-allowed' }}
+        />
+
         <select name='ward' value={form.ward} onChange={handleChange} required style={inputStyle}>
           <option value=''>Select Ward</option>
           {wards.map((w) => (
@@ -178,6 +213,7 @@ export default function ProfileSetup() {
             </option>
           ))}
         </select>
+
         {form.ward && (
           <select name='area' value={form.area} onChange={handleChange} required style={inputStyle}>
             <option value=''>Select Area</option>
@@ -188,6 +224,7 @@ export default function ProfileSetup() {
             ))}
           </select>
         )}
+
         {form.area && (
           <div style={{ textAlign: 'left', margin: '10px 0' }}>
             <label>Nearby Places (max 4)</label>
@@ -204,6 +241,7 @@ export default function ProfileSetup() {
             ))}
           </div>
         )}
+
         <div style={{ textAlign: 'left', margin: '10px 0' }}>
           <label>Services Offered</label>
           {servicesList.map((s) => (
@@ -228,6 +266,7 @@ export default function ProfileSetup() {
             />
           )}
         </div>
+
         <input
           name='incallRate'
           type='number'
@@ -236,6 +275,7 @@ export default function ProfileSetup() {
           onChange={handleChange}
           style={inputStyle}
         />
+
         <input
           name='outcallRate'
           type='number'
@@ -244,6 +284,7 @@ export default function ProfileSetup() {
           onChange={handleChange}
           style={inputStyle}
         />
+
         <div style={{ margin: '10px 0', textAlign: 'left' }}>
           <input
             type='checkbox'
@@ -253,6 +294,7 @@ export default function ProfileSetup() {
           />
           <span style={{ marginLeft: 5 }}>List me in other cities</span>
         </div>
+
         <button type='submit' style={btnSubmitStyle}>
           Save Profile
         </button>
@@ -269,6 +311,7 @@ const inputStyle = {
   borderRadius: 10,
   border: '1px solid #e91e63',
 };
+
 const btnSubmitStyle = {
   backgroundColor: '#e91e63',
   color: 'white',

@@ -4,8 +4,14 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/Home.module.css';
-import { db } from '../firebase'; // Import Firebase database
-import { collection, getDocs, query } from 'firebase/firestore'; // Import Firestore functions
+import { db } from '../firebase';
+import {
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  where
+} from 'firebase/firestore';
 
 export default function Home() {
   const router = useRouter();
@@ -21,45 +27,41 @@ export default function Home() {
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
 
   useEffect(() => {
-    // Fetch profiles from Firestore
+    // Load profiles from Firestore (filter incomplete)
     const fetchProfiles = async () => {
-      const q = query(collection(db, "profiles")); // Query the "profiles" collection
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })); // Convert to array with IDs
+      const querySnapshot = await getDocs(collection(db, 'profiles'));
+      const data = querySnapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((p) => p.username && p.name && p.email);
       setProfiles(data);
     };
     fetchProfiles();
 
-    // Keep user login from localStorage (for now)
+    // Keep user login from localStorage
     const loggedIn = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
     setUser(loggedIn);
   }, []);
-
-  useEffect(() => {
-    if (profiles.length > 0) {
-      profiles.forEach((p) => {
-        if (!p.username) console.warn('Profile missing username:', p);
-      });
-    }
-  }, [profiles]);
 
   useEffect(() => {
     if (!searchLocation || !Nairobi) return setFilteredLocations([]);
     const matches = [];
     Object.keys(Nairobi).forEach((ward) => {
       Nairobi[ward].forEach((area) => {
-        if (area.toLowerCase().includes(searchLocation.toLowerCase())) {
+        if (
+          area.toLowerCase().includes(searchLocation.toLowerCase()) ||
+          ward.toLowerCase().includes(searchLocation.toLowerCase())
+        ) {
           matches.push({ ward, area });
         }
       });
     });
-    setFilteredLocations(matches);
+    setFilteredLocations(matches.slice(0, 5));
   }, [searchLocation]);
 
   const handleLocationSelect = (ward, area) => {
     setSelectedWard(ward);
     setSelectedArea(area);
-    setSearchLocation(area);
+    setSearchLocation(`${ward}, ${area}`);
     setFilteredLocations([]);
   };
 
@@ -82,7 +84,9 @@ export default function Home() {
     const membershipGroups = ['VVIP', 'VIP', 'Prime', 'Regular'];
     let selectedGroup = [];
     for (const m of membershipGroups) {
-      selectedGroup = filteredProfiles.filter((p) => p.membership === m || (m === 'Regular' && !p.membership));
+      selectedGroup = filteredProfiles.filter(
+        (p) => p.membership === m || (m === 'Regular' && !p.membership)
+      );
       if (selectedGroup.length > 0) break;
     }
     filteredProfiles = selectedGroup;
@@ -101,28 +105,80 @@ export default function Home() {
     else groupedProfiles.Regular.push(p);
   });
 
-  const handleLogin = (e) => {
+  // 🔹 Firestore-only REGISTER
+  const handleRegister = async (e) => {
     e.preventDefault();
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const foundUser = users.find((u) => u.email === loginForm.email && u.password === loginForm.password);
-    if (!foundUser) return alert('Invalid email or password!');
-    localStorage.setItem('loggedInUser', JSON.stringify(foundUser));
-    setUser(foundUser);
-    router.push('/profile-setup');
-    setShowLogin(false);
+
+    try {
+      const { name, email, password } = registerForm;
+      if (!name || !email || !password) {
+        alert("Fill in all fields!");
+        return;
+      }
+
+      // check if email exists
+      const q = query(collection(db, "profiles"), where("email", "==", email));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        alert("Email already registered!");
+        return;
+      }
+
+      const newUser = {
+        name,
+        email,
+        password, // temporary for test
+        username: email.split("@")[0],
+        membership: "Regular",
+        createdAt: new Date().toISOString(),
+      };
+
+      const docRef = await addDoc(collection(db, "profiles"), newUser);
+      const savedUser = { id: docRef.id, ...newUser };
+
+      localStorage.setItem("loggedInUser", JSON.stringify(savedUser));
+      setUser(savedUser);
+      alert("✅ Registration successful!");
+      router.push("/profile-setup");
+      setShowRegister(false);
+    } catch (err) {
+      console.error("Registration error:", err);
+      alert("Error during registration. Try again.");
+    }
   };
 
-  const handleRegister = (e) => {
+  // 🔹 Firestore-only LOGIN
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    if (users.some((u) => u.email === registerForm.email)) return alert('Email already registered!');
-    const newUser = { ...registerForm, createdAt: Date.now(), membership: 'Regular' };
-    users.push(newUser);
-    localStorage.setItem('users', JSON.stringify(users));
-    localStorage.setItem('loggedInUser', JSON.stringify(newUser));
-    setUser(newUser);
-    router.push('/profile-setup');
-    setShowRegister(false);
+
+    try {
+      const { email, password } = loginForm;
+      if (!email || !password) {
+        alert("Enter both email and password!");
+        return;
+      }
+
+      const q = query(
+        collection(db, "profiles"),
+        where("email", "==", email),
+        where("password", "==", password)
+      );
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        alert("Invalid email or password!");
+        return;
+      }
+
+      const loggedUser = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+      localStorage.setItem("loggedInUser", JSON.stringify(loggedUser));
+      setUser(loggedUser);
+      router.push("/profile-setup");
+      setShowLogin(false);
+    } catch (err) {
+      console.error("Login error:", err);
+      alert("Error logging in.");
+    }
   };
 
   const handleLogout = () => {
@@ -136,15 +192,19 @@ export default function Home() {
   return (
     <div className={styles.container}>
       <Head>
-        <title>Meetconnect - Find Your Match</title>
-        <meta name="description" content="Connect with people in Nairobi on Meetconnect" />
+        <title>Meet Connect Ladies - For Gentlemen</title>
+        <meta
+          name="description"
+          content="Discover stunning ladies in Nairobi on Meet Connect Ladies, designed for gentlemen."
+        />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="index, follow" />
       </Head>
+
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            MeetConnect ❤️
+            Meet Connect Ladies ❤️
           </h1>
         </div>
         <div className={styles.authButtons}>
@@ -153,14 +213,20 @@ export default function Home() {
               <button onClick={() => setShowRegister(true)} className={styles.button}>
                 Register
               </button>
-              <button onClick={() => setShowLogin(true)} className={`${styles.button} ${styles.login}`}>
+              <button
+                onClick={() => setShowLogin(true)}
+                className={`${styles.button} ${styles.login}`}
+              >
                 Login
               </button>
             </>
           )}
           {user && (
             <>
-              <button onClick={() => router.push('/profile-setup')} className={styles.button}>
+              <button
+                onClick={() => router.push('/profile-setup')}
+                className={styles.button}
+              >
                 My Profile
               </button>
               <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
@@ -170,78 +236,94 @@ export default function Home() {
           )}
         </div>
       </header>
-      <div className={styles.search}>
-        <select
-          value={selectedWard}
-          onChange={(e) => {
-            setSelectedWard(e.target.value);
-            setSelectedArea(''); // Reset area when ward changes
-          }}
-          className={styles.select}
-        >
-          <option value="">Select Ward</option>
-          {wards.map((ward) => (
-            <option key={ward} value={ward}>
-              {ward}
-            </option>
-          ))}
-        </select>
-        <select
-          value={selectedArea}
-          onChange={(e) => setSelectedArea(e.target.value)}
-          className={styles.select}
-          disabled={!selectedWard}
-        >
-          <option value="">Select Area</option>
-          {areas.map((area) => (
-            <option key={area} value={area}>
-              {area}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          placeholder="Search location..."
-          value={searchLocation}
-          onChange={(e) => setSearchLocation(e.target.value)}
-          className={styles.searchInput}
-        />
-        {filteredLocations.length > 0 && (
-          <div className={styles.dropdown}>
-            {filteredLocations.map((loc, idx) => (
-              <div
-                key={idx}
-                onClick={() => handleLocationSelect(loc.ward, loc.area)}
-                className={styles.dropdownItem}
-              >
-                {loc.ward} - {loc.area}
-              </div>
+
+      <main className={styles.main}>
+        <div className={styles.searchContainer}>
+          <input
+            type="text"
+            placeholder="Search ladies by location (e.g., 'Nairobi', 'Kilimani')..."
+            value={searchLocation}
+            onChange={(e) => setSearchLocation(e.target.value)}
+            className={styles.searchInput}
+          />
+          {filteredLocations.length > 0 && (
+            <div className={styles.dropdown}>
+              {filteredLocations.map((loc, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => handleLocationSelect(loc.ward, loc.area)}
+                  className={styles.dropdownItem}
+                >
+                  {loc.ward}, {loc.area}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.filters}>
+          <select
+            value={selectedWard}
+            onChange={(e) => {
+              setSelectedWard(e.target.value);
+              setSelectedArea('');
+            }}
+            className={styles.select}
+          >
+            <option value="">All Wards</option>
+            {wards.map((ward) => (
+              <option key={ward} value={ward}>
+                {ward}
+              </option>
             ))}
-          </div>
-        )}
-      </div>
-      <div className={styles.profiles}>
-        {searchLocation ? (
-          <>
-            {groupedProfiles.VIP.length > 0 && <h2 className={styles.sectionTitle}>VIP Profiles</h2>}
-            {groupedProfiles.VIP.map((p, i) => (
-              <ProfileCard key={i} p={p} router={router} />
+          </select>
+
+          <select
+            value={selectedArea}
+            onChange={(e) => setSelectedArea(e.target.value)}
+            className={styles.select}
+            disabled={!selectedWard}
+          >
+            <option value="">All Areas</option>
+            {areas.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
             ))}
-            {groupedProfiles.Prime.length > 0 && <h2 className={styles.sectionTitle}>Prime Profiles</h2>}
-            {groupedProfiles.Prime.map((p, i) => (
-              <ProfileCard key={i} p={p} router={router} />
-            ))}
-            {groupedProfiles.Regular.map((p, i) => (
-              <ProfileCard key={i} p={p} router={router} />
-            ))}
-          </>
-        ) : (
-          filteredProfiles.map((p, i) => (
-            <ProfileCard key={i} p={p} router={router} />
-          ))
-        )}
-        {filteredProfiles.length === 0 && <p className={styles.noProfiles}>No profiles found.</p>}
-      </div>
+          </select>
+        </div>
+
+        <div className={styles.profiles}>
+          {searchLocation ? (
+            <>
+              {groupedProfiles.VIP.length > 0 && (
+                <h2 className={styles.sectionTitle}>VIP Ladies</h2>
+              )}
+              {groupedProfiles.VIP.map((p, i) => (
+                <ProfileCard key={i} p={p} router={router} />
+              ))}
+              {groupedProfiles.Prime.length > 0 && (
+                <h2 className={styles.sectionTitle}>Prime Ladies</h2>
+              )}
+              {groupedProfiles.Prime.map((p, i) => (
+                <ProfileCard key={i} p={p} router={router} />
+              ))}
+              {groupedProfiles.Regular.length > 0 && (
+                <h2 className={styles.sectionTitle}>Regular Ladies</h2>
+              )}
+              {groupedProfiles.Regular.map((p, i) => (
+                <ProfileCard key={i} p={p} router={router} />
+              ))}
+            </>
+          ) : (
+            filteredProfiles.map((p, i) => <ProfileCard key={i} p={p} router={router} />)
+          )}
+          {filteredProfiles.length === 0 && (
+            <p className={styles.noProfiles}>No ladies found.</p>
+          )}
+        </div>
+      </main>
+
       {showLogin && (
         <Modal title="Login" onClose={() => setShowLogin(false)}>
           <form onSubmit={handleLogin}>
@@ -267,6 +349,7 @@ export default function Home() {
           </form>
         </Modal>
       )}
+
       {showRegister && (
         <Modal title="Register" onClose={() => setShowRegister(false)}>
           <form onSubmit={handleRegister}>
@@ -290,7 +373,9 @@ export default function Home() {
               type="password"
               placeholder="Password"
               value={registerForm.password}
-              onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+              onChange={(e) =>
+                setRegisterForm({ ...registerForm, password: e.target.value })
+              }
               className={styles.input}
               required
             />
@@ -319,16 +404,16 @@ function ProfileCard({ p, router }) {
       {p.profilePic ? (
         <Image
           src={p.profilePic}
-          alt={p.name || 'Profile'}
-          width={100}
-          height={100}
+          alt={`${p.name || 'Lady'} Profile`}
+          width={150}
+          height={150}
           className={styles.profileImage}
         />
       ) : (
         <div className={styles.placeholderImage} />
       )}
       <div className={styles.profileInfo}>
-        <h3>{p.name}</h3>
+        <h3>{p.name || 'Anonymous Lady'}</h3>
         {p.membership && p.membership !== 'Regular' && (
           <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>
             {p.membership}
@@ -369,3 +454,4 @@ function Modal({ children, title, onClose }) {
     </div>
   );
 }
+

@@ -1,5 +1,13 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
+import { db } from "../firebase";
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 
 const Register = ({ setUser, setShowRegister }) => {
   const router = useRouter();
@@ -15,63 +23,74 @@ const Register = ({ setUser, setShowRegister }) => {
     setLoading(true);
 
     try {
-      // 1️⃣ Send registration data to /api/users
-      const res = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(registerForm),
-      });
+      const { name, email, password } = registerForm;
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        alert(data.message || "Failed to register user");
+      // ✅ 1. Validate
+      if (!name || !password) {
+        alert("Name and password are required!");
         setLoading(false);
         return;
       }
 
-      // 2️⃣ Create a blank profile for the user
-      const profileRes = await fetch("/api/profiles", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: registerForm.email,
-          name: registerForm.name,
-          profilePic: "",
-          phone: "",
-          county: "",
-          area: "",
-          services: [],
-          nearby: [],
-        }),
-      });
-
-      const profileData = await profileRes.json();
-
-      if (!profileRes.ok) {
-        alert(profileData.message || "Profile creation failed");
-        setLoading(false);
-        return;
+      // ✅ 2. Check for duplicate email if provided
+      if (email) {
+        const q = query(collection(db, "profiles"), where("email", "==", email));
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          alert("Email already registered!");
+          setLoading(false);
+          return;
+        }
       }
 
-      // 3️⃣ Save the logged-in user locally
-      const loggedInUser = { ...data.user, profile: profileData.profile };
-      localStorage.setItem("loggedInUser", JSON.stringify(loggedInUser));
-      setUser(loggedInUser);
+      // ✅ 3. Add user to Firestore
+      const newUser = {
+        name,
+        email: email || "",
+        password,
+        username: name.toLowerCase().replace(/\s+/g, "_"),
+        role: "User",
+        membership: "Regular",
+        phone: "",
+        gender: "",
+        age: "",
+        nationality: "",
+        county: "",
+        ward: "",
+        area: "",
+        nearby: [],
+        services: [],
+        profilePic: "",
+        createdAt: new Date().toISOString(),
+      };
+
+      const docRef = await addDoc(collection(db, "profiles"), newUser);
+      const savedUser = { id: docRef.id, ...newUser };
+
+      // ✅ 4. Save locally for session
+      localStorage.setItem("loggedInUser", JSON.stringify(savedUser));
+      setUser(savedUser);
       setShowRegister(false);
 
-      // 4️⃣ Redirect to profile creation page
-      router.push("/create-profile");
+      alert("✅ Registration successful!");
+      router.push("/profile-setup");
     } catch (error) {
       console.error("Registration failed:", error);
-      alert("Error connecting to server. Please try again.");
+      alert("Error during registration. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleRegister}>
+    <form
+      onSubmit={handleRegister}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+      }}
+    >
       <input
         type="text"
         placeholder="Full Name"
@@ -83,12 +102,11 @@ const Register = ({ setUser, setShowRegister }) => {
       />
       <input
         type="email"
-        placeholder="Email Address"
+        placeholder="Email (optional)"
         value={registerForm.email}
         onChange={(e) =>
           setRegisterForm({ ...registerForm, email: e.target.value })
         }
-        required
       />
       <input
         type="password"
@@ -107,6 +125,9 @@ const Register = ({ setUser, setShowRegister }) => {
 };
 
 export default Register;
+
+
+
 
 
 
