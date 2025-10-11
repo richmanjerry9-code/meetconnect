@@ -4,6 +4,8 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/Home.module.css';
+import { db } from '../firebase'; // Import Firebase database
+import { collection, getDocs, query } from 'firebase/firestore'; // Import Firestore functions
 
 export default function Home() {
   const router = useRouter();
@@ -19,8 +21,16 @@ export default function Home() {
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
 
   useEffect(() => {
-    const data = JSON.parse(localStorage.getItem('profiles') || '[]');
-    setProfiles(data);
+    // Fetch profiles from Firestore
+    const fetchProfiles = async () => {
+      const q = query(collection(db, "profiles")); // Query the "profiles" collection
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })); // Convert to array with IDs
+      setProfiles(data);
+    };
+    fetchProfiles();
+
+    // Keep user login from localStorage (for now)
     const loggedIn = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
     setUser(loggedIn);
   }, []);
@@ -56,6 +66,7 @@ export default function Home() {
   const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
 
   let filteredProfiles = profiles.filter((p) => {
+    if (!searchLocation && !selectedWard && !selectedArea) return true;
     const wardMatch = selectedWard ? p.ward === selectedWard : true;
     const areaMatch = selectedArea ? p.area === selectedArea : true;
     const searchMatch = searchLocation
@@ -159,43 +170,41 @@ export default function Home() {
           )}
         </div>
       </header>
-      <div className={styles.locationSearchContainer}>
-        <div className={styles.locationBar}>
-          <select
-            value={selectedWard}
-            onChange={(e) => {
-              setSelectedWard(e.target.value);
-              setSelectedArea(''); // Reset area when ward changes
-            }}
-            className={styles.smallSelect}
-          >
-            <option value="">Select Ward</option>
-            {wards.map((ward) => (
-              <option key={ward} value={ward}>
-                {ward}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedArea}
-            onChange={(e) => setSelectedArea(e.target.value)}
-            className={styles.smallSelect}
-            disabled={!selectedWard}
-          >
-            <option value="">Select Area</option>
-            {areas.map((area) => (
-              <option key={area} value={area}>
-                {area}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className={styles.search}>
+        <select
+          value={selectedWard}
+          onChange={(e) => {
+            setSelectedWard(e.target.value);
+            setSelectedArea(''); // Reset area when ward changes
+          }}
+          className={styles.select}
+        >
+          <option value="">Select Ward</option>
+          {wards.map((ward) => (
+            <option key={ward} value={ward}>
+              {ward}
+            </option>
+          ))}
+        </select>
+        <select
+          value={selectedArea}
+          onChange={(e) => setSelectedArea(e.target.value)}
+          className={styles.select}
+          disabled={!selectedWard}
+        >
+          <option value="">Select Area</option>
+          {areas.map((area) => (
+            <option key={area} value={area}>
+              {area}
+            </option>
+          ))}
+        </select>
         <input
           type="text"
           placeholder="Search location..."
           value={searchLocation}
           onChange={(e) => setSearchLocation(e.target.value)}
-          className={styles.smallSearchInput}
+          className={styles.searchInput}
         />
         {filteredLocations.length > 0 && (
           <div className={styles.dropdown}>

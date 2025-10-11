@@ -2,6 +2,17 @@ import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
+import { db } from '../firebase'; // Import Firebase database
+import {
+  collection,
+  addDoc,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  doc,
+  query,
+  where,
+} from 'firebase/firestore'; // Import Firestore functions
 
 const ADMIN_PASSWORD = '447962Pa$$word';
 
@@ -27,19 +38,53 @@ export default function AdminPanel() {
   const [allVisits, setAllVisits] = useState([]);
 
   const [form, setForm] = useState({
-    username: '', email: '', phone: '', role: 'User', membership: 'Regular',
-    name: '', gender: '', age: '', nationality: '', county: '', ward: '',
-    area: '', nearby: [], services: [], otherServices: '', incallRate: '', outcallRate: '', profilePic: null,
+    username: '',
+    email: '',
+    phone: '',
+    role: 'User',
+    membership: 'Regular',
+    name: '',
+    gender: '',
+    age: '',
+    nationality: '',
+    county: '',
+    ward: '',
+    area: '',
+    nearby: [],
+    services: [],
+    otherServices: '',
+    incallRate: '',
+    outcallRate: '',
+    profilePic: null,
   });
 
   const servicesList = [
-    'Dinner Date', 'Travel Companion', 'Lesbian Show', 'Rimming', 'Raw BJ', 'BJ',
-    'GFE', 'COB – Cum On Body', 'CIM – Cum In Mouth', '3 Some', 'Anal', 'Massage', 'Other Services',
+    'Dinner Date',
+    'Travel Companion',
+    'Lesbian Show',
+    'Rimming',
+    'Raw BJ',
+    'BJ',
+    'GFE',
+    'COB – Cum On Body',
+    'CIM – Cum In Mouth',
+    '3 Some',
+    'Anal',
+    'Massage',
+    'Other Services',
   ];
 
   useEffect(() => {
-    const storedUsers = JSON.parse(localStorage.getItem('profiles') || '[]');
-    setUsers(storedUsers);
+    // Fetch profiles from Firestore
+    const fetchUsers = async () => {
+      const q = query(collection(db, 'profiles'));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setUsers(data);
+    };
+    fetchUsers();
+
+    // Keep visits and viewers logic (still using localStorage for now)
     const storedVisits = JSON.parse(localStorage.getItem('visits') || '[]');
     const newVisit = { timestamp: new Date().toISOString() };
     const updatedVisits = [...storedVisits, newVisit];
@@ -87,66 +132,97 @@ export default function AdminPanel() {
     reader.readAsDataURL(file);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.username) {
       alert('Username is required!');
       return;
     }
-    const existing = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const duplicate = existing.find(
-      (u) => u.username === form.username && u.username !== form.username
-    );
-    if (duplicate) {
+    // Check for duplicate username in Firestore
+    const q = query(collection(db, 'profiles'), where('username', '==', form.username));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
       alert('Username already exists!');
       return;
     }
-    const updatedUser = { ...form };
-    const index = existing.findIndex((u) => u.username === form.username && form.username !== '');
-    if (index >= 0) {
-      if (existing[index].role === 'Admin' && form.role !== 'Admin') {
-        alert('Cannot downgrade Admin role!');
+    const profileData = { ...form };
+    if (profileData.profilePic && typeof profilePic !== 'string') {
+      profileData.profilePic = profileData.profilePic.toString(); // Ensure it's a string for Firestore
+    }
+    try {
+      await addDoc(collection(db, 'profiles'), profileData);
+      alert('✅ Profile saved successfully!');
+      setUsers((prev) => [...prev, profileData]);
+      setForm({
+        username: '',
+        email: '',
+        phone: '',
+        role: 'User',
+        membership: 'Regular',
+        name: '',
+        gender: '',
+        age: '',
+        nationality: '',
+        county: '',
+        ward: '',
+        area: '',
+        nearby: [],
+        services: [],
+        otherServices: '',
+        incallRate: '',
+        outcallRate: '',
+        profilePic: null,
+      });
+      setRefresh(!refresh);
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      alert('Failed to save profile.');
+    }
+  };
+
+  const handleDelete = async (username) => {
+    const q = query(collection(db, 'profiles'), where('username', '==', username));
+    const querySnapshot = await getDocs(q);
+    querySnapshot.forEach(async (docSnap) => {
+      const user = docSnap.data();
+      if (user.role === 'Admin') {
+        alert('Cannot delete admin!');
         return;
       }
-      existing[index] = updatedUser;
-    } else {
-      existing.push(updatedUser);
-    }
-    localStorage.setItem('profiles', JSON.stringify(existing));
-    alert('✅ Profile saved successfully!');
-    setUsers(existing);
-    setForm({
-      username: '', email: '', phone: '', role: 'User', membership: 'Regular',
-      name: '', gender: '', age: '', nationality: '', county: '', ward: '',
-      area: '', nearby: [], services: [], otherServices: '', incallRate: '', outcallRate: '', profilePic: null,
+      if (!confirm('Delete this profile?')) return;
+      try {
+        await deleteDoc(doc(db, 'profiles', docSnap.id));
+        setUsers((prev) => prev.filter((u) => u.username !== username));
+        setRefresh(!refresh);
+      } catch (error) {
+        console.error('Error deleting profile:', error);
+        alert('Failed to delete profile.');
+      }
     });
-    setRefresh(!refresh);
   };
 
-  const handleDelete = (username) => {
-    const existing = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const user = existing.find((u) => u.username === username);
-    if (user?.role === 'Admin') {
-      alert('Cannot delete admin!');
-      return;
-    }
-    if (!confirm('Delete this profile?')) return;
-    const filtered = existing.filter((u) => u.username !== username);
-    localStorage.setItem('profiles', JSON.stringify(filtered));
-    setUsers(filtered);
-    setRefresh(!refresh);
-  };
-
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!uploadFile) return alert('No file selected!');
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const data = parseCSV(e.target.result);
-      const existing = JSON.parse(localStorage.getItem('profiles') || '[]');
-      const newUsers = [...existing, ...data];
-      localStorage.setItem('profiles', JSON.stringify(newUsers));
-      setUsers(newUsers);
-      setUploadFile(null);
-      setRefresh(!refresh);
+      const existingQ = query(collection(db, 'profiles'));
+      const existingSnapshot = await getDocs(existingQ);
+      const existingUsernames = new Set(existingSnapshot.docs.map((doc) => doc.data().username));
+      const newProfiles = data.filter((profile) => !existingUsernames.has(profile.username));
+      const savePromises = newProfiles.map((profile) =>
+        addDoc(collection(db, 'profiles'), profile)
+      );
+      try {
+        await Promise.all(savePromises);
+        const updatedUsers = [...users, ...newProfiles];
+        setUsers(updatedUsers);
+        setUploadFile(null);
+        setRefresh(!refresh);
+        alert('✅ Profiles uploaded successfully!');
+      } catch (error) {
+        console.error('Error uploading profiles:', error);
+        alert('Failed to upload profiles.');
+      }
     };
     reader.readAsText(uploadFile);
   };
@@ -195,8 +271,8 @@ export default function AdminPanel() {
       </button>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '5px', marginBottom: '10px' }}>
         <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>Total Profiles: {users.length}</div>
-        <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>Users: {users.filter(u => u.role === 'User').length}</div>
-        <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>Admins: {users.filter(u => u.role === 'Admin').length}</div>
+        <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>Users: {users.filter((u) => u.role === 'User').length}</div>
+        <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>Admins: {users.filter((u) => u.role === 'Admin').length}</div>
         <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>Current Viewers: {currentViewers}</div>
         <div style={{ background: '#fff', padding: '8px', fontSize: '0.9rem' }}>All-Time Visits: {allVisits.length}</div>
       </div>
@@ -288,7 +364,9 @@ export default function AdminPanel() {
           style={{ padding: '8px', margin: '5px 0', width: '100%', fontSize: '0.9rem' }}
         >
           <option value="">Select Ward</option>
-          {wards.map((w) => <option key={w}>{w}</option>)}
+          {wards.map((w) => (
+            <option key={w}>{w}</option>
+          ))}
         </select>
         {form.ward && (
           <select
@@ -298,22 +376,25 @@ export default function AdminPanel() {
             style={{ padding: '8px', margin: '5px 0', width: '100%', fontSize: '0.9rem' }}
           >
             <option value="">Select Area</option>
-            {areasForWard.map((a) => <option key={a}>{a}</option>)}
+            {areasForWard.map((a) => (
+              <option key={a}>{a}</option>
+            ))}
           </select>
         )}
-        {form.ward && areasForWard.map((place) => (
-          <div key={place} style={{ margin: '5px 0' }}>
-            <input
-              type="checkbox"
-              name="nearby"
-              value={place}
-              checked={form.nearby.includes(place)}
-              onChange={handleChange}
-              style={{ marginRight: '5px' }}
-            />
-            <span style={{ fontSize: '0.9rem' }}>{place}</span>
-          </div>
-        ))}
+        {form.ward &&
+          areasForWard.map((place) => (
+            <div key={place} style={{ margin: '5px 0' }}>
+              <input
+                type="checkbox"
+                name="nearby"
+                value={place}
+                checked={form.nearby.includes(place)}
+                onChange={handleChange}
+                style={{ marginRight: '5px' }}
+              />
+              <span style={{ fontSize: '0.9rem' }}>{place}</span>
+            </div>
+          ))}
         {servicesList.map((service) => (
           <div key={service} style={{ margin: '5px 0' }}>
             <input
@@ -378,7 +459,14 @@ export default function AdminPanel() {
         </label>
         <button
           onClick={handleSave}
-          style={{ padding: '8px 16px', background: '#4CAF50', color: 'white', border: 'none', fontSize: '0.9rem' }}
+          style={{
+            padding: '8px 16px',
+            background: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            fontSize: '0.9rem',
+            marginTop: '5px',
+          }}
         >
           Save
         </button>
@@ -393,7 +481,14 @@ export default function AdminPanel() {
         />
         <button
           onClick={handleUpload}
-          style={{ padding: '8px 16px', background: '#4CAF50', color: 'white', border: 'none', fontSize: '0.9rem' }}
+          style={{
+            padding: '8px 16px',
+            background: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            fontSize: '0.9rem',
+            marginTop: '5px',
+          }}
         >
           Upload
         </button>
@@ -404,38 +499,51 @@ export default function AdminPanel() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
             <thead>
               <tr style={{ background: '#ddd' }}>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Username</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Email</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Phone</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Role</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Membership</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Name</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>County</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Ward</th>
-                <th style={{ padding: '8px', border: '1px solid #ccc' }}>Actions</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Username</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Email</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Phone</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Role</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Membership</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Name</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>County</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Ward</th>
+                <th style={{ padding: '5px', border: '1px solid #ccc' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.username}>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.username}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.email || 'N/A'}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.phone}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.role}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.membership || 'Regular'}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.name}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.county}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>{u.ward}</td>
-                  <td style={{ padding: '8px', border: '1px solid #ccc' }}>
+                <tr key={u.username || u.id}> {/* Use id if username is missing */}
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.username}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.email || 'N/A'}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.phone}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.role}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.membership || 'Regular'}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.name}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.county}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>{u.ward}</td>
+                  <td style={{ padding: '5px', border: '1px solid #ccc' }}>
                     <button
                       onClick={() => setForm(u)}
-                      style={{ padding: '5px 10px', background: '#2196F3', color: 'white', border: 'none', fontSize: '0.9rem', marginRight: '5px' }}
+                      style={{
+                        padding: '5px 10px',
+                        background: '#2196F3',
+                        color: 'white',
+                        border: 'none',
+                        fontSize: '0.9rem',
+                        marginRight: '5px',
+                      }}
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(u.username)}
-                      style={{ padding: '5px 10px', background: '#f44336', color: 'white', border: 'none', fontSize: '0.9rem' }}
+                      onClick={() => handleDelete(u.username || u.id)} // Use id as fallback
+                      style={{
+                        padding: '5px 10px',
+                        background: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        fontSize: '0.9rem',
+                      }}
                     >
                       Delete
                     </button>
