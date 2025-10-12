@@ -1,60 +1,56 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
+import styles from '../styles/Home.module.css';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs } from 'firebase/firestore';
+import {
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  where
+} from 'firebase/firestore';
 
-export default function ProfileSetup() {
+export default function Home() {
   const router = useRouter();
+  const [profiles, setProfiles] = useState([]);
   const [user, setUser] = useState(null);
-  const [profilePic, setProfilePic] = useState(null);
+  const [selectedWard, setSelectedWard] = useState('');
+  const [selectedArea, setSelectedArea] = useState('');
   const [searchLocation, setSearchLocation] = useState('');
   const [filteredLocations, setFilteredLocations] = useState([]);
-  const [form, setForm] = useState({
-    username: '',
-    name: '',
-    phone: '',
-    gender: '',
-    orientation: '',
-    age: '',
-    nationality: '',
-    county: 'Nairobi',
-    town: 'Nairobi',
-    ward: '',
-    area: '',
-    nearby: [],
-    services: [],
-    otherServices: '',
-    incallRate: '',
-    outcallRate: '',
-    listOtherCities: false,
-  });
-
-  const servicesList = [
-    'Dinner Date',
-    'Travel Companion',
-    'Lesbian Show',
-    'Rimming',
-    'Raw BJ',
-    'BJ',
-    'GFE',
-    'COB – Cum On Body',
-    'CIM – Cum In Mouth',
-    '3 Some',
-    'Anal',
-    'Massage',
-    'Other Services',
-  ];
+  const [showLogin, setShowLogin] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
 
   useEffect(() => {
-    const logged = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-    if (!logged) {
-      router.push('/');
-      return;
-    }
-    setUser(logged);
-  }, [router]);
+    // Load profiles from Firestore (filter incomplete)
+    const fetchProfiles = async () => {
+      const querySnapshot = await getDocs(collection(db, 'profiles'));
+      const data = querySnapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        // ✅ Only show complete profiles
+        .filter(
+          (p) =>
+            p.username &&
+            p.name &&
+            p.email &&
+            p.phone &&
+            p.profilePic &&
+            p.age &&
+            parseInt(p.age) >= 18
+        );
+      setProfiles(data);
+    };
+    fetchProfiles();
+
+    // Keep user login from localStorage
+    const loggedIn = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
+    setUser(loggedIn);
+  }, []);
 
   useEffect(() => {
     if (!searchLocation || !Nairobi) return setFilteredLocations([]);
@@ -73,278 +69,310 @@ export default function ProfileSetup() {
   }, [searchLocation]);
 
   const handleLocationSelect = (ward, area) => {
-    setForm({ ...form, ward, area });
+    setSelectedWard(ward);
+    setSelectedArea(area);
     setSearchLocation(`${ward}, ${area}`);
     setFilteredLocations([]);
   };
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if (type === 'checkbox' && name === 'services') {
-      let updated = [...form.services];
-      if (checked) updated.push(value);
-      else updated = updated.filter((s) => s !== value);
-      setForm({ ...form, services: updated });
-    } else if (type === 'checkbox' && name === 'listOtherCities') {
-      setForm({ ...form, listOtherCities: checked });
-    } else if (name === 'age') {
-      const ageValue = parseInt(value, 10);
-      if (ageValue < 18) return; // block typing below 18
-      setForm({ ...form, [name]: value });
-    } else {
-      setForm({ ...form, [name]: value });
+  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
+
+  let filteredProfiles = profiles.filter((p) => {
+    if (!searchLocation && !selectedWard && !selectedArea) return true;
+    const wardMatch = selectedWard ? p.ward === selectedWard : true;
+    const areaMatch = selectedArea ? p.area === selectedArea : true;
+    const searchMatch = searchLocation
+      ? [p.county, p.city, p.ward, p.area, ...(p.nearby || [])]
+          .join(' ')
+          .toLowerCase()
+          .includes(searchLocation.toLowerCase())
+      : true;
+    return wardMatch && areaMatch && searchMatch;
+  });
+
+  if (!searchLocation && !selectedWard && !selectedArea) {
+    const membershipGroups = ['VVIP', 'VIP', 'Prime', 'Regular'];
+    let selectedGroup = [];
+    for (const m of membershipGroups) {
+      selectedGroup = filteredProfiles.filter(
+        (p) => p.membership === m || (m === 'Regular' && !p.membership)
+      );
+      if (selectedGroup.length > 0) break;
     }
-  };
+    filteredProfiles = selectedGroup;
+  }
 
-  const handleProfilePic = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = () => setProfilePic(reader.result);
-      reader.readAsDataURL(file);
-    }
-  };
+  filteredProfiles.sort((a, b) => {
+    const aPriority = membershipPriority[a.membership] || 0;
+    const bPriority = membershipPriority[b.membership] || 0;
+    return bPriority - aPriority;
+  });
 
-  const handleNearbyChange = (e) => {
-    const value = e.target.value;
-    const nearby = form.nearby.includes(value)
-      ? form.nearby.filter((n) => n !== value)
-      : [...form.nearby, value].slice(0, 4);
-    setForm({ ...form, nearby });
-  };
+  const groupedProfiles = { VIP: [], Prime: [], Regular: [] };
+  filteredProfiles.forEach((p) => {
+    if (p.membership === 'VVIP' || p.membership === 'VIP') groupedProfiles.VIP.push(p);
+    else if (p.membership === 'Prime') groupedProfiles.Prime.push(p);
+    else groupedProfiles.Regular.push(p);
+  });
 
-  const handleSubmit = async (e) => {
+  // 🔹 Firestore-only REGISTER
+  const handleRegister = async (e) => {
     e.preventDefault();
 
-    if (!form.username || !form.name || !form.phone || !form.gender || !form.orientation || !form.age || !form.nationality || !form.ward || !form.area || !profilePic) {
-      alert('Please fill in all fields and add a profile picture!');
-      return;
-    }
-
-    if (parseInt(form.age) < 18) {
-      alert('You must be 18 or older to register!');
-      return;
-    }
-
     try {
-      const querySnapshot = await getDocs(collection(db, 'profiles'));
-      const profiles = querySnapshot.docs.map((doc) => doc.data());
-      const duplicate = profiles.find(
-        (p) => p.username === form.username && p.email !== user.email
-      );
-      if (duplicate) {
-        alert('Username already taken! Choose another.');
+      const { name, email, password } = registerForm;
+      if (!name || !email || !password) {
+        alert("Fill in all fields!");
         return;
       }
 
-      const newProfile = {
-        ...form,
-        profilePic,
-        email: user.email,
-        createdAt: Date.now(),
-        membership: user.membership || 'Regular',
+      const q = query(collection(db, "profiles"), where("email", "==", email));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        alert("Email already registered!");
+        return;
+      }
+
+      const newUser = {
+        name,
+        email,
+        password,
+        username: email.split("@")[0],
+        membership: "Regular",
+        createdAt: new Date().toISOString(),
       };
 
-      await addDoc(collection(db, 'profiles'), newProfile);
-      alert('Profile saved!');
-      router.push('/');
-    } catch (error) {
-      console.error('Error saving profile:', error);
-      alert('Error saving profile. Try again.');
+      const docRef = await addDoc(collection(db, "profiles"), newUser);
+      const savedUser = { id: docRef.id, ...newUser };
+
+      localStorage.setItem("loggedInUser", JSON.stringify(savedUser));
+      setUser(savedUser);
+      alert("✅ Registration successful!");
+      router.push("/profile-setup");
+      setShowRegister(false);
+    } catch (err) {
+      console.error("Registration error:", err);
+      alert("Error during registration. Try again.");
     }
   };
 
-  const areasForWard = form.ward && Nairobi ? Nairobi[form.ward] || [] : [];
+  // 🔹 Firestore-only LOGIN
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
+    try {
+      const { email, password } = loginForm;
+      if (!email || !password) {
+        alert("Enter both email and password!");
+        return;
+      }
+
+      const q = query(
+        collection(db, "profiles"),
+        where("email", "==", email),
+        where("password", "==", password)
+      );
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        alert("Invalid email or password!");
+        return;
+      }
+
+      const loggedUser = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+      localStorage.setItem("loggedInUser", JSON.stringify(loggedUser));
+      setUser(loggedUser);
+      router.push("/profile-setup");
+      setShowLogin(false);
+    } catch (err) {
+      console.error("Login error:", err);
+      alert("Error logging in.");
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('loggedInUser');
+    setUser(null);
+  };
+
+  const wards = Nairobi ? Object.keys(Nairobi) : [];
+  const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
 
   return (
-    <div style={{ minHeight: '100vh', padding: 20 }}>
-      <h1 style={{ color: '#e91e63' }}>Profile Setup</h1>
-      <form onSubmit={handleSubmit} style={{ maxWidth: 500, margin: '20px auto', textAlign: 'center' }}>
-        <label style={{ display: 'block', marginBottom: 15, cursor: 'pointer' }}>
-          <div
-            style={{
-              width: 120,
-              height: 120,
-              margin: '0 auto',
-              background: '#ffe6ee',
-              border: '2px dashed #e91e63',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              overflow: 'hidden',
-            }}
-          >
-            {profilePic ? (
-              <Image
-                src={profilePic}
-                alt='Profile'
-                width={120}
-                height={120}
-                style={{ objectFit: 'cover' }}
-              />
-            ) : (
-              <span style={{ color: '#e91e63' }}>Click to add</span>
-            )}
-          </div>
-          <input type='file' accept='image/*' onChange={handleProfilePic} style={{ display: 'none' }} />
-        </label>
+    <div className={styles.container}>
+      <Head>
+        <title>Meet Connect Ladies - For Gentlemen</title>
+        <meta name="description" content="Discover stunning ladies in Nairobi on Meet Connect Ladies, designed for gentlemen." />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="index, follow" />
+      </Head>
 
-        <input name='username' placeholder='Username (unique)' value={form.username} onChange={handleChange} required style={inputStyle} />
-        <input name='name' placeholder='Name' value={form.name} onChange={handleChange} required style={inputStyle} />
-        <input name='phone' placeholder='Phone' value={form.phone} onChange={handleChange} required style={inputStyle} />
-
-        <select name='gender' value={form.gender} onChange={handleChange} required style={inputStyle}>
-          <option value=''>Select Gender</option>
-          <option value='Male'>Male</option>
-          <option value='Female'>Female</option>
-        </select>
-
-        <select name='orientation' value={form.orientation} onChange={handleChange} required style={inputStyle}>
-          <option value=''>Sexual Orientation</option>
-          <option value='Straight'>Straight</option>
-          <option value='Lesbian'>Lesbian</option>
-          <option value='Gay'>Gay</option>
-          <option value='Bisexual'>Bisexual</option>
-        </select>
-
-        <input
-          name='age'
-          type='number'
-          placeholder='Age (18+)'
-          min='18'
-          value={form.age}
-          onChange={handleChange}
-          required
-          style={inputStyle}
-        />
-
-        <input name='nationality' placeholder='Nationality' value={form.nationality} onChange={handleChange} required style={inputStyle} />
-
-        {/* Smart Search Location */}
-        <input
-          type='text'
-          placeholder='Search Ward or Area (e.g., Westlands, Kilimani)'
-          value={searchLocation}
-          onChange={(e) => setSearchLocation(e.target.value)}
-          style={inputStyle}
-        />
-        {filteredLocations.length > 0 && (
-          <div style={{ background: '#fff', border: '1px solid #e91e63', borderRadius: 10, marginTop: 5 }}>
-            {filteredLocations.map((loc, idx) => (
-              <div
-                key={idx}
-                onClick={() => handleLocationSelect(loc.ward, loc.area)}
-                style={{
-                  padding: 10,
-                  cursor: 'pointer',
-                  borderBottom: '1px solid #f0f0f0',
-                }}
-              >
-                {loc.ward}, {loc.area}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {form.ward && form.area && (
-          <p style={{ color: '#e91e63' }}>
-            Selected: {form.ward}, {form.area}
-          </p>
-        )}
-
-        {form.area && (
-          <div style={{ textAlign: 'left', margin: '10px 0' }}>
-            <label>Nearby Places (max 4)</label>
-            {areasForWard.map((place) => (
-              <div key={place}>
-                <input
-                  type='checkbox'
-                  value={place}
-                  checked={form.nearby?.includes(place)}
-                  onChange={handleNearbyChange}
-                />
-                <span style={{ marginLeft: 5 }}>{place}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{ textAlign: 'left', margin: '10px 0' }}>
-          <label>Services Offered</label>
-          {servicesList.map((s) => (
-            <div key={s}>
-              <input
-                type='checkbox'
-                name='services'
-                value={s}
-                checked={form.services?.includes(s)}
-                onChange={handleChange}
-              />
-              <span style={{ marginLeft: 5 }}>{s}</span>
-            </div>
-          ))}
-          {form.services?.includes('Other Services') && (
-            <input
-              name='otherServices'
-              placeholder='Add other services'
-              value={form.otherServices}
-              onChange={handleChange}
-              style={inputStyle}
-            />
+      <header className={styles.header}>
+        <div className={styles.logoContainer}>
+          <h1 onClick={() => router.push('/')} className={styles.title}>
+            Meet Connect Ladies ❤️
+          </h1>
+        </div>
+        <div className={styles.authButtons}>
+          {!user && (
+            <>
+              <button onClick={() => setShowRegister(true)} className={styles.button}>Register</button>
+              <button onClick={() => setShowLogin(true)} className={`${styles.button} ${styles.login}`}>Login</button>
+            </>
+          )}
+          {user && (
+            <>
+              <button onClick={() => router.push('/profile-setup')} className={styles.button}>My Profile</button>
+              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>Logout</button>
+            </>
           )}
         </div>
+      </header>
 
-        <input
-          name='incallRate'
-          type='number'
-          placeholder='Incalls Rate (KSh/hr)'
-          value={form.incallRate}
-          onChange={handleChange}
-          style={inputStyle}
-        />
-
-        <input
-          name='outcallRate'
-          type='number'
-          placeholder='Outcalls Rate (KSh/hr)'
-          value={form.outcallRate}
-          onChange={handleChange}
-          style={inputStyle}
-        />
-
-        <div style={{ margin: '10px 0', textAlign: 'left' }}>
+      <main className={styles.main}>
+        <div className={styles.searchContainer}>
           <input
-            type='checkbox'
-            name='listOtherCities'
-            checked={form.listOtherCities}
-            onChange={handleChange}
+            type="text"
+            placeholder="Search ladies by location (e.g., 'Nairobi', 'Kilimani')..."
+            value={searchLocation}
+            onChange={(e) => setSearchLocation(e.target.value)}
+            className={styles.searchInput}
           />
-          <span style={{ marginLeft: 5 }}>List me in other cities</span>
+          {filteredLocations.length > 0 && (
+            <div className={styles.dropdown}>
+              {filteredLocations.map((loc, idx) => (
+                <div key={idx} onClick={() => handleLocationSelect(loc.ward, loc.area)} className={styles.dropdownItem}>
+                  {loc.ward}, {loc.area}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ✅ Manual location selection option */}
+          <div className={styles.manualLocation}>
+            <label>Or select location manually:</label>
+            <select
+              value={selectedWard}
+              onChange={(e) => {
+                setSelectedWard(e.target.value);
+                setSelectedArea('');
+              }}
+              className={styles.select}
+            >
+              <option value="">Select Ward</option>
+              {wards.map((ward) => (
+                <option key={ward} value={ward}>{ward}</option>
+              ))}
+            </select>
+
+            {selectedWard && (
+              <select
+                value={selectedArea}
+                onChange={(e) => setSelectedArea(e.target.value)}
+                className={styles.select}
+              >
+                <option value="">Select Area</option>
+                {areas.map((area) => (
+                  <option key={area} value={area}>{area}</option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
-        <button type='submit' style={btnSubmitStyle}>
-          Save Profile
-        </button>
-      </form>
+        <div className={styles.profiles}>
+          {filteredProfiles.length === 0 && <p className={styles.noProfiles}>No ladies found.</p>}
+          {filteredProfiles.map((p, i) => <ProfileCard key={i} p={p} router={router} />)}
+        </div>
+      </main>
+
+      {showLogin && (
+        <Modal title="Login" onClose={() => setShowLogin(false)}>
+          <form onSubmit={handleLogin}>
+            <input type="email" placeholder="Email" value={loginForm.email} onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })} className={styles.input} required />
+            <input type="password" placeholder="Password" value={loginForm.password} onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })} className={styles.input} required />
+            <button type="submit" className={styles.button}>Login</button>
+          </form>
+        </Modal>
+      )}
+
+      {showRegister && (
+        <Modal title="Register" onClose={() => setShowRegister(false)}>
+          <form onSubmit={handleRegister}>
+            <input type="text" placeholder="Full Name" value={registerForm.name} onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })} className={styles.input} required />
+            <input type="email" placeholder="Email" value={registerForm.email} onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })} className={styles.input} required />
+            <input type="password" placeholder="Password" value={registerForm.password} onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })} className={styles.input} required />
+            {/* ✅ Add Age field */}
+            <input
+              type="number"
+              placeholder="Age (must be 18+)"
+              onChange={(e) => {
+                const age = parseInt(e.target.value);
+                if (age < 18) {
+                  alert("You must be 18 or older to register.");
+                  e.target.value = '';
+                }
+              }}
+              className={styles.input}
+            />
+            <button type="submit" className={styles.button}>Register</button>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 }
 
-const inputStyle = {
-  display: 'block',
-  width: '100%',
-  padding: 10,
-  margin: '10px 0',
-  borderRadius: 10,
-  border: '1px solid #e91e63',
-};
+function ProfileCard({ p, router }) {
+  const handleClick = () => {
+    if (!p.username || p.username.trim() === '') {
+      console.error('Missing or empty username for profile:', p);
+      alert('This profile lacks a username. Please update it in Profile Setup.');
+      return;
+    }
+    router.push(`/view-profile/${encodeURIComponent(p.username)}`);
+  };
 
-const btnSubmitStyle = {
-  backgroundColor: '#e91e63',
-  color: 'white',
-  padding: '10px 25px',
-  border: 'none',
-  borderRadius: 10,
-  cursor: 'pointer',
-  width: '100%',
-};
+  return (
+    <div className={styles.profileCard} onClick={handleClick}>
+      {p.profilePic ? (
+        <Image src={p.profilePic} alt={`${p.name || 'Lady'} Profile`} width={150} height={150} className={styles.profileImage} />
+      ) : (
+        <div className={styles.placeholderImage} />
+      )}
+      <div className={styles.profileInfo}>
+        <h3>{p.name || 'Anonymous Lady'}</h3>
+        {p.membership && p.membership !== 'Regular' && (
+          <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
+        )}
+      </div>
+      <p className={styles.location}>{p.area || p.city || 'Nairobi'}</p>
+      {p.services && (
+        <div className={styles.services}>
+          {p.services.map((s, idx) => (
+            <span key={idx} className={styles.serviceTag}>{s}</span>
+          ))}
+        </div>
+      )}
+      {p.phone && (
+        <p>
+          <a href={`tel:${p.phone}`} className={styles.phoneLink}>
+            {p.phone}
+          </a>
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Modal({ children, title, onClose }) {
+  return (
+    <div className={styles.modal}>
+      <div className={styles.modalContent}>
+        <h2>{title}</h2>
+        <span onClick={onClose} className={styles.close}>X</span>
+        {children}
+      </div>
+    </div>
+  );
+}
