@@ -1,0 +1,271 @@
+.container {
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #f8f1f1, #ffe4e1);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  width: 100%;
+  padding: 10px 0;
+  border-bottom: 1px solid #ffb6c1;
+}
+
+.logoContainer {
+  cursor: pointer;
+}
+
+.title {
+  font-size: 2.2rem;
+  color: #ff69b4;
+  margin: 0;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.authButtons {
+  display: flex;
+  gap: 15px;
+}
+
+.button {
+  padding: 12px 25px;
+  background: #ff80bf;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.2s;
+  font-size: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.button:hover {
+  background: #ff4d94;
+  transform: translateY(-2px);
+}
+
+.logout {
+  background: #ff69b4;
+}
+
+.logout:hover {
+  background: #ff1493;
+}
+
+.main {
+  width: 100%;
+  max-width: 1200px;
+  display: flex;
+  justify-content: space-between;
+  gap: 30px;
+}
+
+.profileSetupContainer {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.profilePicSection {
+  text-align: center;
+  margin-bottom: 25px;
+}
+
+.profilePicLabel {
+  cursor: pointer;
+  display: inline-block;
+  position: relative;
+}
+
+.profilePic {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #ffb6c1;
+  transition: border-color 0.3s;
+}
+
+.profilePic:hover {
+  border-color: #ff69b4;
+}
+
+.profilePicPlaceholder {
+  font-size: 3.5rem;
+  width: 150px;
+  height: 150px;
+  background: #fff0f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px dashed #ffb6c1;
+  color: #ff69b4;
+  transition: border-color 0.3s;
+}
+
+.profilePicPlaceholder:hover {
+  border-color: #ff69b4;
+}
+
+.profilePicInput {
+  display: none;
+}
+
+.contentContainer {
+  display: flex;
+  width: 100%;
+}
+
+.membershipSection {
+  width: 220px;
+  padding: 20px;
+  background: #fff0f5;
+  border: 1px solid #ffb6c1;
+  border-radius: 10px;
+  margin-right: 30px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.setupTitle {
+  font-size: 2rem;
+  color: #ff69b4;
+  margin-bottom: 20px;
+  text-align: center;
+  font-weight: bold;
+}
+
+.profileFormContainer {
+  flex-grow: 1;
+  background: #ffffff;
+  padding: 25px;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.profileForm {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 450px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 1.1rem;
+  color: #444;
+}
+
+.input {
+  padding: 12px;
+  font-size: 1rem;
+  border: 2px solid #ffb6c1;
+  border-radius: 8px;
+  background: #fff0f5;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.input:focus {
+  border-color: #ff69b4;
+  outline: none;
+  box-shadow: 0 0 5px rgba(255, 105, 180, 0.5);
+}
+
+.select {
+  padding: 12px;
+  font-size: 1rem;
+  border: 2px solid #ffb6c1;
+  border-radius: 8px;
+  background: #fff0f5;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.select:focus {
+  border-color: #ff69b4;
+  outline: none;
+  box-shadow: 0 0 5px rgba(255, 105, 180, 0.5);
+}
+
+.checkboxGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.locationInput {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 2px solid #ffb6c1;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dropdownItem {
+  padding: 12px;
+  cursor: pointer;
+  color: #444;
+  transition: background 0.3s;
+}
+
+.dropdownItem:hover {
+  background: #ffe4e1;
+}
+
+.sectionTitle {
+  font-size: 1.6rem;
+  color: #ff69b4;
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+.upgradeButton {
+  padding: 12px 25px;
+  background: #dda0dd;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  margin: 10px 0;
+  width: 100%;
+  transition: background 0.3s, transform 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.upgradeButton:hover {
+  background: #c71585;
+  transform: translateY(-2px);
+}
+
+.error {
+  color: #ff4040;
+  margin-bottom: 15px;
+  text-align: center;
+  font-size: 1.1rem;
+  padding: 10px;
+  background: #ffebee;
+  border-radius: 5px;
+}

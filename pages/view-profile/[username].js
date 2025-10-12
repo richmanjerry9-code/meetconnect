@@ -2,24 +2,38 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import { db } from '../../firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function ViewProfile() {
   const router = useRouter();
   const { username } = router.query;
   const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!username) return;
-    const profiles = JSON.parse(localStorage.getItem('profiles') || '[]');
-    const found = profiles.find((p) => p.username === username);
-    if (found) {
-      setProfile(found);
-    } else {
-      setProfile('notfound');
-    }
+    const fetchProfile = async () => {
+      try {
+        const q = query(collection(db, 'profiles'), where('username', '==', username));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          const found = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+          setProfile(found);
+        } else {
+          setProfile('notfound');
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error);
+        setProfile('notfound');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
   }, [username]);
 
-  if (profile === null) {
+  if (loading) {
     return <p style={{ textAlign: 'center', marginTop: 50 }}>Loading profile...</p>;
   }
 
@@ -58,7 +72,7 @@ export default function ViewProfile() {
 
         <p style={infoText}>
           <b>Gender:</b> {profile.gender || 'N/A'} <br />
-          <b>Orientation:</b> {profile.orientation || 'N/A'} <br />
+          <b>Orientation:</b> {profile.sexualOrientation || 'N/A'} <br />
           <b>Age:</b> {profile.age || 'N/A'} <br />
           <b>Nationality:</b> {profile.nationality || 'N/A'} <br />
           <b>County:</b> {profile.county || 'N/A'} <br />
@@ -88,12 +102,12 @@ export default function ViewProfile() {
           </div>
         )}
 
-        {(profile.incallRate || profile.outcallRate) && (
+        {(profile.incallsRate || profile.outcallsRate) && (
           <div style={{ marginBottom: 15 }}>
             <b>Rates:</b>
             <p>
-              {profile.incallRate && `Incalls: KSh ${profile.incallRate}/hr`} <br />
-              {profile.outcallRate && `Outcalls: KSh ${profile.outcallRate}/hr`}
+              {profile.incallsRate && `Incalls: KSh ${profile.incallsRate}/hr`} <br />
+              {profile.outcallsRate && `Outcalls: KSh ${profile.outcallsRate}/hr`}
             </p>
           </div>
         )}

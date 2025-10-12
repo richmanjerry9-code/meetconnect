@@ -1,3 +1,4 @@
+// admin.js
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { Nairobi } from '../data/locations';
@@ -10,7 +11,25 @@ import {
   doc,
   query,
   where,
+  updateDoc,
 } from 'firebase/firestore';
+
+// Add servicesList definition
+const servicesList = [
+  'Dinner Date',
+  'Travel Companion',
+  'Lesbian Show',
+  'Rimming',
+  'Raw BJ',
+  'BJ',
+  'GFE',
+  'COB – Cum On Body',
+  'CIM – Cum In Mouth',
+  '3 Some',
+  'Anal',
+  'Massage',
+  'Other Services',
+];
 
 const ADMIN_PASSWORD = '447962Pa$$word';
 
@@ -35,11 +54,15 @@ export default function AdminPanel() {
     nearby: [],
     services: [],
     otherServices: '',
-    incallRate: '',
-    outcallRate: '',
+    incallsRate: '',
+    outcallsRate: '',
     profilePic: null,
   });
-
+  const [isEdit, setIsEdit] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [deletedUsers, setDeletedUsers] = useState([]); // Track deleted users
+  const [lastEdit, setLastEdit] = useState(null); // Track last edited profile
+  const [globalMenuOpen, setGlobalMenuOpen] = useState(false); // For global 3-dot menu
   const [currentViewers, setCurrentViewers] = useState(0);
   const [allVisits, setAllVisits] = useState([]);
 
@@ -61,8 +84,7 @@ export default function AdminPanel() {
     localStorage.setItem('visits', JSON.stringify(updatedVisits));
     setAllVisits(updatedVisits);
     setCurrentViewers((prev) => prev + 1);
-    const handleUnload = () =>
-      setCurrentViewers((prev) => Math.max(prev - 1, 0));
+    const handleUnload = () => setCurrentViewers((prev) => Math.max(prev - 1, 0));
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [refresh]);
@@ -82,13 +104,13 @@ export default function AdminPanel() {
     const { name, value, type, checked } = e.target;
     if (type === 'checkbox' && name === 'services') {
       const updated = checked
-        ? [...form.services, value]
-        : form.services.filter((s) => s !== value);
+        ? [...(form.services || []), value]
+        : (form.services || []).filter((s) => s !== value);
       setForm({ ...form, services: updated });
     } else if (type === 'checkbox' && name === 'nearby') {
       const updated = checked
-        ? [...form.nearby, value]
-        : form.nearby.filter((n) => n !== value);
+        ? [...(form.nearby || []), value]
+        : (form.nearby || []).filter((n) => n !== value);
       setForm({ ...form, nearby: updated.slice(0, 4) });
     } else {
       setForm({ ...form, [name]: value });
@@ -103,40 +125,52 @@ export default function AdminPanel() {
     reader.readAsDataURL(file);
   };
 
-  // ✅ Auto fake email + password generator
   const handleSave = async () => {
     if (!form.username) {
       alert('Username is required!');
       return;
     }
 
-    const q = query(
-      collection(db, 'profiles'),
-      where('username', '==', form.username)
-    );
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      alert('Username already exists!');
-      return;
-    }
-
-    const fakeEmail =
-      form.email || `${form.username.toLowerCase()}@meetconnect.fake`;
-    const fakePassword = Math.random().toString(36).slice(-8);
-
-    const profileData = {
-      ...form,
-      email: fakeEmail,
-      password: fakePassword,
-      createdAt: Date.now(),
-    };
-
     try {
-      await addDoc(collection(db, 'profiles'), profileData);
-      alert(
-        `✅ Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`
-      );
-      setUsers((prev) => [...prev, profileData]);
+      if (isEdit) {
+        await updateDoc(doc(db, 'profiles', editId), form);
+        alert('✅ Profile updated!');
+        setUsers((prev) =>
+          prev.map((u) => (u.id === editId ? { ...form, id: editId } : u))
+        );
+      } else {
+        const q = query(collection(db, 'profiles'), where('username', '==', form.username));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+          alert('Username already exists!');
+          return;
+        }
+
+        const fakeEmail = form.email || `${form.username.toLowerCase()}@meetconnect.fake`;
+        const fakePassword = Math.random().toString(36).slice(-8);
+
+        const profileData = {
+          ...form,
+          email: fakeEmail,
+          password: fakePassword,
+          createdAt: Date.now(),
+          sexualOrientation: '', // Added from profileSetup
+          incallsRate: form.incallsRate, // Renamed to match profileSetup
+          outcallsRate: form.outcallsRate, // Renamed to match profileSetup
+          county: form.county || 'Nairobi', // Default to Nairobi if empty
+          ward: form.ward || '',
+          area: form.area || '',
+          nearby: form.nearby || [],
+          services: form.services || [],
+          otherServices: form.otherServices || '',
+          profilePic: form.profilePic || '',
+        };
+
+        const docRef = await addDoc(collection(db, 'profiles'), profileData);
+        alert(`✅ Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`);
+        setUsers((prev) => [...prev, { id: docRef.id, ...profileData }]);
+      }
+
       setForm({
         username: '',
         email: '',
@@ -153,10 +187,12 @@ export default function AdminPanel() {
         nearby: [],
         services: [],
         otherServices: '',
-        incallRate: '',
-        outcallRate: '',
+        incallsRate: '',
+        outcallsRate: '',
         profilePic: null,
       });
+      setIsEdit(false);
+      setEditId(null);
       setRefresh(!refresh);
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -164,16 +200,15 @@ export default function AdminPanel() {
     }
   };
 
-  // ✅ Delete and refresh from Firestore
   const handleDelete = async (userId) => {
     const userToDelete = users.find((u) => u.id === userId);
     if (!userToDelete) return alert('User not found.');
-    if (userToDelete.role === 'Admin')
-      return alert('Cannot delete admin account!');
+    if (userToDelete.role === 'Admin') return alert('Cannot delete admin account!');
     if (!confirm('Delete this profile?')) return;
 
     try {
       await deleteDoc(doc(db, 'profiles', userId));
+      setDeletedUsers((prev) => [...prev, userToDelete]); // Store deleted user
       const q = query(collection(db, 'profiles'));
       const querySnapshot = await getDocs(q);
       const updatedUsers = querySnapshot.docs.map((docSnap) => ({
@@ -186,6 +221,80 @@ export default function AdminPanel() {
       console.error('Error deleting profile:', error);
       alert('Failed to delete profile.');
     }
+  };
+
+  const handleUpdateMembership = async (userId, newMembership) => {
+    try {
+      await updateDoc(doc(db, 'profiles', userId), { membership: newMembership });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, membership: newMembership } : u))
+      );
+      alert(`Membership updated to ${newMembership} for user ${users.find((u) => u.id === userId)?.username}!`);
+      setRefresh(!refresh);
+    } catch (error) {
+      console.error('Error updating membership:', error);
+      alert('Failed to update membership.');
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!confirm('Are you sure you want to delete all accounts? This cannot be undone directly.')) return;
+    try {
+      const promises = users.map((u) => deleteDoc(doc(db, 'profiles', u.id)));
+      await Promise.all(promises);
+      setDeletedUsers((prev) => [...prev, ...users]); // Store all deleted users
+      setUsers([]);
+      alert('✅ All accounts deleted!');
+      setRefresh(!refresh);
+    } catch (error) {
+      console.error('Error deleting all accounts:', error);
+      alert('Failed to delete all accounts.');
+    }
+  };
+
+  const handleRestoreAll = async () => {
+    if (deletedUsers.length === 0) return alert('No deleted accounts to restore!');
+    try {
+      const promises = deletedUsers.map((user) =>
+        addDoc(collection(db, 'profiles'), { ...user, id: undefined })
+      );
+      await Promise.all(promises);
+      setDeletedUsers([]); // Clear deleted users after restoration
+      setRefresh(!refresh);
+      alert('✅ All deleted accounts restored!');
+    } catch (error) {
+      console.error('Error restoring accounts:', error);
+      alert('Failed to restore accounts.');
+    }
+  };
+
+  const handleRevertLastEdit = () => {
+    if (!lastEdit) return alert('No previous edit to revert!');
+    const { userId, previousData } = lastEdit;
+    updateDoc(doc(db, 'profiles', userId), previousData)
+      .then(() => {
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...previousData, id: userId } : u))
+        );
+        setLastEdit(null); // Clear last edit after revert
+        alert('✅ Last edit reverted successfully!');
+        setRefresh(!refresh);
+      })
+      .catch((error) => {
+        console.error('Error reverting edit:', error);
+        alert('Failed to revert edit.');
+      });
+  };
+
+  const handleEdit = (user) => {
+    setForm({ 
+      ...user, 
+      services: user.services || [], 
+      nearby: user.nearby || [] 
+    });
+    setIsEdit(true);
+    setEditId(user.id);
+    setLastEdit({ userId: user.id, previousData: { ...user } }); // Store original data
   };
 
   if (!loggedIn) {
@@ -234,7 +343,7 @@ export default function AdminPanel() {
   const areasForWard = form.ward && Nairobi ? Nairobi[form.ward] : [];
 
   return (
-    <div style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0' }}>
+    <div style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0', position: 'relative' }}>
       <Head>
         <title>Admin Panel</title>
       </Head>
@@ -254,6 +363,73 @@ export default function AdminPanel() {
       >
         Logout
       </button>
+
+      {/* Global 3-dot menu at top right */}
+      <button
+        onClick={() => setGlobalMenuOpen(!globalMenuOpen)}
+        style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          background: '#666',
+          color: 'white',
+          border: 'none',
+          padding: '8px',
+          borderRadius: '50%',
+          cursor: 'pointer',
+          fontSize: '18px',
+          zIndex: 100,
+        }}
+      >
+        ⋮
+      </button>
+      {globalMenuOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '60px',
+            right: '20px',
+            background: '#fff',
+            border: '1px solid #ccc',
+            padding: '10px',
+            borderRadius: '5px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            zIndex: 100,
+          }}
+        >
+          <button
+            onClick={handleDeleteAll}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px',
+              background: '#f44336',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              marginBottom: '5px',
+              cursor: 'pointer',
+            }}
+          >
+            Delete All Accounts
+          </button>
+          <button
+            onClick={handleRestoreAll}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px',
+              background: '#4CAF50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '3px',
+              cursor: 'pointer',
+            }}
+          >
+            Restore All Deleted Accounts
+          </button>
+        </div>
+      )}
 
       <div style={{ background: '#fff', padding: '10px', marginBottom: '10px' }}>
         <h2 style={{ color: '#e91e63' }}>Create Profile</h2>
@@ -297,6 +473,143 @@ export default function AdminPanel() {
           <option>VIP</option>
           <option>VVIP</option>
         </select>
+        <input
+          name="name"
+          placeholder="Full Name"
+          value={form.name}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <select
+          name="gender"
+          value={form.gender}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option value="">Select Gender</option>
+          <option value="Female">Female</option>
+          <option value="Male">Male</option>
+        </select>
+        <select
+          name="age"
+          value={form.age}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option value="">Select Age</option>
+          {Array.from({ length: 82 }, (_, i) => 18 + i).map((age) => (
+            <option key={age} value={age}>
+              {age}
+            </option>
+          ))}
+        </select>
+        <input
+          name="nationality"
+          placeholder="Nationality (optional)"
+          value={form.nationality}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <input
+          name="county"
+          placeholder="County"
+          value={form.county}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <select
+          name="ward"
+          value={form.ward}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option value="">Select Ward</option>
+          {wards.map((ward) => (
+            <option key={ward} value={ward}>
+              {ward}
+            </option>
+          ))}
+        </select>
+        <select
+          name="area"
+          value={form.area}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+          disabled={!form.ward}
+        >
+          <option value="">Select Area</option>
+          {areasForWard.map((area) => (
+            <option key={area} value={area}>
+              {area}
+            </option>
+          ))}
+        </select>
+        <div>
+          <label>Nearby Places:</label>
+          {form.ward && Nairobi[form.ward].map((place) => (
+            <div key={place}>
+              <input
+                type="checkbox"
+                name="nearby"
+                value={place}
+                checked={(form.nearby || []).includes(place)}
+                onChange={handleChange}
+              />
+              <span>{place}</span>
+            </div>
+          ))}
+        </div>
+        <div>
+          <label>Services:</label>
+          {servicesList.map((service) => (
+            <div key={service}>
+              <input
+                type="checkbox"
+                name="services"
+                value={service}
+                checked={(form.services || []).includes(service)}
+                onChange={handleChange}
+              />
+              <span>{service}</span>
+            </div>
+          ))}
+        </div>
+        <input
+          name="otherServices"
+          placeholder="Other Services (optional)"
+          value={form.otherServices}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <input
+          name="incallsRate"
+          placeholder="Incalls Rate (KSh/hr)"
+          value={form.incallsRate}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <input
+          name="outcallsRate"
+          placeholder="Outcalls Rate (KSh/hr)"
+          value={form.outcallsRate}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        {isEdit && form.profilePic && (
+          <div style={{ marginBottom: '5px' }}>
+            <img 
+              src={form.profilePic} 
+              alt="Current Profile Pic" 
+              style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '5px' }} 
+            />
+          </div>
+        )}
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleProfilePic}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
         <button
           onClick={handleSave}
           style={{
@@ -307,7 +620,7 @@ export default function AdminPanel() {
             marginTop: '5px',
           }}
         >
-          Save
+          {isEdit ? 'Update' : 'Save'}
         </button>
       </div>
 
@@ -333,27 +646,51 @@ export default function AdminPanel() {
                 <td>{u.email || 'N/A'}</td>
                 <td>{u.phone || 'N/A'}</td>
                 <td>{u.role || 'User'}</td>
-                <td>{u.membership || 'Regular'}</td>
                 <td>
+                  <select
+                    value={u.membership || 'Regular'}
+                    onChange={(e) => handleUpdateMembership(u.id, e.target.value)}
+                    style={{
+                      padding: '5px',
+                      marginRight: '5px',
+                      fontSize: '0.9rem',
+                    }}
+                  >
+                    <option>Regular</option>
+                    <option>VIP</option>
+                    <option>VVIP</option>
+                  </select>
+                </td>
+                <td style={{ position: 'relative' }}>
                   <button
-                    onClick={() => setForm(u)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent menu open
+                      handleEdit(u);
+                    }}
                     style={{
                       background: '#2196F3',
                       color: 'white',
                       border: 'none',
                       padding: '5px 10px',
                       marginRight: '5px',
+                      cursor: 'pointer',
+                      pointerEvents: 'auto',
                     }}
                   >
                     Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(u.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(u.id);
+                    }}
                     style={{
                       background: '#f44336',
                       color: 'white',
                       border: 'none',
                       padding: '5px 10px',
+                      cursor: 'pointer',
+                      pointerEvents: 'auto',
                     }}
                   >
                     Delete
@@ -364,7 +701,21 @@ export default function AdminPanel() {
           </tbody>
         </table>
       </div>
+
+      <div style={{ marginTop: '10px' }}>
+        <button
+          onClick={handleRevertLastEdit}
+          style={{
+            padding: '8px 16px',
+            background: '#ff9800',
+            color: 'white',
+            border: 'none',
+            fontSize: '0.9rem',
+          }}
+        >
+          Revert Previous Action
+        </button>
+      </div>
     </div>
   );
 }
-

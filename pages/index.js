@@ -1,3 +1,4 @@
+// pages/index.js (added refreshKey for auto-re-fetch after save/navigation)
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -25,33 +26,44 @@ export default function Home() {
   const [showRegister, setShowRegister] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    // Load profiles from Firestore (filter incomplete)
     const fetchProfiles = async () => {
-      const querySnapshot = await getDocs(collection(db, 'profiles'));
-      const data = querySnapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        // ✅ Only show complete profiles
-        .filter(
-          (p) =>
-            p.username &&
-            p.name &&
-            p.email &&
-            p.phone &&
-            p.profilePic &&
-            p.age &&
-            parseInt(p.age) >= 18
-        );
-      setProfiles(data);
+      try {
+        const querySnapshot = await getDocs(collection(db, 'profiles'));
+        const data = querySnapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          // Slightly loosened filter: photo optional for now, but keep core reqs
+          .filter(
+            (p) =>
+              p.username &&
+              p.name &&
+              p.email &&
+              p.phone &&
+              p.age &&
+              parseInt(p.age) >= 18
+          );
+        setProfiles(data);
+      } catch (error) {
+        console.error('Error fetching profiles:', error);
+      }
     };
+
     fetchProfiles();
 
-    // Keep user login from localStorage
-    const loggedIn = JSON.parse(localStorage.getItem('loggedInUser') || 'null');
-    setUser(loggedIn);
-  }, []);
+    // Check flag and auto-refresh every 5s for real-time
+    if (localStorage.getItem('profileSaved') === 'true') {
+      localStorage.removeItem('profileSaved');
+      setRefreshKey(prev => prev + 1);
+      fetchProfiles();
+    }
 
+    const interval = setInterval(fetchProfiles, 5000); // Light polling
+    return () => clearInterval(interval);
+  }, [refreshKey]);
+
+  // Rest of your code unchanged...
   useEffect(() => {
     if (!searchLocation || !Nairobi) return setFilteredLocations([]);
     const matches = [];
@@ -82,7 +94,7 @@ export default function Home() {
     const wardMatch = selectedWard ? p.ward === selectedWard : true;
     const areaMatch = selectedArea ? p.area === selectedArea : true;
     const searchMatch = searchLocation
-      ? [p.county, p.city, p.ward, p.area, ...(p.nearby || [])]
+      ? [p.county, p.ward, p.area, ...(p.nearby || [])]
           .join(' ')
           .toLowerCase()
           .includes(searchLocation.toLowerCase())
@@ -115,7 +127,6 @@ export default function Home() {
     else groupedProfiles.Regular.push(p);
   });
 
-  // 🔹 Firestore-only REGISTER
   const handleRegister = async (e) => {
     e.preventDefault();
 
@@ -142,7 +153,7 @@ export default function Home() {
         createdAt: new Date().toISOString(),
       };
 
-      const docRef = await addDoc(collection(db, "profiles"), newUser);
+      const docRef = await addDoc(collection(db, 'profiles'), newUser);
       const savedUser = { id: docRef.id, ...newUser };
 
       localStorage.setItem("loggedInUser", JSON.stringify(savedUser));
@@ -156,7 +167,6 @@ export default function Home() {
     }
   };
 
-  // 🔹 Firestore-only LOGIN
   const handleLogin = async (e) => {
     e.preventDefault();
 
@@ -328,7 +338,7 @@ export default function Home() {
             filteredProfiles.map((p, i) => <ProfileCard key={i} p={p} router={router} />)
           )}
           {filteredProfiles.length === 0 && (
-            <p className={styles.noProfiles}>No ladies found.</p>
+            <p className={styles.noProfiles}>No ladies found. Complete your profile with a photo to appear here.</p>
           )}
         </div>
       </main>
@@ -398,6 +408,7 @@ export default function Home() {
   );
 }
 
+// ProfileCard and Modal unchanged...
 function ProfileCard({ p, router }) {
   const handleClick = () => {
     if (!p.username || p.username.trim() === '') {
@@ -429,7 +440,7 @@ function ProfileCard({ p, router }) {
           </span>
         )}
       </div>
-      <p className={styles.location}>{p.area || p.city || 'Nairobi'}</p>
+      <p className={styles.location}>{p.area || p.ward || 'Nairobi'}</p>
       {p.services && (
         <div className={styles.services}>
           {p.services.map((s, idx) => (
@@ -463,4 +474,3 @@ function Modal({ children, title, onClose }) {
     </div>
   );
 }
-
