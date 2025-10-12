@@ -32,7 +32,17 @@ export default function Home() {
       const querySnapshot = await getDocs(collection(db, 'profiles'));
       const data = querySnapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter((p) => p.username && p.name && p.email);
+        // ✅ Only show complete profiles
+        .filter(
+          (p) =>
+            p.username &&
+            p.name &&
+            p.email &&
+            p.phone &&
+            p.profilePic &&
+            p.age &&
+            parseInt(p.age) >= 18
+        );
       setProfiles(data);
     };
     fetchProfiles();
@@ -116,7 +126,6 @@ export default function Home() {
         return;
       }
 
-      // check if email exists
       const q = query(collection(db, "profiles"), where("email", "==", email));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
@@ -127,7 +136,7 @@ export default function Home() {
       const newUser = {
         name,
         email,
-        password, // temporary for test
+        password,
         username: email.split("@")[0],
         membership: "Regular",
         createdAt: new Date().toISOString(),

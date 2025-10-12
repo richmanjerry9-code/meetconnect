@@ -3,12 +3,14 @@ import { useRouter } from 'next/router';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import { db } from '../firebase';
-import { collection, doc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
 
 export default function ProfileSetup() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [profilePic, setProfilePic] = useState(null);
+  const [searchLocation, setSearchLocation] = useState('');
+  const [filteredLocations, setFilteredLocations] = useState([]);
   const [form, setForm] = useState({
     username: '',
     name: '',
@@ -17,7 +19,7 @@ export default function ProfileSetup() {
     orientation: '',
     age: '',
     nationality: '',
-    county: 'Nairobi', // Fixed to Nairobi
+    county: 'Nairobi',
     town: 'Nairobi',
     ward: '',
     area: '',
@@ -52,26 +54,29 @@ export default function ProfileSetup() {
       return;
     }
     setUser(logged);
-
-    const fetchExistingProfile = async () => {
-      const querySnapshot = await getDocs(collection(db, 'profiles'));
-      const profiles = querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      const existingProfile = profiles.find((p) => p.email === logged.email);
-      if (existingProfile) {
-        setForm({
-          ...existingProfile,
-          nearby: existingProfile.nearby || [],
-          services: existingProfile.services || [],
-        });
-        setProfilePic(existingProfile.profilePic || null);
-      } else {
-        const defaultUsername = logged.email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '_');
-        setForm((prev) => ({ ...prev, username: defaultUsername, email: logged.email }));
-      }
-    };
-
-    fetchExistingProfile();
   }, [router]);
+
+  useEffect(() => {
+    if (!searchLocation || !Nairobi) return setFilteredLocations([]);
+    const matches = [];
+    Object.keys(Nairobi).forEach((ward) => {
+      Nairobi[ward].forEach((area) => {
+        if (
+          area.toLowerCase().includes(searchLocation.toLowerCase()) ||
+          ward.toLowerCase().includes(searchLocation.toLowerCase())
+        ) {
+          matches.push({ ward, area });
+        }
+      });
+    });
+    setFilteredLocations(matches.slice(0, 5));
+  }, [searchLocation]);
+
+  const handleLocationSelect = (ward, area) => {
+    setForm({ ...form, ward, area });
+    setSearchLocation(`${ward}, ${area}`);
+    setFilteredLocations([]);
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -82,6 +87,10 @@ export default function ProfileSetup() {
       setForm({ ...form, services: updated });
     } else if (type === 'checkbox' && name === 'listOtherCities') {
       setForm({ ...form, listOtherCities: checked });
+    } else if (name === 'age') {
+      const ageValue = parseInt(value, 10);
+      if (ageValue < 18) return; // block typing below 18
+      setForm({ ...form, [name]: value });
     } else {
       setForm({ ...form, [name]: value });
     }
@@ -107,12 +116,12 @@ export default function ProfileSetup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.username || form.username.trim() === '') {
-      alert('Username is required!');
+    if (!form.username || !form.name || !form.phone || !form.gender || !form.orientation || !form.age || !form.nationality || !form.ward || !form.area || !profilePic) {
+      alert('Please fill in all fields and add a profile picture!');
       return;
     }
 
-    if (form.age < 18) {
+    if (parseInt(form.age) < 18) {
       alert('You must be 18 or older to register!');
       return;
     }
@@ -128,10 +137,15 @@ export default function ProfileSetup() {
         return;
       }
 
-      const newProfile = { ...form, profilePic, email: user.email, createdAt: Date.now() };
+      const newProfile = {
+        ...form,
+        profilePic,
+        email: user.email,
+        createdAt: Date.now(),
+        membership: user.membership || 'Regular',
+      };
 
-      await setDoc(doc(db, 'profiles', user.email), newProfile);
-
+      await addDoc(collection(db, 'profiles'), newProfile);
       alert('Profile saved!');
       router.push('/');
     } catch (error) {
@@ -140,7 +154,6 @@ export default function ProfileSetup() {
     }
   };
 
-  const wards = Nairobi ? Object.keys(Nairobi) : [];
   const areasForWard = form.ward && Nairobi ? Nairobi[form.ward] || [] : [];
 
   return (
@@ -194,35 +207,49 @@ export default function ProfileSetup() {
           <option value='Bisexual'>Bisexual</option>
         </select>
 
-        <input name='age' type='number' placeholder='Age (18+)' min='18' value={form.age} onChange={handleChange} required style={inputStyle} />
+        <input
+          name='age'
+          type='number'
+          placeholder='Age (18+)'
+          min='18'
+          value={form.age}
+          onChange={handleChange}
+          required
+          style={inputStyle}
+        />
 
         <input name='nationality' placeholder='Nationality' value={form.nationality} onChange={handleChange} required style={inputStyle} />
 
+        {/* Smart Search Location */}
         <input
-          name='county'
-          value='Nairobi'
-          readOnly
-          style={{ ...inputStyle, backgroundColor: '#f8f8f8', cursor: 'not-allowed' }}
+          type='text'
+          placeholder='Search Ward or Area (e.g., Westlands, Kilimani)'
+          value={searchLocation}
+          onChange={(e) => setSearchLocation(e.target.value)}
+          style={inputStyle}
         />
-
-        <select name='ward' value={form.ward} onChange={handleChange} required style={inputStyle}>
-          <option value=''>Select Ward</option>
-          {wards.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
-          ))}
-        </select>
-
-        {form.ward && (
-          <select name='area' value={form.area} onChange={handleChange} required style={inputStyle}>
-            <option value=''>Select Area</option>
-            {areasForWard.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
+        {filteredLocations.length > 0 && (
+          <div style={{ background: '#fff', border: '1px solid #e91e63', borderRadius: 10, marginTop: 5 }}>
+            {filteredLocations.map((loc, idx) => (
+              <div
+                key={idx}
+                onClick={() => handleLocationSelect(loc.ward, loc.area)}
+                style={{
+                  padding: 10,
+                  cursor: 'pointer',
+                  borderBottom: '1px solid #f0f0f0',
+                }}
+              >
+                {loc.ward}, {loc.area}
+              </div>
             ))}
-          </select>
+          </div>
+        )}
+
+        {form.ward && form.area && (
+          <p style={{ color: '#e91e63' }}>
+            Selected: {form.ward}, {form.area}
+          </p>
         )}
 
         {form.area && (
