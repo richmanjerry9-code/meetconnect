@@ -44,8 +44,8 @@ export const initiateSTKPush = async (amount, phoneNumber, accountReference, tra
   const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
 
-  // Use ngrok or localtunnel public URL here - replace 'your-ngrok-url.ngrok-free.app' with actual
-  const publicCallbackUrl = 'https://your-ngrok-url.ngrok-free.app/api/mpesa-callback'; // Or localtunnel URL
+  // FIXED: Use localtunnel or ngrok public URL - replace with your actual tunnel URL (e.g., from 'lt --port 3000')
+  const publicCallbackUrl = 'https://your-localtunnel-subdomain.loca.lt/api/mpesa-callback'; // Replace 'your-localtunnel-subdomain' with real one
 
   const payload = {
     BusinessShortCode: shortcode,
@@ -56,7 +56,7 @@ export const initiateSTKPush = async (amount, phoneNumber, accountReference, tra
     PartyA: phoneNumber,
     PartyB: shortcode,
     PhoneNumber: phoneNumber,
-    CallBackURL: publicCallbackUrl, // Fixed: Use public URL from ngrok/localtunnel
+    CallBackURL: publicCallbackUrl, // FIXED: Public URL for callbacks
     AccountReference: accountReference,
     TransactionDesc: transactionDesc,
   };
