@@ -1,4 +1,4 @@
-// pages/profile-setup.js
+// pages/profile-setup.js (Updated to shorten accountReference to <=20 chars)
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -49,7 +49,17 @@ export default function ProfileSetup() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredOptions, setFilteredOptions] = useState([]);
   const [membership, setMembership] = useState('Regular');
+  const [walletBalance, setWalletBalance] = useState(0);
   const [error, setError] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedDuration, setSelectedDuration] = useState('');
+  // New states for Add Fund modal
+  const [showAddFundModal, setShowAddFundModal] = useState(false);
+  const [addFundAmount, setAddFundAmount] = useState('');
+  // New states for Upgrade Payment Choice
+  const [showPaymentChoice, setShowPaymentChoice] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -72,8 +82,12 @@ export default function ProfileSetup() {
             age: data.age || formData.age,
           });
           setSelectedWard(data.ward || '');
+          setWalletBalance(data.walletBalance || 0);
+          setMembership(data.membership || 'Regular');
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
+          setWalletBalance(0);
+          setMembership('Regular');
         }
       } catch (err) {
         console.error('Fetch profile error:', err);
@@ -82,6 +96,28 @@ export default function ProfileSetup() {
     fetchProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  // Helper function to format phone for M-Pesa (254xxxxxxxxx)
+  const formatPhoneForMpesa = (phone) => {
+    if (!phone) return '';
+    let formatted = phone.replace(/[\s+]/g, ''); // Remove spaces and +
+    if (formatted.startsWith('0')) {
+      formatted = '254' + formatted.slice(1);
+    } else if (formatted.startsWith('254') || formatted.startsWith('7') || formatted.startsWith('1')) {
+      // Already good or needs prefix
+      if (formatted.length === 9 && (formatted.startsWith('7') || formatted.startsWith('1'))) {
+        formatted = '254' + formatted;
+      }
+    }
+    // Validate length
+    if (formatted.length !== 12 || !formatted.match(/^254[17]\d{8}$/)) {
+      throw new Error('Invalid phone number. Use format like 0712345678 or +254712345678.');
+    }
+    return formatted;
+  };
+
+  // Helper to shorten userId to last 10 chars for ref
+  const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -200,7 +236,7 @@ export default function ProfileSetup() {
     }
     setError('');
     try {
-      const fullData = { ...loggedInUser, ...formData };
+      const fullData = { ...loggedInUser, ...formData, walletBalance };
       await setDoc(doc(db, 'profiles', loggedInUser.id), fullData, { merge: true });
       localStorage.setItem('profileSaved', 'true');
       alert('Profile updated successfully');
@@ -212,25 +248,159 @@ export default function ProfileSetup() {
   };
 
   const handleUpgrade = (level) => {
+    if (level === 'Regular') {
+      alert('Regular membership is free! No upgrade needed.');
+      return;
+    }
+    setSelectedLevel(level);
+    setSelectedDuration('');
+    setShowModal(true);
+  };
+
+  const handleDurationSelect = (duration) => {
+    setSelectedDuration(duration);
+  };
+
+  const handleProceedToPayment = () => {
+    if (!selectedDuration) {
+      alert('Please select a duration.');
+      return;
+    }
     const plans = {
-      Prime: { '1 Month': 1000, '3 Days': 100 },
-      VIP: { '1 Month': 2000, '3 Days': 200 },
-      VVIP: { '1 Month': 3000, '3 Days': 300 },
+      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
     };
-    const selectedPlan = prompt(
-      `Select payment plan for ${level}:\n${Object.entries(plans[level])
-        .map(([duration, price]) => `${duration}: KSh ${price}`)
-        .join('\n')}\nEnter duration (e.g., '1 Month' or '3 Days')`
-    );
-    if (selectedPlan && plans[level][selectedPlan]) {
-      const price = plans[level][selectedPlan];
-      if (confirm(`Upgrading to ${level} for ${selectedPlan} at KSh ${price}. Proceed?`)) {
-        alert('Payment simulation - implement real payment here');
-        setDoc(doc(db, 'profiles', loggedInUser.id), { membership: level }, { merge: true });
-        setMembership(level);
-      }
+    const price = plans[selectedLevel][selectedDuration];
+    if (walletBalance >= price) {
+      setSelectedPaymentMethod('wallet');
+      setShowPaymentChoice(true);
+      setShowModal(false);
     } else {
-      alert('Invalid selection or canceled');
+      setSelectedPaymentMethod('mpesa');
+      handleConfirmMpesaUpgrade();
+    }
+  };
+
+  const handlePaymentMethodChange = (method) => {
+    setSelectedPaymentMethod(method);
+  };
+
+  const handleConfirmWalletUpgrade = async () => {
+    const plans = {
+      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+    };
+    const price = plans[selectedLevel][selectedDuration];
+    if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
+      setWalletBalance(prev => prev - price);
+      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
+        membership: selectedLevel,
+        walletBalance: walletBalance - price 
+      }, { merge: true });
+      setMembership(selectedLevel);
+      setShowPaymentChoice(false);
+      setSelectedDuration('');
+      alert('Upgrade successful!');
+    }
+  };
+
+  const handleConfirmMpesaUpgrade = async () => {
+    try {
+      const formattedPhone = formatPhoneForMpesa(formData.phone);
+      const plans = {
+        Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+        VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+        VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+      };
+      const price = plans[selectedLevel][selectedDuration];
+      const shortUserId = shortenUserId(loggedInUser.id);
+      const shortLevel = selectedLevel.slice(0, 3); // Pri, VIP, VVI
+      const accountRef = `upg_${shortUserId}_${shortLevel}`; // e.g., upg_nxLdK1XA5_Pri (20 chars max)
+      const response = await fetch('/api/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: price,
+          phone: formattedPhone,
+          userId: loggedInUser.id,
+          level: selectedLevel,
+          duration: selectedDuration,
+          accountReference: accountRef,
+          transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert(`STK Push initiated for upgrade. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
+        setShowPaymentChoice(false);
+        setShowModal(false);
+        setSelectedDuration('');
+      } else {
+        const errorData = await response.json();
+        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
+        alert(`Error: ${errorMsg}`);
+        console.error('Full error data:', errorData);
+      }
+    } catch (error) {
+      console.error('Upgrade M-Pesa error:', error);
+      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
+      alert(`Error: ${errorMsg}`);
+      setError(errorMsg);
+    }
+  };
+
+  const handleAddFund = () => {
+    if (!formData.phone) {
+      setError('Please add your phone number to your profile first.');
+      return;
+    }
+    try {
+      formatPhoneForMpesa(formData.phone); // Validate early
+      setAddFundAmount('');
+      setShowAddFundModal(true);
+    } catch (error) {
+      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
+      setError(errorMsg);
+    }
+  };
+
+  const handleConfirmAddFund = async () => {
+    if (!addFundAmount || parseInt(addFundAmount) < 10) {
+      setError('Minimum amount is KSh 10.');
+      return;
+    }
+    try {
+      const formattedPhone = formatPhoneForMpesa(formData.phone);
+      const shortUserId = shortenUserId(loggedInUser.id);
+      const accountRef = `wal_${shortUserId}`; // e.g., wal_nxLdK1XA5 (15 chars)
+      const response = await fetch('/api/addFunds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseInt(addFundAmount),
+          phone: formattedPhone,
+          userId: loggedInUser.id,
+          accountReference: accountRef,
+          transactionDesc: 'Add funds to wallet'
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
+        setShowAddFundModal(false);
+      } else {
+        const errorData = await response.json();
+        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
+        alert(`Error: ${errorMsg}`);
+        console.error('Full error data:', errorData);
+      }
+    } catch (error) {
+      console.error('Add fund error:', error);
+      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
+      alert(`Error: ${errorMsg}`);
+      setError(errorMsg);
     }
   };
 
@@ -253,6 +423,12 @@ export default function ProfileSetup() {
 
   const wards = Nairobi ? Object.keys(Nairobi) : [];
   const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
+
+  const plans = {
+    Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+    VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+    VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+  };
 
   return (
     <div className={styles.container}>
@@ -278,6 +454,14 @@ export default function ProfileSetup() {
       <main className={styles.main}>
         <div className={styles.profileSetupContainer}>
           <aside className={styles.membershipSection}>
+            <div className={styles.walletSection}>
+              <div className={styles.walletStripe}></div>
+              <p className={styles.walletLabel}>Available Wallet Balance</p>
+              <p className={styles.walletBalance}>KSh{walletBalance}</p>
+              <button onClick={handleAddFund} className={styles.addFundButton}>
+                Add Fund
+              </button>
+            </div>
             <h2 className={styles.sectionTitle}>My Membership</h2>
             <p>Current: {membership}</p>
             <p>Regular: Free</p>
@@ -290,6 +474,120 @@ export default function ProfileSetup() {
             <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
               Upgrade to VVIP
             </button>
+            {showModal && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Select Duration for {selectedLevel}</h3>
+                  <div className={styles.durationList}>
+                    {Object.entries(plans[selectedLevel]).map(([duration, price]) => (
+                      <div key={duration} className={styles.durationItem}>
+                        <label className={styles.durationLabel}>
+                          <input
+                            type="radio"
+                            name="duration"
+                            value={duration}
+                            checked={selectedDuration === duration}
+                            onChange={() => handleDurationSelect(duration)}
+                          />
+                          <span className={styles.durationText}>{duration} Listing = KSh {price}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={handleProceedToPayment} 
+                      className={`${styles.upgradeButton} ${selectedDuration ? styles.active : styles.inactive}`}
+                      disabled={!selectedDuration}
+                    >
+                      Proceed to Payment
+                    </button>
+                    <button onClick={() => setShowModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Payment Choice Modal */}
+            {showPaymentChoice && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Choose Payment Method for {selectedLevel} - {selectedDuration}</h3>
+                  <p className={styles.durationText}>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
+                  <div className={styles.durationList}>
+                    <div className={styles.durationItem}>
+                      <label className={styles.durationLabel}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="wallet"
+                          checked={selectedPaymentMethod === 'wallet'}
+                          onChange={() => handlePaymentMethodChange('wallet')}
+                        />
+                        <span className={styles.durationText}>Wallet Balance (KSh {walletBalance})</span>
+                      </label>
+                    </div>
+                    <div className={styles.durationItem}>
+                      <label className={styles.durationLabel}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="mpesa"
+                          checked={selectedPaymentMethod === 'mpesa'}
+                          onChange={() => handlePaymentMethodChange('mpesa')}
+                        />
+                        <span className={styles.durationText}>M-Pesa (STK Push)</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={selectedPaymentMethod === 'wallet' ? handleConfirmWalletUpgrade : handleConfirmMpesaUpgrade} 
+                      className={styles.upgradeButton}
+                      disabled={selectedPaymentMethod === 'wallet' && walletBalance < plans[selectedLevel][selectedDuration]}
+                    >
+                      Confirm Payment
+                    </button>
+                    <button onClick={() => { setShowPaymentChoice(false); setShowModal(true); }} className={styles.closeButton}>
+                      Back
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Add Fund Modal */}
+            {showAddFundModal && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Add Funds to Wallet</h3>
+                  <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
+                  <label className={styles.label}>
+                    Amount (KSh)
+                    <input
+                      type="number"
+                      value={addFundAmount}
+                      onChange={(e) => setAddFundAmount(e.target.value)}
+                      min="10"
+                      className={styles.input}
+                      required
+                    />
+                  </label>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={handleConfirmAddFund} 
+                      className={styles.upgradeButton}
+                      disabled={!addFundAmount || parseInt(addFundAmount) < 10}
+                    >
+                      Pay with M-Pesa
+                    </button>
+                    <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </aside>
 
           <div className={styles.profileFormContainer}>
@@ -333,7 +631,7 @@ export default function ProfileSetup() {
               </label>
 
               <label className={styles.label}>
-                Phone Number
+                Phone Number <small>(e.g., 0712345678 or +254712345678)</small>
                 <input
                   type="text"
                   name="phone"
@@ -341,6 +639,7 @@ export default function ProfileSetup() {
                   onChange={handleChange}
                   className={styles.input}
                   required
+                  placeholder="0712345678"
                 />
               </label>
 
@@ -553,4 +852,3 @@ export default function ProfileSetup() {
     </div>
   );
 }
-
