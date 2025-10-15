@@ -1,52 +1,60 @@
-// pages/api/mpesa-callback.js
-import { db } from '../../firebase'; // Adjust path if needed
+// pages/api/mpesa/callback.js
+import { db } from '../../firebase'; // Adjust to '../../../lib/firebase' if in /lib
 import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).end();
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { Body } = req.body;
-  if (!Body || !Body.stkCallback) {
-    return res.status(200).end(); // Ignore invalid
-  }
-
-  const { CheckoutRequestID, ResultCode, ResultDesc } = Body.stkCallback;
+  const data = req.body;
 
   try {
-    // Assume pendingTransactions collection (from previous context)
-    const pendingRef = doc(db, 'pendingTransactions', CheckoutRequestID);
+    const callback = data.Body.stkCallback;
+    const checkoutRequestID = callback.CheckoutRequestID;
+    const resultCode = callback.ResultCode;
+
+    // Find pending transaction
+    const pendingRef = doc(db, 'pendingTransactions', checkoutRequestID);
     const pendingSnap = await getDoc(pendingRef);
+
     if (!pendingSnap.exists()) {
-      console.log('No pending tx for', CheckoutRequestID);
-      return res.status(200).json({ ResultDesc: 'No pending transaction' });
+      console.log('No pending transaction found for', checkoutRequestID);
+      return res.status(200).json({ result: 'ok' });
     }
 
     const pendingData = pendingSnap.data();
 
-    if (ResultCode === 0) { // Success
-      const userRef = doc(db, 'profiles', pendingData.userId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const userData = userSnap.data();
-        if (pendingData.type === 'add_fund') {
-          const newBalance = (userData.walletBalance || 0) + pendingData.amount;
-          await updateDoc(userRef, { walletBalance: newBalance });
-          console.log(`Added KSh ${pendingData.amount} to wallet for ${pendingData.userId}`);
-        } else if (pendingData.type === 'upgrade') {
-          await updateDoc(userRef, { membership: pendingData.level });
-          console.log(`Upgraded ${pendingData.userId} to ${pendingData.level}`);
+    if (resultCode === 0) {
+      // Success: Update wallet or membership
+      if (pendingData.type === 'add_fund') {
+        const userRef = doc(db, 'profiles', pendingData.userId);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const currentWallet = userSnap.data().walletBalance || 0;
+          await updateDoc(userRef, {
+            walletBalance: currentWallet + pendingData.amount,
+          });
         }
+        console.log('Wallet updated for user', pendingData.userId, 'by', pendingData.amount);
+      } else if (pendingData.type === 'upgrade') {
+        // Update membership
+        const userRef = doc(db, 'profiles', pendingData.userId);
+        await updateDoc(userRef, {
+          membership: pendingData.level,
+        });
+        console.log('Membership upgraded to', pendingData.level, 'for user', pendingData.userId);
       }
     } else {
-      console.log(`Tx failed: ${ResultDesc} for ${CheckoutRequestID}`);
+      console.log('Transaction failed:', callback.ResultDesc);
     }
 
-    await deleteDoc(pendingRef); // Clean up
-    res.status(200).json({ ResultDesc: 'Accepted' });
+    // Delete pending
+    await deleteDoc(pendingRef);
+
+    res.status(200).json({ result: 'ok' });
   } catch (error) {
     console.error('Callback error:', error);
-    res.status(200).end(); // Always 200 for M-Pesa
+    res.status(200).json({ result: 'ok' }); // Always return 200 to M-Pesa
   }
 }

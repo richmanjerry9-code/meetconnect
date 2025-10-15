@@ -35,10 +35,8 @@ export const initiateSTKPush = async (amount, phoneNumber, accountReference, tra
   }
 
   const token = await getToken();
-
   const shortcode = process.env.MPESA_SHORTCODE;
   const passkey = process.env.MPESA_PASSKEY;
-
   const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
   const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
 
@@ -51,9 +49,9 @@ export const initiateSTKPush = async (amount, phoneNumber, accountReference, tra
         Timestamp: timestamp,
         TransactionType: 'CustomerPayBillOnline',
         Amount: amount,
-        PartyA: phoneNumber,
+        PartyA: phoneNumber,        // <-- User phone used here
         PartyB: shortcode,
-        PhoneNumber: phoneNumber,
+        PhoneNumber: phoneNumber,   // <-- User phone used here
         CallBackURL: `${process.env.NEXT_PUBLIC_BASE_URL}/api/mpesa-callback`,
         AccountReference: accountReference,
         TransactionDesc: transactionDesc,

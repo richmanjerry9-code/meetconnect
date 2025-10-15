@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { Nairobi } from '../data/locations';
-import { db } from '../firebase';
+import { db } from '../lib/firebase';
 import {
   collection,
   addDoc,

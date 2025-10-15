@@ -1,3 +1,4 @@
+// pages/api/mpesa.js
 import { initiateSTKPush } from '../../utils/mpesa';
 
 export default async function handler(req, res) {
@@ -12,18 +13,21 @@ export default async function handler(req, res) {
   }
 
   try {
-    const response = await initiateSTKPush(Number(amount), phone, 'Test123', 'Payment Test');
+    // Use phone typed by user
+    const response = await initiateSTKPush(
+      Number(amount),
+      phone,
+      'Test123',      // AccountReference
+      'Payment Test'  // TransactionDesc
+    );
+
     res.status(200).json(response);
   } catch (error) {
-    console.error('API Error:', error); // Full log
+    console.error('STK Push API Error:', error);
     const errorDetails = error.response?.data || { message: error.message };
-    res.status(500).json({ 
-      message: 'STK Push failed', 
-      error: errorDetails // Object, not stringified here
-    });
+    res.status(500).json({ message: 'STK Push failed', error: errorDetails });
   }
 }
-
 
 
 

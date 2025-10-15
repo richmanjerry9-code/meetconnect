@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/Home.module.css';
-import { db } from '../firebase';
+import { db } from '../lib/firebase';
 import {
   collection,
   getDocs,
