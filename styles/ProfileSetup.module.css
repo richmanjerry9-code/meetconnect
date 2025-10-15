@@ -1,9 +1,5 @@
-/* styles/ProfileSetup.module.css - Full Responsive Mobile-First Version */
-/* Base styles for all devices, then override for larger screens */
-
-* {
-  box-sizing: border-box;
-}
+/* styles/ProfileSetup.module.css - Mobile-First, Pure Selectors Only */
+/* Apply box-sizing to root for global-like effect without * selector */
 
 .container {
   min-height: 100vh;
@@ -11,6 +7,7 @@
   font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
     Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   background-color: #f9f9f9;
+  box-sizing: border-box; /* Moved here from * selector */
 }
 
 .header {
@@ -21,6 +18,7 @@
   background: white;
   border-bottom: 1px solid #ddd;
   flex-wrap: wrap;
+  box-sizing: border-box;
 }
 
 .logoContainer {
@@ -47,6 +45,7 @@
   color: white;
   cursor: pointer;
   font-size: 0.9rem;
+  box-sizing: border-box;
 }
 
 .logout {
@@ -57,6 +56,7 @@
   padding: 1rem;
   max-width: 100%;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .profileSetupContainer {
@@ -65,6 +65,7 @@
   gap: 1rem;
   max-width: 100%;
   overflow-x: hidden; /* Prevent horizontal scroll */
+  box-sizing: border-box;
 }
 
 .membershipSection {
@@ -74,6 +75,7 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   order: 2; /* Sidebar below form on mobile */
   width: 100%;
+  box-sizing: border-box;
 }
 
 .walletSection {
@@ -110,6 +112,7 @@
   color: white;
   cursor: pointer;
   font-size: 1rem;
+  box-sizing: border-box;
 }
 
 .upgradeButton:hover {
@@ -133,6 +136,7 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   order: 1; /* Form on top on mobile */
   width: 100%;
+  box-sizing: border-box;
 }
 
 .setupTitle {
@@ -166,6 +170,7 @@
   border-radius: 50%;
   font-size: 3rem;
   margin-bottom: 0.5rem;
+  box-sizing: border-box;
 }
 
 .profilePicInput {
@@ -179,12 +184,14 @@
   padding: 0.5rem;
   background: #ffebee;
   border-radius: 4px;
+  box-sizing: border-box;
 }
 
 .profileForm {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  box-sizing: border-box;
 }
 
 .label {
@@ -192,11 +199,12 @@
   flex-direction: column;
   font-weight: bold;
   color: #333;
-  small {
-    font-weight: normal;
-    color: #666;
-    font-size: 0.8rem;
-  }
+}
+
+.label small {
+  font-weight: normal;
+  color: #666;
+  font-size: 0.8rem;
 }
 
 .input, .select {
@@ -205,6 +213,7 @@
   border-radius: 4px;
   font-size: 1rem;
   margin-top: 0.25rem;
+  box-sizing: border-box;
 }
 
 .select {
@@ -219,6 +228,7 @@
   margin-top: 0.5rem;
   max-height: 200px; /* Scrollable on mobile if too many */
   overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .checkboxGroup div {
@@ -245,12 +255,14 @@
   overflow-y: auto;
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-sizing: border-box;
 }
 
 .dropdownItem {
   padding: 0.75rem;
   cursor: pointer;
   border-bottom: 1px solid #eee;
+  box-sizing: border-box;
 }
 
 .dropdownItem:hover {
@@ -268,6 +280,7 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  box-sizing: border-box;
 }
 
 .modalContent {
@@ -278,6 +291,7 @@
   max-height: 80%;
   overflow-y: auto;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .durationList {
@@ -285,6 +299,7 @@
   flex-direction: column;
   gap: 0.5rem;
   margin: 1rem 0;
+  box-sizing: border-box;
 }
 
 .durationItem {
@@ -309,6 +324,7 @@
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 1rem;
+  box-sizing: border-box;
 }
 
 .closeButton {
@@ -318,6 +334,7 @@
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .active {
