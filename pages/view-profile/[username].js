@@ -2,7 +2,7 @@
 import { useRouter } from 'next/router';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { db } from '../../lib/firebase';
+import { db } from '../../lib/firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function ViewProfile() {

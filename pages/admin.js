@@ -1,8 +1,9 @@
 // admin.js
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import Image from 'next/image';
 import { Nairobi } from '../data/locations';
-import { db } from '../lib/firebase';
+import { db } from '../lib/firebase.js';
 import {
   collection,
   addDoc,
@@ -492,6 +493,7 @@ export default function AdminPanel() {
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
         >
           <option>Regular</option>
+          <option>Prime</option>
           <option>VIP</option>
           <option>VVIP</option>
         </select>
@@ -624,12 +626,12 @@ export default function AdminPanel() {
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
         />
         {form.profilePic && (
-          <img
+          <Image
             src={form.profilePic}
             alt="Current Profile Picture"
+            width={150}
+            height={150}
             style={{
-              width: '150px',
-              height: '150px',
               objectFit: 'cover',
               marginTop: '10px',
               borderRadius: '8px',
@@ -685,6 +687,7 @@ export default function AdminPanel() {
                     }}
                   >
                     <option>Regular</option>
+                    <option>Prime</option>
                     <option>VIP</option>
                     <option>VVIP</option>
                   </select>

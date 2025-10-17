@@ -1,6 +1,6 @@
 // pages/api/addFunds.js
 import { initiateSTKPush } from '../../utils/mpesa';
-import { db } from '../../lib/firebase'; // fixed import
+import { db } from '../../lib/firebase.js'; // fixed import
 import { doc, setDoc } from 'firebase/firestore';
 
 export default async function handler(req, res) {

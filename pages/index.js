@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/Home.module.css';
-import { db } from '../lib/firebase';
+import { db } from '../lib/firebase.js';
 import {
   collection,
   getDocs,
@@ -97,7 +97,12 @@ export default function Home() {
       ? [p.county, p.ward, p.area, ...(p.nearby || [])]
           .join(' ')
           .toLowerCase()
-          .includes(searchLocation.toLowerCase())
+          .includes(
+            searchLocation
+              .toLowerCase()
+              .replace(/[^\w\s]/g, ' ')
+              .replace(/\s+/g, ' ')
+          )
       : true;
     return wardMatch && areaMatch && searchMatch;
   });
