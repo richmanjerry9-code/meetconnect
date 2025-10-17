@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db } from '../lib/firebase';
+import { db } from '../lib/firebase.js';
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 
 const servicesList = [
