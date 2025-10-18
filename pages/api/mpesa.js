@@ -17,8 +17,8 @@ export default async function handler(req, res) {
     const response = await initiateSTKPush(
       Number(amount),
       phone,
-      'Test123',      // AccountReference
-      'Payment Test'  // TransactionDesc
+      'Test123', // AccountReference
+      'Payment Test' // TransactionDesc
     );
 
     res.status(200).json(response);
@@ -28,7 +28,3 @@ export default async function handler(req, res) {
     res.status(500).json({ message: 'STK Push failed', error: errorDetails });
   }
 }
-
-
-
-

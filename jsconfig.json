@@ -2,8 +2,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@lib/*": ["lib/*"]
+      "@/*": ["./*"],
+      "@/lib/*": ["./lib/*"]
+      // Remove "@/mpesa-api/*" line
     }
   }
 }
-

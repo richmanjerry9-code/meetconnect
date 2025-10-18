@@ -26,11 +26,28 @@ export default function ProfilePage() {
   }
 
   return (
-    <div style={{ padding: 20, fontFamily: 'Poppins, sans-serif', minHeight: '100vh', background: 'linear-gradient(to bottom right,#fff5f7,#ffe6ee)' }}>
+    <div
+      style={{
+        padding: 20,
+        fontFamily: 'Poppins, sans-serif',
+        minHeight: '100vh',
+        background: 'linear-gradient(to bottom right,#fff5f7,#ffe6ee)',
+      }}
+    >
       <button onClick={() => router.push('/')} style={{ ...btnStyle, marginBottom: 20 }}>
         ⬅ Back
       </button>
-      <div style={{ maxWidth: 400, margin: '0 auto', background: '#fff', padding: 30, borderRadius: 20, textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+      <div
+        style={{
+          maxWidth: 400,
+          margin: '0 auto',
+          background: '#fff',
+          padding: 30,
+          borderRadius: 20,
+          textAlign: 'center',
+          boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+        }}
+      >
         {profile.profilePic ? (
           <Image
             src={profile.profilePic}
@@ -40,7 +57,15 @@ export default function ProfilePage() {
             style={{ borderRadius: '50%', objectFit: 'cover', marginBottom: 10 }}
           />
         ) : (
-          <div style={{ width: 120, height: 120, borderRadius: '50%', background: '#ffe6ee', margin: '0 auto 10px' }} />
+          <div
+            style={{
+              width: 120,
+              height: 120,
+              borderRadius: '50%',
+              background: '#ffe6ee',
+              margin: '0 auto 10px',
+            }}
+          />
         )}
         <h2 style={{ color: '#e91e63', margin: '10px 0' }}>{profile.name}</h2>
         <p style={{ fontSize: 14, color: '#555', margin: '4px 0' }}>
@@ -48,7 +73,10 @@ export default function ProfilePage() {
         </p>
         {profile.phone && (
           <p style={{ margin: '6px 0' }}>
-            <a href={`tel:${profile.phone}`} style={{ color: '#e91e63', textDecoration: 'underline' }}>
+            <a
+              href={`tel:${profile.phone}`}
+              style={{ color: '#e91e63', textDecoration: 'underline' }}
+            >
               {profile.phone}
             </a>
           </p>
@@ -58,7 +86,14 @@ export default function ProfilePage() {
             {profile.services.map((s, idx) => (
               <span
                 key={idx}
-                style={{ display: 'inline-block', margin: '3px 5px', padding: '3px 7px', background: '#ffe6ee', borderRadius: 5, fontSize: 12 }}
+                style={{
+                  display: 'inline-block',
+                  margin: '3px 5px',
+                  padding: '3px 7px',
+                  background: '#ffe6ee',
+                  borderRadius: 5,
+                  fontSize: 12,
+                }}
               >
                 {s}
               </span>
@@ -78,4 +113,3 @@ const btnStyle = {
   borderRadius: 10,
   cursor: 'pointer',
 };
-

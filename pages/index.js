@@ -6,13 +6,7 @@ import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db } from '../lib/firebase.js';
-import {
-  collection,
-  getDocs,
-  addDoc,
-  query,
-  where
-} from 'firebase/firestore';
+import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
 
 export default function Home() {
   const router = useRouter();
@@ -36,13 +30,7 @@ export default function Home() {
           .map((doc) => ({ id: doc.id, ...doc.data() }))
           // Slightly loosened filter: photo optional for now, but keep core reqs
           .filter(
-            (p) =>
-              p.username &&
-              p.name &&
-              p.email &&
-              p.phone &&
-              p.age &&
-              parseInt(p.age) >= 18
+            (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
           );
         setProfiles(data);
       } catch (error) {
@@ -55,7 +43,7 @@ export default function Home() {
     // Check flag and auto-refresh every 5s for real-time
     if (localStorage.getItem('profileSaved') === 'true') {
       localStorage.removeItem('profileSaved');
-      setRefreshKey(prev => prev + 1);
+      setRefreshKey((prev) => prev + 1);
       fetchProfiles();
     }
 
@@ -138,14 +126,14 @@ export default function Home() {
     try {
       const { name, email, password } = registerForm;
       if (!name || !email || !password) {
-        alert("Fill in all fields!");
+        alert('Fill in all fields!');
         return;
       }
 
-      const q = query(collection(db, "profiles"), where("email", "==", email));
+      const q = query(collection(db, 'profiles'), where('email', '==', email));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        alert("Email already registered!");
+        alert('Email already registered!');
         return;
       }
 
@@ -153,22 +141,22 @@ export default function Home() {
         name,
         email,
         password,
-        username: email.split("@")[0],
-        membership: "Regular",
+        username: email.split('@')[0],
+        membership: 'Regular',
         createdAt: new Date().toISOString(),
       };
 
       const docRef = await addDoc(collection(db, 'profiles'), newUser);
       const savedUser = { id: docRef.id, ...newUser };
 
-      localStorage.setItem("loggedInUser", JSON.stringify(savedUser));
+      localStorage.setItem('loggedInUser', JSON.stringify(savedUser));
       setUser(savedUser);
-      alert("✅ Registration successful!");
-      router.push("/profile-setup");
+      alert('✅ Registration successful!');
+      router.push('/profile-setup');
       setShowRegister(false);
     } catch (err) {
-      console.error("Registration error:", err);
-      alert("Error during registration. Try again.");
+      console.error('Registration error:', err);
+      alert('Error during registration. Try again.');
     }
   };
 
@@ -178,30 +166,30 @@ export default function Home() {
     try {
       const { email, password } = loginForm;
       if (!email || !password) {
-        alert("Enter both email and password!");
+        alert('Enter both email and password!');
         return;
       }
 
       const q = query(
-        collection(db, "profiles"),
-        where("email", "==", email),
-        where("password", "==", password)
+        collection(db, 'profiles'),
+        where('email', '==', email),
+        where('password', '==', password)
       );
       const snapshot = await getDocs(q);
 
       if (snapshot.empty) {
-        alert("Invalid email or password!");
+        alert('Invalid email or password!');
         return;
       }
 
       const loggedUser = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
-      localStorage.setItem("loggedInUser", JSON.stringify(loggedUser));
+      localStorage.setItem('loggedInUser', JSON.stringify(loggedUser));
       setUser(loggedUser);
-      router.push("/profile-setup");
+      router.push('/profile-setup');
       setShowLogin(false);
     } catch (err) {
-      console.error("Login error:", err);
-      alert("Error logging in.");
+      console.error('Login error:', err);
+      alert('Error logging in.');
     }
   };
 
@@ -247,10 +235,7 @@ export default function Home() {
           )}
           {user && (
             <>
-              <button
-                onClick={() => router.push('/profile-setup')}
-                className={styles.button}
-              >
+              <button onClick={() => router.push('/profile-setup')} className={styles.button}>
                 My Profile
               </button>
               <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
@@ -343,7 +328,9 @@ export default function Home() {
             filteredProfiles.map((p, i) => <ProfileCard key={i} p={p} router={router} />)
           )}
           {filteredProfiles.length === 0 && (
-            <p className={styles.noProfiles}>No ladies found. Complete your profile with a photo to appear here.</p>
+            <p className={styles.noProfiles}>
+              No ladies found. Complete your profile with a photo to appear here.
+            </p>
           )}
         </div>
       </main>
@@ -397,9 +384,7 @@ export default function Home() {
               type="password"
               placeholder="Password"
               value={registerForm.password}
-              onChange={(e) =>
-                setRegisterForm({ ...registerForm, password: e.target.value })
-              }
+              onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
               className={styles.input}
               required
             />

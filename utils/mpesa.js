@@ -14,9 +14,12 @@ export const getToken = async () => {
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
   try {
-    const { data } = await axios.get(`${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
-      headers: { Authorization: `Basic ${auth}` },
-    });
+    const { data } = await axios.get(
+      `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
+      {
+        headers: { Authorization: `Basic ${auth}` },
+      }
+    );
     return data.access_token;
   } catch (error) {
     console.error('Token fetch error:', error.response?.data || error.message);
@@ -37,7 +40,10 @@ export const initiateSTKPush = async (amount, phoneNumber, accountReference, tra
   const token = await getToken();
   const shortcode = process.env.MPESA_SHORTCODE;
   const passkey = process.env.MPESA_PASSKEY;
-  const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-:.TZ]/g, '')
+    .slice(0, 14);
   const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
 
   try {
@@ -49,9 +55,9 @@ export const initiateSTKPush = async (amount, phoneNumber, accountReference, tra
         Timestamp: timestamp,
         TransactionType: 'CustomerPayBillOnline',
         Amount: amount,
-        PartyA: phoneNumber,        // <-- User phone used here
+        PartyA: phoneNumber, // <-- User phone used here
         PartyB: shortcode,
-        PhoneNumber: phoneNumber,   // <-- User phone used here
+        PhoneNumber: phoneNumber, // <-- User phone used here
         CallBackURL: `${process.env.NEXT_PUBLIC_BASE_URL}/api/mpesa-callback`,
         AccountReference: accountReference,
         TransactionDesc: transactionDesc,
