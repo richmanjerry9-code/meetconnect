@@ -45,10 +45,11 @@ export default function MpesaPage() {
           required
           style={{ width: '100%', marginBottom: '1rem', padding: '0.5rem' }}
         />
-        <button type="submit" style={{ padding: '0.5rem 1rem' }}>Pay</button>
+        <button type="submit" style={{ padding: '0.5rem 1rem' }}>
+          Pay
+        </button>
       </form>
       <p>{status}</p>
     </div>
   );
 }
-

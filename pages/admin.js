@@ -137,9 +137,7 @@ export default function AdminPanel() {
       if (isEdit) {
         await updateDoc(doc(db, 'profiles', editId), form);
         alert('✅ Profile updated!');
-        setUsers((prev) =>
-          prev.map((u) => (u.id === editId ? { ...form, id: editId } : u))
-        );
+        setUsers((prev) => prev.map((u) => (u.id === editId ? { ...form, id: editId } : u)));
       } else {
         const q = query(collection(db, 'profiles'), where('username', '==', form.username));
         const querySnapshot = await getDocs(q);
@@ -232,7 +230,9 @@ export default function AdminPanel() {
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, membership: newMembership } : u))
       );
-      alert(`Membership updated to ${newMembership} for user ${users.find((u) => u.id === userId)?.username}!`);
+      alert(
+        `Membership updated to ${newMembership} for user ${users.find((u) => u.id === userId)?.username}!`
+      );
       setRefresh(!refresh);
     } catch (error) {
       console.error('Error updating membership:', error);
@@ -241,7 +241,8 @@ export default function AdminPanel() {
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm('Are you sure you want to delete all accounts? This cannot be undone directly.')) return;
+    if (!confirm('Are you sure you want to delete all accounts? This cannot be undone directly.'))
+      return;
     try {
       const promises = users.map((u) => deleteDoc(doc(db, 'profiles', u.id)));
       await Promise.all(promises);
@@ -290,10 +291,10 @@ export default function AdminPanel() {
   };
 
   const handleEdit = (user) => {
-    setForm({ 
-      ...user, 
-      services: user.services || [], 
-      nearby: user.nearby || [] 
+    setForm({
+      ...user,
+      services: user.services || [],
+      nearby: user.nearby || [],
     });
     setIsEdit(true);
     setEditId(user.id);
@@ -347,7 +348,9 @@ export default function AdminPanel() {
   const areasForWard = form.ward && Nairobi ? Nairobi[form.ward] : [];
 
   return (
-    <div style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0', position: 'relative' }}>
+    <div
+      style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0', position: 'relative' }}
+    >
       <Head>
         <title>Admin Panel</title>
       </Head>
@@ -452,9 +455,17 @@ export default function AdminPanel() {
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
         />
         {isEdit && (
-          <div style={{ padding: '8px', background: 'lightgray', marginBottom: '5px', display: 'flex', alignItems: 'center' }}>
+          <div
+            style={{
+              padding: '8px',
+              background: 'lightgray',
+              marginBottom: '5px',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
             <span style={{ marginRight: '10px' }}>Password: </span>
-            <span style={{ flex: 1 }}>{showPassword ? (form.password || 'N/A') : '********'}</span>
+            <span style={{ flex: 1 }}>{showPassword ? form.password || 'N/A' : '********'}</span>
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
@@ -570,18 +581,19 @@ export default function AdminPanel() {
         </select>
         <div>
           <label>Nearby Places:</label>
-          {form.ward && Nairobi[form.ward].map((place) => (
-            <div key={place}>
-              <input
-                type="checkbox"
-                name="nearby"
-                value={place}
-                checked={(form.nearby || []).includes(place)}
-                onChange={handleChange}
-              />
-              <span>{place}</span>
-            </div>
-          ))}
+          {form.ward &&
+            Nairobi[form.ward].map((place) => (
+              <div key={place}>
+                <input
+                  type="checkbox"
+                  name="nearby"
+                  value={place}
+                  checked={(form.nearby || []).includes(place)}
+                  onChange={handleChange}
+                />
+                <span>{place}</span>
+              </div>
+            ))}
         </div>
         <div>
           <label>Services:</label>
@@ -654,9 +666,7 @@ export default function AdminPanel() {
 
       <div style={{ background: '#fff', padding: '10px' }}>
         <h2 style={{ color: '#e91e63' }}>All Users</h2>
-        <table
-          style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}
-        >
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
           <thead>
             <tr style={{ background: '#ddd' }}>
               <th>Username</th>
@@ -750,4 +760,3 @@ export default function AdminPanel() {
     </div>
   );
 }
-

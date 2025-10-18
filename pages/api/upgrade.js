@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     level,
     duration,
     accountReference = 'MembershipUpgrade',
-    transactionDesc = 'Upgrade Membership'
+    transactionDesc = 'Upgrade Membership',
   } = req.body;
 
   if (!phone || !amount || !userId || !level) {
@@ -55,7 +55,7 @@ export default async function handler(req, res) {
 
         if (err.response?.data?.errorCode === '500.003.02') {
           console.log('M-PESA system busy, retrying in 5 seconds...');
-          await new Promise(r => setTimeout(r, 5000));
+          await new Promise((r) => setTimeout(r, 5000));
           retries--;
         } else {
           throw err; // other errors, stop retrying
@@ -75,4 +75,3 @@ export default async function handler(req, res) {
     });
   }
 }
-

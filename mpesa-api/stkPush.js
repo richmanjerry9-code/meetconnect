@@ -1,7 +1,7 @@
-import axios from "axios";
+import axios from 'axios';
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
+  if (req.method !== 'POST') return res.status(405).end();
 
   const { phone, amount } = req.body;
 
@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   try {
     // 1️⃣ Get Access Token
     const tokenResponse = await axios.get(
-      "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+      'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
       {
         auth: { username: consumerKey, password: consumerSecret },
       }
@@ -21,24 +21,27 @@ export default async function handler(req, res) {
     const token = tokenResponse.data.access_token;
 
     // 2️⃣ Generate Password
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
-    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString("base64");
+    const timestamp = new Date()
+      .toISOString()
+      .replace(/[^0-9]/g, '')
+      .slice(0, 14);
+    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
 
     // 3️⃣ Send STK Push
     const stkResponse = await axios.post(
-      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+      'https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
       {
         BusinessShortCode: shortcode,
         Password: password,
         Timestamp: timestamp,
-        TransactionType: "CustomerBuyGoodsOnline", // or CustomerPayBillOnline
+        TransactionType: 'CustomerBuyGoodsOnline', // or CustomerPayBillOnline
         Amount: amount,
-        PartyA: phone.startsWith("254") ? phone : `254${phone.slice(1)}`,
+        PartyA: phone.startsWith('254') ? phone : `254${phone.slice(1)}`,
         PartyB: shortcode,
-        PhoneNumber: phone.startsWith("254") ? phone : `254${phone.slice(1)}`,
+        PhoneNumber: phone.startsWith('254') ? phone : `254${phone.slice(1)}`,
         CallBackURL: process.env.MPESA_CALLBACK_URL,
-        AccountReference: "MeetConnect Payment",
-        TransactionDesc: "Membership upgrade",
+        AccountReference: 'MeetConnect Payment',
+        TransactionDesc: 'Membership upgrade',
       },
       {
         headers: { Authorization: `Bearer ${token}` },
@@ -48,7 +51,6 @@ export default async function handler(req, res) {
     res.status(200).json(stkResponse.data);
   } catch (error) {
     console.error(error.response?.data || error.message);
-    res.status(500).json({ error: "STK Push failed" });
+    res.status(500).json({ error: 'STK Push failed' });
   }
 }
-

@@ -108,7 +108,11 @@ export default function ProfileSetup() {
     let formatted = phone.replace(/[\s+]/g, ''); // Remove spaces and +
     if (formatted.startsWith('0')) {
       formatted = '254' + formatted.slice(1);
-    } else if (formatted.startsWith('254') || formatted.startsWith('7') || formatted.startsWith('1')) {
+    } else if (
+      formatted.startsWith('254') ||
+      formatted.startsWith('7') ||
+      formatted.startsWith('1')
+    ) {
       // Already good or needs prefix
       if (formatted.length === 9 && (formatted.startsWith('7') || formatted.startsWith('1'))) {
         formatted = '254' + formatted;
@@ -122,7 +126,7 @@ export default function ProfileSetup() {
   };
 
   // Helper to shorten userId to last 10 chars for ref
-  const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
+  const shortenUserId = (userId) => (userId ? userId.slice(-10) : '');
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -185,10 +189,9 @@ export default function ProfileSetup() {
       return;
     }
 
-    const allOptions = [
-      ...Object.keys(Nairobi),
-      ...Object.values(Nairobi).flat(),
-    ].filter((item, index, self) => self.indexOf(item) === index);
+    const allOptions = [...Object.keys(Nairobi), ...Object.values(Nairobi).flat()].filter(
+      (item, index, self) => self.indexOf(item) === index
+    );
 
     const filtered = allOptions
       .filter((option) => option.toLowerCase().includes(query))
@@ -303,13 +306,21 @@ export default function ProfileSetup() {
       alert('Insufficient balance');
       return;
     }
-    if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
+    if (
+      confirm(
+        `Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`
+      )
+    ) {
       const newBalance = walletBalance - price;
       setWalletBalance(newBalance);
-      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
-        membership: selectedLevel,
-        walletBalance: newBalance 
-      }, { merge: true });
+      await setDoc(
+        doc(db, 'profiles', loggedInUser.id),
+        {
+          membership: selectedLevel,
+          walletBalance: newBalance,
+        },
+        { merge: true }
+      );
       setMembership(selectedLevel);
       setShowPaymentChoice(false);
       setSelectedDuration('');
@@ -383,13 +394,19 @@ export default function ProfileSetup() {
         setTimeout(() => clearInterval(pollInterval), 60000); // Stop after 1 min
       } else {
         const errorData = await response.json();
-        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
+        const errorMsg =
+          typeof errorData.error === 'object'
+            ? JSON.stringify(errorData.error, null, 2)
+            : errorData.error;
         alert(`Error: ${errorMsg}`);
         console.error('Full error data:', errorData);
       }
     } catch (error) {
       console.error('Upgrade M-Pesa error:', error);
-      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
+      const errorMsg =
+        typeof error === 'object'
+          ? JSON.stringify(error, null, 2)
+          : error.message || 'Failed to initiate payment. Please check your phone number.';
       alert(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
@@ -427,22 +444,30 @@ export default function ProfileSetup() {
           phone: formattedPhone,
           userId: loggedInUser.id,
           accountReference: accountRef,
-          transactionDesc: 'Add funds to wallet'
+          transactionDesc: 'Add funds to wallet',
         }),
       });
       if (response.ok) {
         const data = await response.json();
-        alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
+        alert(
+          `STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`
+        );
         setShowAddFundModal(false);
       } else {
         const errorData = await response.json();
-        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
+        const errorMsg =
+          typeof errorData.error === 'object'
+            ? JSON.stringify(errorData.error, null, 2)
+            : errorData.error;
         alert(`Error: ${errorMsg}`);
         console.error('Full error data:', errorData);
       }
     } catch (error) {
       console.error('Add fund error:', error);
-      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
+      const errorMsg =
+        typeof error === 'object'
+          ? JSON.stringify(error, null, 2)
+          : error.message || 'Failed to initiate payment. Please check your phone number.';
       alert(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
@@ -478,7 +503,10 @@ export default function ProfileSetup() {
     <div className={styles.container}>
       <Head>
         <title>Meet Connect Ladies - Profile Setup</title>
-        <meta name="description" content="Set up your profile on Meet Connect Ladies for gentlemen." />
+        <meta
+          name="description"
+          content="Set up your profile on Meet Connect Ladies for gentlemen."
+        />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
@@ -533,14 +561,16 @@ export default function ProfileSetup() {
                             checked={selectedDuration === duration}
                             onChange={() => handleDurationSelect(duration)}
                           />
-                          <span className={styles.durationText}>{duration} Listing = KSh {price}</span>
+                          <span className={styles.durationText}>
+                            {duration} Listing = KSh {price}
+                          </span>
                         </label>
                       </div>
                     ))}
                   </div>
                   <div className={styles.modalButtons}>
-                    <button 
-                      onClick={handleProceedToPayment} 
+                    <button
+                      onClick={handleProceedToPayment}
                       className={`${styles.upgradeButton} ${selectedDuration ? styles.active : styles.inactive}`}
                       disabled={!selectedDuration}
                     >
@@ -557,8 +587,12 @@ export default function ProfileSetup() {
             {showPaymentChoice && (
               <div className={styles.modal}>
                 <div className={styles.modalContent}>
-                  <h3>Choose Payment Method for {selectedLevel} - {selectedDuration}</h3>
-                  <p className={styles.durationText}>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
+                  <h3>
+                    Choose Payment Method for {selectedLevel} - {selectedDuration}
+                  </h3>
+                  <p className={styles.durationText}>
+                    Total: KSh {plans[selectedLevel][selectedDuration]}
+                  </p>
                   <div className={styles.durationList}>
                     <div className={styles.durationItem}>
                       <label className={styles.durationLabel}>
@@ -569,7 +603,9 @@ export default function ProfileSetup() {
                           checked={selectedPaymentMethod === 'wallet'}
                           onChange={() => handlePaymentMethodChange('wallet')}
                         />
-                        <span className={styles.durationText}>Wallet Balance (KSh {walletBalance})</span>
+                        <span className={styles.durationText}>
+                          Wallet Balance (KSh {walletBalance})
+                        </span>
                       </label>
                     </div>
                     <div className={styles.durationItem}>
@@ -598,14 +634,27 @@ export default function ProfileSetup() {
                     </label>
                   )}
                   <div className={styles.modalButtons}>
-                    <button 
-                      onClick={selectedPaymentMethod === 'wallet' ? handleConfirmWalletUpgrade : handleConfirmMpesaUpgrade} 
+                    <button
+                      onClick={
+                        selectedPaymentMethod === 'wallet'
+                          ? handleConfirmWalletUpgrade
+                          : handleConfirmMpesaUpgrade
+                      }
                       className={styles.upgradeButton}
-                      disabled={selectedPaymentMethod === 'wallet' && walletBalance < plans[selectedLevel][selectedDuration]}
+                      disabled={
+                        selectedPaymentMethod === 'wallet' &&
+                        walletBalance < plans[selectedLevel][selectedDuration]
+                      }
                     >
                       Confirm Payment
                     </button>
-                    <button onClick={() => { setShowPaymentChoice(false); setShowModal(true); }} className={styles.closeButton}>
+                    <button
+                      onClick={() => {
+                        setShowPaymentChoice(false);
+                        setShowModal(true);
+                      }}
+                      className={styles.closeButton}
+                    >
                       Back
                     </button>
                   </div>
@@ -620,7 +669,10 @@ export default function ProfileSetup() {
                   <p>Check your phone for M-Pesa prompt. CheckoutRequestID: {checkoutRequestID}</p>
                   <p>Upgrade will auto-apply after payment confirmation.</p>
                   <div className={styles.modalButtons}>
-                    <button onClick={() => setShowProcessingModal(false)} className={styles.closeButton}>
+                    <button
+                      onClick={() => setShowProcessingModal(false)}
+                      className={styles.closeButton}
+                    >
                       Close
                     </button>
                   </div>
@@ -645,14 +697,17 @@ export default function ProfileSetup() {
                     />
                   </label>
                   <div className={styles.modalButtons}>
-                    <button 
-                      onClick={handleConfirmAddFund} 
+                    <button
+                      onClick={handleConfirmAddFund}
                       className={styles.upgradeButton}
                       disabled={!addFundAmount || parseInt(addFundAmount) < 10}
                     >
                       Pay with M-Pesa
                     </button>
-                    <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>
+                    <button
+                      onClick={() => setShowAddFundModal(false)}
+                      className={styles.closeButton}
+                    >
                       Close
                     </button>
                   </div>

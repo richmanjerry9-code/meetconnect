@@ -26,23 +26,28 @@ export default function MpesaModal({ isOpen, onClose }) {
   };
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0, left: 0,
-      width: '100%',
-      height: '100%',
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      zIndex: 1000,
-    }}>
-      <div style={{
-        background: 'white',
-        padding: '2rem',
-        borderRadius: '8px',
-        width: '400px',
-      }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          background: 'white',
+          padding: '2rem',
+          borderRadius: '8px',
+          width: '400px',
+        }}
+      >
         <h2>Upgrade via M-Pesa</h2>
         <form onSubmit={handleSubmit}>
           <input
@@ -61,8 +66,12 @@ export default function MpesaModal({ isOpen, onClose }) {
             required
             style={{ width: '100%', marginBottom: '1rem', padding: '0.5rem' }}
           />
-          <button type="submit" style={{ padding: '0.5rem 1rem', marginRight: '1rem' }}>Pay</button>
-          <button type="button" onClick={onClose} style={{ padding: '0.5rem 1rem' }}>Cancel</button>
+          <button type="submit" style={{ padding: '0.5rem 1rem', marginRight: '1rem' }}>
+            Pay
+          </button>
+          <button type="button" onClick={onClose} style={{ padding: '0.5rem 1rem' }}>
+            Cancel
+          </button>
         </form>
         <p>{status}</p>
       </div>

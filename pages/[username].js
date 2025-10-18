@@ -20,20 +20,42 @@ export default function ViewProfile() {
   }, [username, router]);
 
   if (!profile) {
-    return <div style={{ padding: 20, fontFamily: 'Poppins, sans-serif', textAlign: 'center' }}>Loading...</div>;
+    return (
+      <div style={{ padding: 20, fontFamily: 'Poppins, sans-serif', textAlign: 'center' }}>
+        Loading...
+      </div>
+    );
   }
 
   return (
-    <div style={{ padding: 20, fontFamily: 'Poppins, sans-serif', maxWidth: 600, margin: '0 auto' }}>
-      <h1 style={{ color: '#e91e63', textAlign: 'center' }}>Profile Details: {profile.name || profile.username}</h1>
-      <div style={{ background: '#fff', padding: 20, borderRadius: 10, boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
+    <div
+      style={{ padding: 20, fontFamily: 'Poppins, sans-serif', maxWidth: 600, margin: '0 auto' }}
+    >
+      <h1 style={{ color: '#e91e63', textAlign: 'center' }}>
+        Profile Details: {profile.name || profile.username}
+      </h1>
+      <div
+        style={{
+          background: '#fff',
+          padding: 20,
+          borderRadius: 10,
+          boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+        }}
+      >
         {profile.profilePic && (
           <Image
             src={profile.profilePic}
             alt={profile.name || 'Profile'}
             width={150}
             height={150}
-            style={{ objectFit: 'cover', borderRadius: 10, marginBottom: 15, display: 'block', marginLeft: 'auto', marginRight: 'auto' }}
+            style={{
+              objectFit: 'cover',
+              borderRadius: 10,
+              marginBottom: 15,
+              display: 'block',
+              marginLeft: 'auto',
+              marginRight: 'auto',
+            }}
           />
         )}
         <p>
@@ -45,7 +67,10 @@ export default function ViewProfile() {
         <p>
           <strong>Phone:</strong>{' '}
           {profile.phone ? (
-            <a href={`tel:${profile.phone}`} style={{ color: '#e91e63', textDecoration: 'underline' }}>
+            <a
+              href={`tel:${profile.phone}`}
+              style={{ color: '#e91e63', textDecoration: 'underline' }}
+            >
               {profile.phone}
             </a>
           ) : (
@@ -88,15 +113,28 @@ export default function ViewProfile() {
           </p>
         )}
         <p>
-          <strong>Incall Rate:</strong> {profile.incallRate ? `${profile.incallRate} KSh/hr` : 'N/A'}
+          <strong>Incall Rate:</strong>{' '}
+          {profile.incallRate ? `${profile.incallRate} KSh/hr` : 'N/A'}
         </p>
         <p>
-          <strong>Outcall Rate:</strong> {profile.outcallRate ? `${profile.outcallRate} KSh/hr` : 'N/A'}
+          <strong>Outcall Rate:</strong>{' '}
+          {profile.outcallRate ? `${profile.outcallRate} KSh/hr` : 'N/A'}
         </p>
       </div>
       <button
         onClick={() => router.push('/')}
-        style={{ background: '#e91e63', color: '#fff', padding: '8px 15px', borderRadius: 8, border: 'none', cursor: 'pointer', marginTop: 15, display: 'block', marginLeft: 'auto', marginRight: 'auto' }}
+        style={{
+          background: '#e91e63',
+          color: '#fff',
+          padding: '8px 15px',
+          borderRadius: 8,
+          border: 'none',
+          cursor: 'pointer',
+          marginTop: 15,
+          display: 'block',
+          marginLeft: 'auto',
+          marginRight: 'auto',
+        }}
       >
         Back to Home
       </button>

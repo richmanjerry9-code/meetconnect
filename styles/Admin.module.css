@@ -32,7 +32,9 @@ button {
   padding: 10px;
 }
 
-.formContainer, .uploadContainer, .tableContainer {
+.formContainer,
+.uploadContainer,
+.tableContainer {
   background: #fff;
   padding: 20px;
   margin-bottom: 20px;
@@ -51,7 +53,7 @@ button {
   height: 120px;
   border: 2px dashed #000;
   text-align: center;
-  lineHeight: 120px;
+  lineheight: 120px;
   margin: 5px 0;
 }
 
@@ -60,7 +62,8 @@ button {
   border-collapse: collapse;
 }
 
-.table th, .table td {
+.table th,
+.table td {
   padding: 10px;
   border: 1px solid #ccc;
 }
@@ -71,7 +74,7 @@ button {
 
 .actionButton {
   padding: 5px 10px;
-  background: #2196F3;
+  background: #2196f3;
   color: white;
   border: none;
   margin-right: 5px;
@@ -85,7 +88,8 @@ button {
   .stats {
     grid-template-columns: 1fr;
   }
-  .input, .profilePic {
+  .input,
+  .profilePic {
     max-width: 100%;
   }
   .table {
@@ -105,7 +109,8 @@ button {
     width: 100px;
     height: 100px;
   }
-  .table th, .table td {
+  .table th,
+  .table td {
     padding: 5px;
     font-size: 0.9rem;
   }

@@ -85,7 +85,9 @@ export default function ViewProfile() {
             <b>Nearby:</b>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
               {profile.nearby.map((n, i) => (
-                <span key={i} style={tagStyle}>{n}</span>
+                <span key={i} style={tagStyle}>
+                  {n}
+                </span>
               ))}
             </div>
           </div>
@@ -96,7 +98,9 @@ export default function ViewProfile() {
             <b>Services:</b>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
               {profile.services.map((s, i) => (
-                <span key={i} style={tagStyle}>{s}</span>
+                <span key={i} style={tagStyle}>
+                  {s}
+                </span>
               ))}
             </div>
           </div>
@@ -186,4 +190,3 @@ const backBtn = {
   cursor: 'pointer',
   marginBottom: 15,
 };
-
