@@ -5,17 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MeetConnect</title>
 
-    <!-- Favicon (now in public folder) -->
-    <link rel="icon" href="/favicon.png" type="image/png">
-    <link rel="shortcut icon" href="/favicon.png" type="image/png">
+    <!-- Enhanced Favicon Support -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon"> <!-- Fallback for older browsers -->
+    <link rel="icon" href="/favicon-16x16.png" sizes="16x16" type="image/png">
+    <link rel="icon" href="/favicon-32x32.png" sizes="32x32" type="image/png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180"> <!-- For iOS devices -->
 
-    <!-- Basic styling -->
+    <!-- Basic styling with improvements -->
     <style>
         body {
             font-family: Arial, sans-serif;
             text-align: center;
-            padding: 50px;
+            padding: 50px 20px; /* Added side padding for mobile */
             background-color: #ffe0f0; /* soft pink background */
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
         }
 
         header {
@@ -25,31 +32,43 @@
         header img {
             width: 150px; /* adjust as needed */
             height: auto;
+            max-width: 100%; /* Responsive on small screens */
         }
 
         h1 {
             color: #ff3399; /* bright pink */
             margin-top: 10px;
+            font-size: 2.5em; /* Larger for impact */
         }
 
         p {
             font-size: 18px;
             color: #333;
+            max-width: 600px;
+            margin: 0 auto 30px;
         }
 
         .btn {
             display: inline-block;
-            padding: 10px 20px;
+            padding: 12px 24px; /* Slightly larger for touch */
             margin-top: 20px;
             background-color: #ff3399;
             color: #fff;
             text-decoration: none;
             border-radius: 8px;
             font-weight: bold;
+            transition: background-color 0.3s ease, transform 0.2s ease; /* Smooth hover */
         }
 
         .btn:hover {
             background-color: #ff66bb;
+            transform: translateY(-2px); /* Subtle lift effect */
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            h1 { font-size: 2em; }
+            body { padding: 20px; }
         }
     </style>
 </head>
@@ -67,4 +86,3 @@
 
 </body>
 </html>
-
