@@ -1,26 +1,26 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://meetconnect.vercel.app/</loc>
-    <lastmod>2025-10-10</lastmod>
+    <loc>https://meetconnect-76xq.onrender.com/</loc>
+    <lastmod>2025-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://meetconnect.vercel.app/admin</loc>
-    <lastmod>2025-10-10</lastmod>
+    <loc>https://meetconnect-76xq.onrender.com/admin</loc>
+    <lastmod>2025-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://meetconnect.vercel.app/login</loc>
-    <lastmod>2025-10-10</lastmod>
+    <loc>https://meetconnect-76xq.onrender.com/login</loc>
+    <lastmod>2025-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://meetconnect.vercel.app/profile-setup</loc>
-    <lastmod>2025-10-10</lastmod>
+    <loc>https://meetconnect-76xq.onrender.com/profile-setup</loc>
+    <lastmod>2025-10-22</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.7</priority>
   </url>
