@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
-import { Nairobi } from '../data/locations';
+import * as Counties from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase.js';
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
@@ -45,9 +45,8 @@ export default function ProfileSetup() {
     outcallsRate: '',
     profilePic: '',
   });
+  const [selectedCounty, setSelectedCounty] = useState('Nairobi');
   const [selectedWard, setSelectedWard] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredOptions, setFilteredOptions] = useState([]);
   const [membership, setMembership] = useState('Regular');
   const [walletBalance, setWalletBalance] = useState(0);
   const [error, setError] = useState('');
@@ -84,8 +83,10 @@ export default function ProfileSetup() {
             services: data.services || [],
             nearby: data.nearby || [],
             age: data.age || prev.age,
+            county: data.county || prev.county,
           }));
           setSelectedWard(data.ward || '');
+          setSelectedCounty(data.county || 'Nairobi');
           setWalletBalance(data.walletBalance || 0);
           setMembership(data.membership || 'Regular');
           setMpesaPhone(data.phone || ''); // Default M-Pesa phone to profile phone
@@ -167,52 +168,23 @@ export default function ProfileSetup() {
     }
   };
 
+  const handleCountyChange = (e) => {
+    const county = e.target.value;
+    setSelectedCounty(county);
+    setFormData((prev) => ({ ...prev, county, ward: '', area: '', nearby: [] }));
+    setSelectedWard('');
+    if (error) setError('');
+  };
+
   const handleWardChange = (e) => {
     const ward = e.target.value;
     setSelectedWard(ward);
     setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
-    setSearchQuery('');
-    setFilteredOptions([]);
     if (error) setError('');
   };
 
   const handleAreaChange = (e) => {
     setFormData((prev) => ({ ...prev, area: e.target.value }));
-    if (error) setError('');
-  };
-
-  const handleSearchChange = (e) => {
-    const query = e.target.value.toLowerCase();
-    setSearchQuery(query);
-    if (!query) {
-      setFilteredOptions([]);
-      return;
-    }
-
-    const allOptions = [...Object.keys(Nairobi), ...Object.values(Nairobi).flat()].filter(
-      (item, index, self) => self.indexOf(item) === index
-    );
-
-    const filtered = allOptions
-      .filter((option) => option.toLowerCase().includes(query))
-      .slice(0, 5);
-    setFilteredOptions(filtered);
-  };
-
-  const handleSelectOption = (option) => {
-    const isWard = Object.keys(Nairobi).includes(option);
-    if (isWard) {
-      setSelectedWard(option);
-      setFormData((prev) => ({ ...prev, ward: option, area: '', nearby: [] }));
-    } else {
-      const wardKey = Object.keys(Nairobi).find((w) => Nairobi[w].includes(option));
-      if (wardKey) {
-        setSelectedWard(wardKey);
-        setFormData((prev) => ({ ...prev, ward: wardKey, area: option }));
-      }
-    }
-    setSearchQuery('');
-    setFilteredOptions([]);
     if (error) setError('');
   };
 
@@ -490,8 +462,14 @@ export default function ProfileSetup() {
     }
   };
 
-  const wards = Nairobi ? Object.keys(Nairobi) : [];
-  const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
+  // New dynamic options
+  const countyOptions = Object.keys(Counties);
+  const wardOptions =
+    selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
+  const areaOptions =
+    selectedCounty && selectedWard && Counties[selectedCounty][selectedWard]
+      ? Counties[selectedCounty][selectedWard]
+      : [];
 
   const plans = {
     Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
@@ -825,40 +803,19 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 County
-                <input
-                  type="text"
+                <select
                   name="county"
-                  value={formData.county}
-                  onChange={handleChange}
-                  className={styles.input}
-                  disabled
-                />
-              </label>
-
-              <label className={styles.label}>
-                Location Search
-                <div className={styles.locationInput}>
-                  <input
-                    type="text"
-                    placeholder="Search City/Town or Area..."
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    className={styles.input}
-                  />
-                </div>
-                {filteredOptions.length > 0 && (
-                  <div className={styles.dropdown}>
-                    {filteredOptions.map((option, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => handleSelectOption(option)}
-                        className={styles.dropdownItem}
-                      >
-                        {option}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  value={selectedCounty}
+                  onChange={handleCountyChange}
+                  className={styles.select}
+                >
+                  <option value="">Select County</option>
+                  {countyOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className={styles.label}>
@@ -870,7 +827,7 @@ export default function ProfileSetup() {
                   className={styles.select}
                 >
                   <option value="">Select City/Town</option>
-                  {Object.keys(Nairobi).map((ward) => (
+                  {wardOptions.map((ward) => (
                     <option key={ward} value={ward}>
                       {ward}
                     </option>
@@ -889,7 +846,7 @@ export default function ProfileSetup() {
                 >
                   <option value="">Select Area</option>
                   {selectedWard &&
-                    Nairobi[selectedWard].map((area) => (
+                    areaOptions.map((area) => (
                       <option key={area} value={area}>
                         {area}
                       </option>
@@ -901,7 +858,7 @@ export default function ProfileSetup() {
                 Nearby Places
                 <div className={styles.checkboxGroup}>
                   {selectedWard &&
-                    Nairobi[selectedWard].map((place) => (
+                    areaOptions.map((place) => (
                       <div key={place}>
                         <input
                           type="checkbox"
@@ -979,3 +936,4 @@ export default function ProfileSetup() {
     </div>
   );
 }
+
