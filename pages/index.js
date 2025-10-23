@@ -1,9 +1,9 @@
-// pages/index.js
+// pages/index.js (now supports all 47 counties dynamically)
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
-import * as Locations from '../data/locations'; // Import all counties dynamically
+import * as Counties from '../data/locations'; // ✅ all counties imported
 import styles from '../styles/Home.module.css';
 import { db } from '../lib/firebase.js';
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
@@ -12,13 +12,11 @@ export default function Home() {
   const router = useRouter();
   const [profiles, setProfiles] = useState([]);
   const [user, setUser] = useState(null);
-
-  const [selectedCounty, setSelectedCounty] = useState('');
+  const [selectedCounty, setSelectedCounty] = useState(''); // ✅ added
   const [selectedWard, setSelectedWard] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [searchLocation, setSearchLocation] = useState('');
   const [filteredLocations, setFilteredLocations] = useState([]);
-
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -41,6 +39,7 @@ export default function Home() {
     };
 
     fetchProfiles();
+
     if (localStorage.getItem('profileSaved') === 'true') {
       localStorage.removeItem('profileSaved');
       setRefreshKey((prev) => prev + 1);
@@ -51,14 +50,14 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [refreshKey]);
 
-  // 🔍 Dynamic search from all counties
+  // ✅ Updated to handle all counties
   useEffect(() => {
-    if (!searchLocation) return setFilteredLocations([]);
+    if (!searchLocation || !Counties) return setFilteredLocations([]);
     const matches = [];
-    Object.keys(Locations).forEach((county) => {
-      const wards = Locations[county];
-      Object.keys(wards).forEach((ward) => {
-        wards[ward].forEach((area) => {
+
+    Object.keys(Counties).forEach((county) => {
+      Object.keys(Counties[county]).forEach((ward) => {
+        Counties[county][ward].forEach((area) => {
           if (
             area.toLowerCase().includes(searchLocation.toLowerCase()) ||
             ward.toLowerCase().includes(searchLocation.toLowerCase()) ||
@@ -69,10 +68,11 @@ export default function Home() {
         });
       });
     });
+
     setFilteredLocations(matches.slice(0, 5));
   }, [searchLocation]);
 
-  const handleLocationSelect = (county, ward, area) => {
+  const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
     setSelectedArea(area);
@@ -83,6 +83,7 @@ export default function Home() {
   const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
 
   let filteredProfiles = profiles.filter((p) => {
+    if (!searchLocation && !selectedWard && !selectedArea && !selectedCounty) return true;
     const countyMatch = selectedCounty ? p.county === selectedCounty : true;
     const wardMatch = selectedWard ? p.ward === selectedWard : true;
     const areaMatch = selectedArea ? p.area === selectedArea : true;
@@ -90,7 +91,12 @@ export default function Home() {
       ? [p.county, p.ward, p.area, ...(p.nearby || [])]
           .join(' ')
           .toLowerCase()
-          .includes(searchLocation.toLowerCase())
+          .includes(
+            searchLocation
+              .toLowerCase()
+              .replace(/[^\w\s]/g, ' ')
+              .replace(/\s+/g, ' ')
+          )
       : true;
     return countyMatch && wardMatch && areaMatch && searchMatch;
   });
@@ -120,15 +126,23 @@ export default function Home() {
     else groupedProfiles.Regular.push(p);
   });
 
-  // 🔒 Auth
   const handleRegister = async (e) => {
     e.preventDefault();
+
     try {
       const { name, email, password } = registerForm;
-      if (!name || !email || !password) return alert('Fill in all fields!');
+      if (!name || !email || !password) {
+        alert('Fill in all fields!');
+        return;
+      }
+
       const q = query(collection(db, 'profiles'), where('email', '==', email));
       const snapshot = await getDocs(q);
-      if (!snapshot.empty) return alert('Email already registered!');
+      if (!snapshot.empty) {
+        alert('Email already registered!');
+        return;
+      }
+
       const newUser = {
         name,
         email,
@@ -137,8 +151,10 @@ export default function Home() {
         membership: 'Regular',
         createdAt: new Date().toISOString(),
       };
+
       const docRef = await addDoc(collection(db, 'profiles'), newUser);
       const savedUser = { id: docRef.id, ...newUser };
+
       localStorage.setItem('loggedInUser', JSON.stringify(savedUser));
       setUser(savedUser);
       alert('✅ Registration successful!');
@@ -152,16 +168,26 @@ export default function Home() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
+
     try {
       const { email, password } = loginForm;
-      if (!email || !password) return alert('Enter both email and password!');
+      if (!email || !password) {
+        alert('Enter both email and password!');
+        return;
+      }
+
       const q = query(
         collection(db, 'profiles'),
         where('email', '==', email),
         where('password', '==', password)
       );
       const snapshot = await getDocs(q);
-      if (snapshot.empty) return alert('Invalid email or password!');
+
+      if (snapshot.empty) {
+        alert('Invalid email or password!');
+        return;
+      }
+
       const loggedUser = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
       localStorage.setItem('loggedInUser', JSON.stringify(loggedUser));
       setUser(loggedUser);
@@ -178,10 +204,16 @@ export default function Home() {
     setUser(null);
   };
 
-  const counties = Object.keys(Locations);
-  const wards = selectedCounty ? Object.keys(Locations[selectedCounty]) : [];
-  const areas =
-    selectedCounty && selectedWard ? Locations[selectedCounty][selectedWard] : [];
+  // ✅ Dynamically pull county, ward, area options
+  const countyOptions = Object.keys(Counties);
+  const wardOptions =
+    selectedCounty && Counties[selectedCounty]
+      ? Object.keys(Counties[selectedCounty])
+      : [];
+  const areaOptions =
+    selectedCounty && selectedWard && Counties[selectedCounty][selectedWard]
+      ? Counties[selectedCounty][selectedWard]
+      : [];
 
   return (
     <div className={styles.container}>
@@ -189,8 +221,10 @@ export default function Home() {
         <title>Meet Connect Ladies - For Gentlemen</title>
         <meta
           name="description"
-          content="Discover stunning ladies in Nairobi and across Kenya on Meet Connect Ladies."
+          content="Discover stunning ladies across Kenya on Meet Connect Ladies, designed for gentlemen."
         />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="index, follow" />
       </Head>
 
       <header className={styles.header}>
@@ -200,21 +234,25 @@ export default function Home() {
           </h1>
         </div>
         <div className={styles.authButtons}>
-          {!user ? (
+          {!user && (
             <>
               <button onClick={() => setShowRegister(true)} className={styles.button}>
                 Register
               </button>
-              <button onClick={() => setShowLogin(true)} className={styles.button}>
+              <button
+                onClick={() => setShowLogin(true)}
+                className={`${styles.button} ${styles.login}`}
+              >
                 Login
               </button>
             </>
-          ) : (
+          )}
+          {user && (
             <>
               <button onClick={() => router.push('/profile-setup')} className={styles.button}>
                 My Profile
               </button>
-              <button onClick={handleLogout} className={styles.button}>
+              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
                 Logout
               </button>
             </>
@@ -223,11 +261,10 @@ export default function Home() {
       </header>
 
       <main className={styles.main}>
-        {/* 🔍 Keep original search */}
         <div className={styles.searchContainer}>
           <input
             type="text"
-            placeholder="Search ladies by location (e.g., 'Nairobi', 'Kilimani')..."
+            placeholder="Search ladies by location (e.g., 'Kilimani', 'Busia')..."
             value={searchLocation}
             onChange={(e) => setSearchLocation(e.target.value)}
             className={styles.searchInput}
@@ -237,7 +274,7 @@ export default function Home() {
               {filteredLocations.map((loc, idx) => (
                 <div
                   key={idx}
-                  onClick={() => handleLocationSelect(loc.county, loc.ward, loc.area)}
+                  onClick={() => handleLocationSelect(loc.ward, loc.area, loc.county)}
                   className={styles.dropdownItem}
                 >
                   {loc.county}, {loc.ward}, {loc.area}
@@ -247,7 +284,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* 🏙️ County / Ward / Area filters */}
+        {/* ✅ Filters now include County */}
         <div className={styles.filters}>
           <select
             value={selectedCounty}
@@ -259,7 +296,7 @@ export default function Home() {
             className={styles.select}
           >
             <option value="">All Counties</option>
-            {counties.map((county) => (
+            {countyOptions.map((county) => (
               <option key={county} value={county}>
                 {county}
               </option>
@@ -275,8 +312,8 @@ export default function Home() {
             className={styles.select}
             disabled={!selectedCounty}
           >
-            <option value="">All Towns / Wards</option>
-            {wards.map((ward) => (
+            <option value="">All Wards</option>
+            {wardOptions.map((ward) => (
               <option key={ward} value={ward}>
                 {ward}
               </option>
@@ -290,7 +327,7 @@ export default function Home() {
             disabled={!selectedWard}
           >
             <option value="">All Areas</option>
-            {areas.map((area) => (
+            {areaOptions.map((area) => (
               <option key={area} value={area}>
                 {area}
               </option>
@@ -298,37 +335,35 @@ export default function Home() {
           </select>
         </div>
 
-        {/* Profiles */}
         <div className={styles.profiles}>
-          {filteredProfiles.length > 0 ? (
+          {searchLocation ? (
             <>
               {groupedProfiles.VIP.length > 0 && (
-                <>
-                  <h2 className={styles.sectionTitle}>VIP Ladies</h2>
-                  {groupedProfiles.VIP.map((p, i) => (
-                    <ProfileCard key={i} p={p} router={router} />
-                  ))}
-                </>
+                <h2 className={styles.sectionTitle}>VIP Ladies</h2>
               )}
+              {groupedProfiles.VIP.map((p, i) => (
+                <ProfileCard key={i} p={p} router={router} />
+              ))}
               {groupedProfiles.Prime.length > 0 && (
-                <>
-                  <h2 className={styles.sectionTitle}>Prime Ladies</h2>
-                  {groupedProfiles.Prime.map((p, i) => (
-                    <ProfileCard key={i} p={p} router={router} />
-                  ))}
-                </>
+                <h2 className={styles.sectionTitle}>Prime Ladies</h2>
               )}
+              {groupedProfiles.Prime.map((p, i) => (
+                <ProfileCard key={i} p={p} router={router} />
+              ))}
               {groupedProfiles.Regular.length > 0 && (
-                <>
-                  <h2 className={styles.sectionTitle}>Regular Ladies</h2>
-                  {groupedProfiles.Regular.map((p, i) => (
-                    <ProfileCard key={i} p={p} router={router} />
-                  ))}
-                </>
+                <h2 className={styles.sectionTitle}>Regular Ladies</h2>
               )}
+              {groupedProfiles.Regular.map((p, i) => (
+                <ProfileCard key={i} p={p} router={router} />
+              ))}
             </>
           ) : (
-            <p className={styles.noProfiles}>No ladies found in this location.</p>
+            filteredProfiles.map((p, i) => <ProfileCard key={i} p={p} router={router} />)
+          )}
+          {filteredProfiles.length === 0 && (
+            <p className={styles.noProfiles}>
+              No ladies found. Complete your profile with a photo to appear here.
+            </p>
           )}
         </div>
       </main>
@@ -396,10 +431,11 @@ export default function Home() {
   );
 }
 
-// ProfileCard + Modal (unchanged)
+// unchanged components
 function ProfileCard({ p, router }) {
   const handleClick = () => {
     if (!p.username || p.username.trim() === '') {
+      console.error('Missing or empty username for profile:', p);
       alert('This profile lacks a username. Please update it in Profile Setup.');
       return;
     }
@@ -427,7 +463,7 @@ function ProfileCard({ p, router }) {
           </span>
         )}
       </div>
-      <p className={styles.location}>{p.area || p.ward || p.county || 'Kenya'}</p>
+      <p className={styles.location}>{p.area || p.ward || p.county || 'Nairobi'}</p>
       {p.services && (
         <div className={styles.services}>
           {p.services.map((s, idx) => (
