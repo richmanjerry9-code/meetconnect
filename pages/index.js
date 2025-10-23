@@ -1,9 +1,9 @@
-// pages/index.js (added refreshKey for auto-re-fetch after save/navigation)
+// pages/index.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
-import { Nairobi } from '../data/locations';
+import * as Locations from '../data/locations'; // Import all counties dynamically
 import styles from '../styles/Home.module.css';
 import { db } from '../lib/firebase.js';
 import { collection, getDocs, addDoc, query, where } from 'firebase/firestore';
@@ -12,10 +12,13 @@ export default function Home() {
   const router = useRouter();
   const [profiles, setProfiles] = useState([]);
   const [user, setUser] = useState(null);
+
+  const [selectedCounty, setSelectedCounty] = useState('');
   const [selectedWard, setSelectedWard] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
   const [searchLocation, setSearchLocation] = useState('');
   const [filteredLocations, setFilteredLocations] = useState([]);
+
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -28,7 +31,6 @@ export default function Home() {
         const querySnapshot = await getDocs(collection(db, 'profiles'));
         const data = querySnapshot.docs
           .map((doc) => ({ id: doc.id, ...doc.data() }))
-          // Slightly loosened filter: photo optional for now, but keep core reqs
           .filter(
             (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
           );
@@ -39,63 +41,61 @@ export default function Home() {
     };
 
     fetchProfiles();
-
-    // Check flag and auto-refresh every 5s for real-time
     if (localStorage.getItem('profileSaved') === 'true') {
       localStorage.removeItem('profileSaved');
       setRefreshKey((prev) => prev + 1);
       fetchProfiles();
     }
 
-    const interval = setInterval(fetchProfiles, 5000); // Light polling
+    const interval = setInterval(fetchProfiles, 5000);
     return () => clearInterval(interval);
   }, [refreshKey]);
 
-  // Rest of your code unchanged...
+  // 🔍 Dynamic search from all counties
   useEffect(() => {
-    if (!searchLocation || !Nairobi) return setFilteredLocations([]);
+    if (!searchLocation) return setFilteredLocations([]);
     const matches = [];
-    Object.keys(Nairobi).forEach((ward) => {
-      Nairobi[ward].forEach((area) => {
-        if (
-          area.toLowerCase().includes(searchLocation.toLowerCase()) ||
-          ward.toLowerCase().includes(searchLocation.toLowerCase())
-        ) {
-          matches.push({ ward, area });
-        }
+    Object.keys(Locations).forEach((county) => {
+      const wards = Locations[county];
+      Object.keys(wards).forEach((ward) => {
+        wards[ward].forEach((area) => {
+          if (
+            area.toLowerCase().includes(searchLocation.toLowerCase()) ||
+            ward.toLowerCase().includes(searchLocation.toLowerCase()) ||
+            county.toLowerCase().includes(searchLocation.toLowerCase())
+          ) {
+            matches.push({ county, ward, area });
+          }
+        });
       });
     });
     setFilteredLocations(matches.slice(0, 5));
   }, [searchLocation]);
 
-  const handleLocationSelect = (ward, area) => {
+  const handleLocationSelect = (county, ward, area) => {
+    setSelectedCounty(county);
     setSelectedWard(ward);
     setSelectedArea(area);
-    setSearchLocation(`${ward}, ${area}`);
+    setSearchLocation(`${county}, ${ward}, ${area}`);
     setFilteredLocations([]);
   };
 
   const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
 
   let filteredProfiles = profiles.filter((p) => {
-    if (!searchLocation && !selectedWard && !selectedArea) return true;
+    const countyMatch = selectedCounty ? p.county === selectedCounty : true;
     const wardMatch = selectedWard ? p.ward === selectedWard : true;
     const areaMatch = selectedArea ? p.area === selectedArea : true;
     const searchMatch = searchLocation
       ? [p.county, p.ward, p.area, ...(p.nearby || [])]
           .join(' ')
           .toLowerCase()
-          .includes(
-            searchLocation
-              .toLowerCase()
-              .replace(/[^\w\s]/g, ' ')
-              .replace(/\s+/g, ' ')
-          )
+          .includes(searchLocation.toLowerCase())
       : true;
-    return wardMatch && areaMatch && searchMatch;
+    return countyMatch && wardMatch && areaMatch && searchMatch;
   });
 
-  if (!searchLocation && !selectedWard && !selectedArea) {
+  if (!searchLocation && !selectedWard && !selectedArea && !selectedCounty) {
     const membershipGroups = ['VVIP', 'VIP', 'Prime', 'Regular'];
     let selectedGroup = [];
     for (const m of membershipGroups) {
@@ -120,23 +120,15 @@ export default function Home() {
     else groupedProfiles.Regular.push(p);
   });
 
+  // 🔒 Auth
   const handleRegister = async (e) => {
     e.preventDefault();
-
     try {
       const { name, email, password } = registerForm;
-      if (!name || !email || !password) {
-        alert('Fill in all fields!');
-        return;
-      }
-
+      if (!name || !email || !password) return alert('Fill in all fields!');
       const q = query(collection(db, 'profiles'), where('email', '==', email));
       const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        alert('Email already registered!');
-        return;
-      }
-
+      if (!snapshot.empty) return alert('Email already registered!');
       const newUser = {
         name,
         email,
@@ -145,10 +137,8 @@ export default function Home() {
         membership: 'Regular',
         createdAt: new Date().toISOString(),
       };
-
       const docRef = await addDoc(collection(db, 'profiles'), newUser);
       const savedUser = { id: docRef.id, ...newUser };
-
       localStorage.setItem('loggedInUser', JSON.stringify(savedUser));
       setUser(savedUser);
       alert('✅ Registration successful!');
@@ -162,26 +152,16 @@ export default function Home() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-
     try {
       const { email, password } = loginForm;
-      if (!email || !password) {
-        alert('Enter both email and password!');
-        return;
-      }
-
+      if (!email || !password) return alert('Enter both email and password!');
       const q = query(
         collection(db, 'profiles'),
         where('email', '==', email),
         where('password', '==', password)
       );
       const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        alert('Invalid email or password!');
-        return;
-      }
-
+      if (snapshot.empty) return alert('Invalid email or password!');
       const loggedUser = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
       localStorage.setItem('loggedInUser', JSON.stringify(loggedUser));
       setUser(loggedUser);
@@ -198,8 +178,10 @@ export default function Home() {
     setUser(null);
   };
 
-  const wards = Nairobi ? Object.keys(Nairobi) : [];
-  const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
+  const counties = Object.keys(Locations);
+  const wards = selectedCounty ? Object.keys(Locations[selectedCounty]) : [];
+  const areas =
+    selectedCounty && selectedWard ? Locations[selectedCounty][selectedWard] : [];
 
   return (
     <div className={styles.container}>
@@ -207,10 +189,8 @@ export default function Home() {
         <title>Meet Connect Ladies - For Gentlemen</title>
         <meta
           name="description"
-          content="Discover stunning ladies in Nairobi on Meet Connect Ladies, designed for gentlemen."
+          content="Discover stunning ladies in Nairobi and across Kenya on Meet Connect Ladies."
         />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="robots" content="index, follow" />
       </Head>
 
       <header className={styles.header}>
@@ -220,25 +200,21 @@ export default function Home() {
           </h1>
         </div>
         <div className={styles.authButtons}>
-          {!user && (
+          {!user ? (
             <>
               <button onClick={() => setShowRegister(true)} className={styles.button}>
                 Register
               </button>
-              <button
-                onClick={() => setShowLogin(true)}
-                className={`${styles.button} ${styles.login}`}
-              >
+              <button onClick={() => setShowLogin(true)} className={styles.button}>
                 Login
               </button>
             </>
-          )}
-          {user && (
+          ) : (
             <>
               <button onClick={() => router.push('/profile-setup')} className={styles.button}>
                 My Profile
               </button>
-              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
+              <button onClick={handleLogout} className={styles.button}>
                 Logout
               </button>
             </>
@@ -247,6 +223,7 @@ export default function Home() {
       </header>
 
       <main className={styles.main}>
+        {/* 🔍 Keep original search */}
         <div className={styles.searchContainer}>
           <input
             type="text"
@@ -260,17 +237,35 @@ export default function Home() {
               {filteredLocations.map((loc, idx) => (
                 <div
                   key={idx}
-                  onClick={() => handleLocationSelect(loc.ward, loc.area)}
+                  onClick={() => handleLocationSelect(loc.county, loc.ward, loc.area)}
                   className={styles.dropdownItem}
                 >
-                  {loc.ward}, {loc.area}
+                  {loc.county}, {loc.ward}, {loc.area}
                 </div>
               ))}
             </div>
           )}
         </div>
 
+        {/* 🏙️ County / Ward / Area filters */}
         <div className={styles.filters}>
+          <select
+            value={selectedCounty}
+            onChange={(e) => {
+              setSelectedCounty(e.target.value);
+              setSelectedWard('');
+              setSelectedArea('');
+            }}
+            className={styles.select}
+          >
+            <option value="">All Counties</option>
+            {counties.map((county) => (
+              <option key={county} value={county}>
+                {county}
+              </option>
+            ))}
+          </select>
+
           <select
             value={selectedWard}
             onChange={(e) => {
@@ -278,8 +273,9 @@ export default function Home() {
               setSelectedArea('');
             }}
             className={styles.select}
+            disabled={!selectedCounty}
           >
-            <option value="">All Wards</option>
+            <option value="">All Towns / Wards</option>
             {wards.map((ward) => (
               <option key={ward} value={ward}>
                 {ward}
@@ -302,35 +298,37 @@ export default function Home() {
           </select>
         </div>
 
+        {/* Profiles */}
         <div className={styles.profiles}>
-          {searchLocation ? (
+          {filteredProfiles.length > 0 ? (
             <>
               {groupedProfiles.VIP.length > 0 && (
-                <h2 className={styles.sectionTitle}>VIP Ladies</h2>
+                <>
+                  <h2 className={styles.sectionTitle}>VIP Ladies</h2>
+                  {groupedProfiles.VIP.map((p, i) => (
+                    <ProfileCard key={i} p={p} router={router} />
+                  ))}
+                </>
               )}
-              {groupedProfiles.VIP.map((p, i) => (
-                <ProfileCard key={i} p={p} router={router} />
-              ))}
               {groupedProfiles.Prime.length > 0 && (
-                <h2 className={styles.sectionTitle}>Prime Ladies</h2>
+                <>
+                  <h2 className={styles.sectionTitle}>Prime Ladies</h2>
+                  {groupedProfiles.Prime.map((p, i) => (
+                    <ProfileCard key={i} p={p} router={router} />
+                  ))}
+                </>
               )}
-              {groupedProfiles.Prime.map((p, i) => (
-                <ProfileCard key={i} p={p} router={router} />
-              ))}
               {groupedProfiles.Regular.length > 0 && (
-                <h2 className={styles.sectionTitle}>Regular Ladies</h2>
+                <>
+                  <h2 className={styles.sectionTitle}>Regular Ladies</h2>
+                  {groupedProfiles.Regular.map((p, i) => (
+                    <ProfileCard key={i} p={p} router={router} />
+                  ))}
+                </>
               )}
-              {groupedProfiles.Regular.map((p, i) => (
-                <ProfileCard key={i} p={p} router={router} />
-              ))}
             </>
           ) : (
-            filteredProfiles.map((p, i) => <ProfileCard key={i} p={p} router={router} />)
-          )}
-          {filteredProfiles.length === 0 && (
-            <p className={styles.noProfiles}>
-              No ladies found. Complete your profile with a photo to appear here.
-            </p>
+            <p className={styles.noProfiles}>No ladies found in this location.</p>
           )}
         </div>
       </main>
@@ -398,11 +396,10 @@ export default function Home() {
   );
 }
 
-// ProfileCard and Modal unchanged...
+// ProfileCard + Modal (unchanged)
 function ProfileCard({ p, router }) {
   const handleClick = () => {
     if (!p.username || p.username.trim() === '') {
-      console.error('Missing or empty username for profile:', p);
       alert('This profile lacks a username. Please update it in Profile Setup.');
       return;
     }
@@ -430,7 +427,7 @@ function ProfileCard({ p, router }) {
           </span>
         )}
       </div>
-      <p className={styles.location}>{p.area || p.ward || 'Nairobi'}</p>
+      <p className={styles.location}>{p.area || p.ward || p.county || 'Kenya'}</p>
       {p.services && (
         <div className={styles.services}>
           {p.services.map((s, idx) => (
@@ -464,3 +461,4 @@ function Modal({ children, title, onClose }) {
     </div>
   );
 }
+
