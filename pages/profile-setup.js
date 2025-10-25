@@ -736,17 +736,19 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 Age
-                {/* allow typing; block below 18 on submit */}
-                <input
-                  type="number"
+                <select
                   name="age"
-                  min="18"
-                  max="100"
                   value={formData.age}
                   onChange={handleChange}
-                  className={styles.input}
+                  className={styles.select}
                   required
-                />
+                >
+                  {Array.from({ length: 83 }, (_, i) => 18 + i).map((num) => (
+                    <option key={num} value={num}>
+                      {num}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className={styles.label}>
