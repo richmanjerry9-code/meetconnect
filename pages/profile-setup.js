@@ -8,8 +8,6 @@ import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase.js';
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 
-
-
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -18,15 +16,12 @@ export default function ProfileSetup() {
     name: '',
     phone: '',
     gender: 'Female',
-    sexualOrientation: 'Straight',
     age: '18',
     nationality: '',
     county: 'Nairobi',
     ward: '',
     area: '',
     nearby: [],
-    services: [], // ensure array so .includes won't crash
-    otherServices: '',
     incallsRate: '',
     outcallsRate: '',
     profilePic: '',
@@ -66,7 +61,6 @@ export default function ProfileSetup() {
             ...prev,
             ...data,
             username: user.username,
-            services: data.services || [],
             nearby: data.nearby || [],
             age: data.age || prev.age,
             county: data.county || prev.county,
@@ -181,12 +175,6 @@ export default function ProfileSetup() {
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
       setError('You must be 18 or older to register.');
-      return;
-    }
-
-    // Require at least 4 selected services
-    if (!formData.services || formData.services.length < 4) {
-      setError('Please select at least 4 services.');
       return;
     }
 
@@ -747,21 +735,6 @@ export default function ProfileSetup() {
               </label>
 
               <label className={styles.label}>
-                Sexual Orientation
-                <select
-                  name="sexualOrientation"
-                  value={formData.sexualOrientation}
-                  onChange={handleChange}
-                  className={styles.select}
-                >
-                  <option value="Straight">Straight</option>
-                  <option value="Gay">Gay</option>
-                  <option value="Bisexual">Bisexual</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label className={styles.label}>
                 Age
                 {/* allow typing; block below 18 on submit */}
                 <input
@@ -860,37 +833,6 @@ export default function ProfileSetup() {
               </label>
 
               <label className={styles.label}>
-                Services
-                <div className={styles.checkboxGroup}>
-                  {servicesList.map((service) => (
-                    <div key={service}>
-                      <input
-                        type="checkbox"
-                        value={service}
-                        checked={(formData.services || []).includes(service)}
-                        onChange={handleChange}
-                        name="services"
-                      />
-                      <span>{service}</span>
-                    </div>
-                  ))}
-                </div>
-              </label>
-
-              {formData.services?.includes('Other Services') && (
-                <label className={styles.label}>
-                  Add other services
-                  <input
-                    type="text"
-                    name="otherServices"
-                    value={formData.otherServices}
-                    onChange={handleChange}
-                    className={styles.input}
-                  />
-                </label>
-              )}
-
-              <label className={styles.label}>
                 Incalls Rate From (KSh/hr)
                 <input
                   type="number"
@@ -922,4 +864,3 @@ export default function ProfileSetup() {
     </div>
   );
 }
-
