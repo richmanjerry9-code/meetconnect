@@ -8,21 +8,7 @@ import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase.js';
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 
-const servicesList = [
-  'Dinner Date',
-  'Travel Companion',
-  'Lesbian Show',
-  'Rimming',
-  'Raw BJ',
-  'BJ',
-  'GFE',
-  'COB – Cum On Body',
-  'CIM – Cum In Mouth',
-  '3 Some',
-  'Anal',
-  'Massage',
-  'Other Services',
-];
+
 
 export default function ProfileSetup() {
   const router = useRouter();
