@@ -22,8 +22,6 @@ export default function ProfileSetup() {
     ward: '',
     area: '',
     nearby: [],
-    incallsRate: '',
-    outcallsRate: '',
     profilePic: '',
   });
   const [selectedCounty, setSelectedCounty] = useState('Nairobi');
@@ -832,28 +830,6 @@ export default function ProfileSetup() {
                       </div>
                     ))}
                 </div>
-              </label>
-
-              <label className={styles.label}>
-                Incalls Rate From (KSh/hr)
-                <input
-                  type="number"
-                  name="incallsRate"
-                  value={formData.incallsRate}
-                  onChange={handleChange}
-                  className={styles.input}
-                />
-              </label>
-
-              <label className={styles.label}>
-                Outcalls Rate From (KSh/hr)
-                <input
-                  type="number"
-                  name="outcallsRate"
-                  value={formData.outcallsRate}
-                  onChange={handleChange}
-                  className={styles.input}
-                />
               </label>
 
               <button type="submit" className={styles.button}>
