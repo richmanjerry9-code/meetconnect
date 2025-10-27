@@ -1,3 +1,5 @@
+jsx
+
 // pages/profile-setup.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
@@ -8,6 +10,15 @@ import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase.js';
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 
+const servicesList = [
+  'Dinner Date',
+  'Clubbing Partner',
+  'Just Vibes',
+  'Relationship',
+  'Night Out',
+  'Friendship',
+];
+
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -16,12 +27,15 @@ export default function ProfileSetup() {
     name: '',
     phone: '',
     gender: 'Female',
+    sexualOrientation: 'Straight',
     age: '18',
     nationality: '',
     county: 'Nairobi',
     ward: '',
     area: '',
     nearby: [],
+    services: [], // ensure array so .includes won't crash
+    otherServices: '',
     profilePic: '',
   });
   const [selectedCounty, setSelectedCounty] = useState('Nairobi');
@@ -59,6 +73,7 @@ export default function ProfileSetup() {
             ...prev,
             ...data,
             username: user.username,
+            services: data.services || [],
             nearby: data.nearby || [],
             age: data.age || prev.age,
             county: data.county || prev.county,
@@ -109,7 +124,6 @@ export default function ProfileSetup() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-
     if (type === 'checkbox') {
       // handle nearby with max 4, services with normal toggle
       if (name === 'nearby') {
@@ -168,11 +182,16 @@ export default function ProfileSetup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
       setError('You must be 18 or older to register.');
+      return;
+    }
+
+    // Require at least 4 selected services
+    if (!formData.services || formData.services.length < 4) {
+      setError('Please select at least 4 services.');
       return;
     }
 
@@ -463,7 +482,7 @@ export default function ProfileSetup() {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect Ladies ❤️
+            Meet Connect Ladies
           </h1>
         </div>
         <div className={styles.authButtons}>
@@ -679,7 +698,7 @@ export default function ProfileSetup() {
                     className={styles.profilePic}
                   />
                 ) : (
-                  <div className={styles.profilePicPlaceholder}>📷</div>
+                  <div className={styles.profilePicPlaceholder}></div>
                 )}
               </label>
               <input
@@ -733,20 +752,33 @@ export default function ProfileSetup() {
               </label>
 
               <label className={styles.label}>
-                Age
+                Sexual Orientation
                 <select
-                  name="age"
-                  value={formData.age}
+                  name="sexualOrientation"
+                  value={formData.sexualOrientation}
                   onChange={handleChange}
                   className={styles.select}
-                  required
                 >
-                  {Array.from({ length: 83 }, (_, i) => 18 + i).map((num) => (
-                    <option key={num} value={num}>
-                      {num}
-                    </option>
-                  ))}
+                  <option value="Straight">Straight</option>
+                  <option value="Gay">Gay</option>
+                  <option value="Bisexual">Bisexual</option>
+                  <option value="Other">Other</option>
                 </select>
+              </label>
+
+              <label className={styles.label}>
+                Age
+                {/* allow typing; block below 18 on submit */}
+                <input
+                  type="number"
+                  name="age"
+                  min="18"
+                  max="100"
+                  value={formData.age}
+                  onChange={handleChange}
+                  className={styles.input}
+                  required
+                />
               </label>
 
               <label className={styles.label}>
@@ -832,6 +864,24 @@ export default function ProfileSetup() {
                 </div>
               </label>
 
+              <label className={styles.label}>
+                Services
+                <div className={styles.checkboxGroup}>
+                  {servicesList.map((service) => (
+                    <div key={service}>
+                      <input
+                        type="checkbox"
+                        value={service}
+                        checked={(formData.services || []).includes(service)}
+                        onChange={handleChange}
+                        name="services"
+                      />
+                      <span>{service}</span>
+                    </div>
+                  ))}
+                </div>
+              </label>
+
               <button type="submit" className={styles.button}>
                 Save Profile
               </button>
@@ -842,3 +892,5 @@ export default function ProfileSetup() {
     </div>
   );
 }
+
+
