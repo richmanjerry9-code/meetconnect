@@ -1,4 +1,4 @@
-// pages/index.js (now supports all 47 counties dynamically)
+// pages/index.js 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
