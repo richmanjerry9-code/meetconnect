@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
-import Navbar from '../components/Navbar';
+// import Navbar from '../components/Navbar';
 import * as Counties from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase.js';
@@ -469,7 +469,7 @@ export default function ProfileSetup() {
 
   return (
     <>
-      <Navbar />
+      {/* <Navbar /> */}
       <div className={styles.container}>
         <Head>
           <title>Meet Connect Ladies - Profile Setup</title>
