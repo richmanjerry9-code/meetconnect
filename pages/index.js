@@ -428,6 +428,12 @@ export default function Home() {
         </Modal>
       )}
 
+      <footer className={styles.footer}>
+        <div className={styles.footerLinks}>
+          <a href="/privacy" className={styles.footerLink}>Privacy Policy</a>
+          <a href="/terms" className={styles.footerLink}>Terms of Service</a>
+        </div>
+      </footer>
     </div>
   );
 }
