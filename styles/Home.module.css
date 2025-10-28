@@ -1,3 +1,4 @@
+
 .container {
   padding: 20px;
   font-family: Arial, sans-serif;
@@ -5,8 +6,18 @@
   margin: 0 auto;
   background: linear-gradient(135deg, #f8f1f1, #ffe4e1); /* Light pink to misty rose */
   min-height: 100vh;
+  display: flex;
+  flex-direction: column; /* For sticky footer */
 }
 
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1; /* Pushes footer to the bottom */
+}
+
+/* Rest of your CSS remains unchanged */
 .header {
   display: flex;
   justify-content: space-between;
@@ -56,12 +67,6 @@
 
 .logout:hover {
   background: #ff1493; /* Deep pink, toned down */
-}
-
-.main {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
 }
 
 .searchContainer {
@@ -254,3 +259,29 @@
   border-radius: 5px;
   background: #fff0f5; /* Lavender blush */
 }
+
+/* Footer fixed at bottom */
+.footer {
+  text-align: center;
+  padding: 10px 0;
+  background: #fff0f5; /* Lavender blush */
+  border-top: 1px solid #ffb6c1; /* Light coral */
+  margin-top: auto; /* Push footer to bottom of flex container */
+}
+
+.footerLinks {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.footerLink {
+  color: #ff69b4; /* Hot pink */
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.footerLink:hover {
+  text-decoration: underline;
+}
+
