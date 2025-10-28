@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
+import Navbar from '../components/Navbar';
 import * as Counties from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase.js';
@@ -467,428 +468,429 @@ export default function ProfileSetup() {
   };
 
   return (
-    <div className={styles.container}>
-      <Head>
-        <title>Meet Connect Ladies - Profile Setup</title>
-        <meta
-          name="description"
-          content="Set up your profile on Meet Connect Ladies for gentlemen."
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
+    <>
+      <Navbar />
+      <div className={styles.container}>
+        <Head>
+          <title>Meet Connect Ladies - Profile Setup</title>
+          <meta
+            name="description"
+            content="Set up your profile on Meet Connect Ladies for gentlemen."
+          />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </Head>
 
-      <header className={styles.header}>
-        <div className={styles.logoContainer}>
-          <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect Ladies
-          </h1>
-        </div>
-        <div className={styles.authButtons}>
-          <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
-            Logout
-          </button>
-        </div>
-      </header>
+        <header className={styles.header}>
+          <div className={styles.logoContainer}>
+            <h1 onClick={() => router.push('/')} className={styles.title}>
+              Meet Connect Ladies
+            </h1>
+          </div>
+          <div className={styles.authButtons}>
+            <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
+              Logout
+            </button>
+          </div>
+        </header>
 
-      <main className={styles.main}>
-        <div className={styles.profileSetupContainer}>
-          <aside className={styles.membershipSection}>
-            <div className={styles.walletSection}>
-              <div className={styles.walletStripe}></div>
-              <p className={styles.walletLabel}>Available Wallet Balance</p>
-              <p className={styles.walletBalance}>KSh{walletBalance}</p>
-              <button onClick={handleAddFund} className={styles.addFundButton}>
-                Add Fund
+        <main className={styles.main}>
+          <div className={styles.profileSetupContainer}>
+            <aside className={styles.membershipSection}>
+              <div className={styles.walletSection}>
+                <div className={styles.walletStripe}></div>
+                <p className={styles.walletLabel}>Available Wallet Balance</p>
+                <p className={styles.walletBalance}>KSh{walletBalance}</p>
+                <button onClick={handleAddFund} className={styles.addFundButton}>
+                  Add Fund
+                </button>
+              </div>
+              <h2 className={styles.sectionTitle}>My Membership</h2>
+              <p>Current: {membership}</p>
+              <p>Regular: Free</p>
+              <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
+                Upgrade to Prime
               </button>
-            </div>
-            <h2 className={styles.sectionTitle}>My Membership</h2>
-            <p>Current: {membership}</p>
-            <p>Regular: Free</p>
-            <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
-              Upgrade to Prime
-            </button>
-            <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
-              Upgrade to VIP
-            </button>
-            <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
-              Upgrade to VVIP
-            </button>
-            {showModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Select Duration for {selectedLevel}</h3>
-                  <div className={styles.durationList}>
-                    {Object.entries(plans[selectedLevel]).map(([duration, price]) => (
-                      <div key={duration} className={styles.durationItem}>
+              <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
+                Upgrade to VIP
+              </button>
+              <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
+                Upgrade to VVIP
+              </button>
+              {showModal && (
+                <div className={styles.modal}>
+                  <div className={styles.modalContent}>
+                    <h3>Select Duration for {selectedLevel}</h3>
+                    <div className={styles.durationList}>
+                      {Object.entries(plans[selectedLevel]).map(([duration, price]) => (
+                        <div key={duration} className={styles.durationItem}>
+                          <label className={styles.durationLabel}>
+                            <input
+                              type="radio"
+                              name="duration"
+                              value={duration}
+                              checked={selectedDuration === duration}
+                              onChange={() => handleDurationSelect(duration)}
+                            />
+                            <span className={styles.durationText}>
+                              {duration} Listing = KSh {price}
+                            </span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={styles.modalButtons}>
+                      <button
+                        onClick={handleProceedToPayment}
+                        className={`${styles.upgradeButton} ${selectedDuration ? styles.active : styles.inactive}`}
+                        disabled={!selectedDuration}
+                      >
+                        Proceed to Payment
+                      </button>
+                      <button onClick={() => setShowModal(false)} className={styles.closeButton}>
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* Payment Choice Modal */}
+              {showPaymentChoice && (
+                <div className={styles.modal}>
+                  <div className={styles.modalContent}>
+                    <h3>
+                      Choose Payment Method for {selectedLevel} - {selectedDuration}
+                    </h3>
+                    <p className={styles.durationText}>
+                      Total: KSh {plans[selectedLevel][selectedDuration]}
+                    </p>
+                    <div className={styles.durationList}>
+                      <div className={styles.durationItem}>
                         <label className={styles.durationLabel}>
                           <input
                             type="radio"
-                            name="duration"
-                            value={duration}
-                            checked={selectedDuration === duration}
-                            onChange={() => handleDurationSelect(duration)}
+                            name="paymentMethod"
+                            value="wallet"
+                            checked={selectedPaymentMethod === 'wallet'}
+                            onChange={() => handlePaymentMethodChange('wallet')}
                           />
                           <span className={styles.durationText}>
-                            {duration} Listing = KSh {price}
+                            Wallet Balance (KSh {walletBalance})
                           </span>
                         </label>
                       </div>
-                    ))}
-                  </div>
-                  <div className={styles.modalButtons}>
-                    <button
-                      onClick={handleProceedToPayment}
-                      className={`${styles.upgradeButton} ${selectedDuration ? styles.active : styles.inactive}`}
-                      disabled={!selectedDuration}
-                    >
-                      Proceed to Payment
-                    </button>
-                    <button onClick={() => setShowModal(false)} className={styles.closeButton}>
-                      Close
-                    </button>
+                      <div className={styles.durationItem}>
+                        <label className={styles.durationLabel}>
+                          <input
+                            type="radio"
+                            name="paymentMethod"
+                            value="mpesa"
+                            checked={selectedPaymentMethod === 'mpesa'}
+                            onChange={() => handlePaymentMethodChange('mpesa')}
+                          />
+                          <span className={styles.durationText}>M-Pesa (STK Push)</span>
+                        </label>
+                      </div>
+                    </div>
+                    {selectedPaymentMethod === 'mpesa' && (
+                      <label className={styles.label}>
+                        M-Pesa Phone Number <small>(for prompt)</small>
+                        <input
+                          type="text"
+                          value={mpesaPhone}
+                          onChange={(e) => setMpesaPhone(e.target.value)}
+                          placeholder="0712345678"
+                          className={styles.input}
+                        />
+                      </label>
+                    )}
+                    <div className={styles.modalButtons}>
+                      <button
+                        onClick={
+                          selectedPaymentMethod === 'wallet'
+                            ? handleConfirmWalletUpgrade
+                            : handleConfirmMpesaUpgrade
+                        }
+                        className={styles.upgradeButton}
+                        disabled={
+                          selectedPaymentMethod === 'wallet' &&
+                          walletBalance < plans[selectedLevel][selectedDuration]
+                        }
+                      >
+                        Confirm Payment
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowPaymentChoice(false);
+                          setShowModal(true);
+                        }}
+                        className={styles.closeButton}
+                      >
+                        Back
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {/* Payment Choice Modal */}
-            {showPaymentChoice && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>
-                    Choose Payment Method for {selectedLevel} - {selectedDuration}
-                  </h3>
-                  <p className={styles.durationText}>
-                    Total: KSh {plans[selectedLevel][selectedDuration]}
-                  </p>
-                  <div className={styles.durationList}>
-                    <div className={styles.durationItem}>
-                      <label className={styles.durationLabel}>
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="wallet"
-                          checked={selectedPaymentMethod === 'wallet'}
-                          onChange={() => handlePaymentMethodChange('wallet')}
-                        />
-                        <span className={styles.durationText}>
-                          Wallet Balance (KSh {walletBalance})
-                        </span>
-                      </label>
-                    </div>
-                    <div className={styles.durationItem}>
-                      <label className={styles.durationLabel}>
-                        <input
-                          type="radio"
-                          name="paymentMethod"
-                          value="mpesa"
-                          checked={selectedPaymentMethod === 'mpesa'}
-                          onChange={() => handlePaymentMethodChange('mpesa')}
-                        />
-                        <span className={styles.durationText}>M-Pesa (STK Push)</span>
-                      </label>
+              )}
+              {/* Processing Modal for M-Pesa Confirmation */}
+              {showProcessingModal && (
+                <div className={styles.modal}>
+                  <div className={styles.modalContent}>
+                    <h3>Processing Upgrade</h3>
+                    <p>Check your phone for M-Pesa prompt. CheckoutRequestID: {checkoutRequestID}</p>
+                    <p>Upgrade will auto-apply after payment confirmation.</p>
+                    <div className={styles.modalButtons}>
+                      <button
+                        onClick={() => setShowProcessingModal(false)}
+                        className={styles.closeButton}
+                      >
+                        Close
+                      </button>
                     </div>
                   </div>
-                  {selectedPaymentMethod === 'mpesa' && (
+                </div>
+              )}
+              {/* Add Fund Modal */}
+              {showAddFundModal && (
+                <div className={styles.modal}>
+                  <div className={styles.modalContent}>
+                    <h3>Add Funds to Wallet</h3>
+                    <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
                     <label className={styles.label}>
-                      M-Pesa Phone Number <small>(for prompt)</small>
+                      Amount (KSh)
                       <input
-                        type="text"
-                        value={mpesaPhone}
-                        onChange={(e) => setMpesaPhone(e.target.value)}
-                        placeholder="0712345678"
+                        type="number"
+                        value={addFundAmount}
+                        onChange={(e) => setAddFundAmount(e.target.value)}
+                        min="10"
                         className={styles.input}
+                        required
                       />
                     </label>
-                  )}
-                  <div className={styles.modalButtons}>
-                    <button
-                      onClick={
-                        selectedPaymentMethod === 'wallet'
-                          ? handleConfirmWalletUpgrade
-                          : handleConfirmMpesaUpgrade
-                      }
-                      className={styles.upgradeButton}
-                      disabled={
-                        selectedPaymentMethod === 'wallet' &&
-                        walletBalance < plans[selectedLevel][selectedDuration]
-                      }
-                    >
-                      Confirm Payment
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowPaymentChoice(false);
-                        setShowModal(true);
-                      }}
-                      className={styles.closeButton}
-                    >
-                      Back
-                    </button>
+                    <div className={styles.modalButtons}>
+                      <button
+                        onClick={handleConfirmAddFund}
+                        className={styles.upgradeButton}
+                        disabled={!addFundAmount || parseInt(addFundAmount) < 10}
+                      >
+                        Pay with M-Pesa
+                      </button>
+                      <button
+                        onClick={() => setShowAddFundModal(false)}
+                        className={styles.closeButton}
+                      >
+                        Close
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
-            {/* Processing Modal for M-Pesa Confirmation */}
-            {showProcessingModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Processing Upgrade</h3>
-                  <p>Check your phone for M-Pesa prompt. CheckoutRequestID: {checkoutRequestID}</p>
-                  <p>Upgrade will auto-apply after payment confirmation.</p>
-                  <div className={styles.modalButtons}>
-                    <button
-                      onClick={() => setShowProcessingModal(false)}
-                      className={styles.closeButton}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* Add Fund Modal */}
-            {showAddFundModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Add Funds to Wallet</h3>
-                  <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
-                  <label className={styles.label}>
-                    Amount (KSh)
-                    <input
-                      type="number"
-                      value={addFundAmount}
-                      onChange={(e) => setAddFundAmount(e.target.value)}
-                      min="10"
-                      className={styles.input}
-                      required
+              )}
+            </aside>
+
+            <div className={styles.profileFormContainer}>
+              <h1 className={styles.setupTitle}>My Profile</h1>
+              <div className={styles.profilePicSection}>
+                <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
+                  {formData.profilePic ? (
+                    <Image
+                      src={formData.profilePic}
+                      alt="Profile Picture"
+                      width={150}
+                      height={150}
+                      className={styles.profilePic}
                     />
-                  </label>
-                  <div className={styles.modalButtons}>
-                    <button
-                      onClick={handleConfirmAddFund}
-                      className={styles.upgradeButton}
-                      disabled={!addFundAmount || parseInt(addFundAmount) < 10}
-                    >
-                      Pay with M-Pesa
-                    </button>
-                    <button
-                      onClick={() => setShowAddFundModal(false)}
-                      className={styles.closeButton}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
+                  ) : (
+                    <div className={styles.profilePicPlaceholder}></div>
+                  )}
+                </label>
+                <input
+                  id="profilePicUpload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className={styles.profilePicInput}
+                />
               </div>
-            )}
-          </aside>
 
-          <div className={styles.profileFormContainer}>
-            <h1 className={styles.setupTitle}>My Profile</h1>
-            <div className={styles.profilePicSection}>
-              <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
-                {formData.profilePic ? (
-                  <Image
-                    src={formData.profilePic}
-                    alt="Profile Picture"
-                    width={150}
-                    height={150}
-                    className={styles.profilePic}
+              {error && <p className={styles.error}>{error}</p>}
+
+              <form onSubmit={handleSubmit} className={styles.profileForm}>
+                <label className={styles.label}>
+                  Name
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    className={styles.input}
+                    required
                   />
-                ) : (
-                  <div className={styles.profilePicPlaceholder}></div>
-                )}
-              </label>
-              <input
-                id="profilePicUpload"
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className={styles.profilePicInput}
-              />
-            </div>
+                </label>
 
-            {error && <p className={styles.error}>{error}</p>}
+                <label className={styles.label}>
+                  Phone Number <small>(254 followed by 9 digits, e.g., 0712345678)</small>
+                  <input
+                    type="text"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className={styles.input}
+                    required
+                    placeholder="0712345678"
+                  />
+                </label>
 
-            <form onSubmit={handleSubmit} className={styles.profileForm}>
-              <label className={styles.label}>
-                Name
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={styles.input}
-                  required
-                />
-              </label>
+                <label className={styles.label}>
+                  Gender
+                  <select
+                    name="gender"
+                    value={formData.gender}
+                    onChange={handleChange}
+                    className={styles.select}
+                  >
+                    <option value="Female">Female</option>
+                    <option value="Male">Male</option>
+                  </select>
+                </label>
 
-              <label className={styles.label}>
-                Phone Number <small>(254 followed by 9 digits, e.g., 0712345678)</small>
-                <input
-                  type="text"
-                  name="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={styles.input}
-                  required
-                  placeholder="0712345678"
-                />
-              </label>
+                <label className={styles.label}>
+                  Sexual Orientation
+                  <select
+                    name="sexualOrientation"
+                    value={formData.sexualOrientation}
+                    onChange={handleChange}
+                    className={styles.select}
+                  >
+                    <option value="Straight">Straight</option>
+                    <option value="Gay">Gay</option>
+                    <option value="Bisexual">Bisexual</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
 
-              <label className={styles.label}>
-                Gender
-                <select
-                  name="gender"
-                  value={formData.gender}
-                  onChange={handleChange}
-                  className={styles.select}
-                >
-                  <option value="Female">Female</option>
-                  <option value="Male">Male</option>
-                </select>
-              </label>
+                <label className={styles.label}>
+                  Age
+                  {/* allow typing; block below 18 on submit */}
+                  <input
+                    type="number"
+                    name="age"
+                    min="18"
+                    max="100"
+                    value={formData.age}
+                    onChange={handleChange}
+                    className={styles.input}
+                    required
+                  />
+                </label>
 
-              <label className={styles.label}>
-                Sexual Orientation
-                <select
-                  name="sexualOrientation"
-                  value={formData.sexualOrientation}
-                  onChange={handleChange}
-                  className={styles.select}
-                >
-                  <option value="Straight">Straight</option>
-                  <option value="Gay">Gay</option>
-                  <option value="Bisexual">Bisexual</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
+                <label className={styles.label}>
+                  Nationality
+                  <input
+                    type="text"
+                    name="nationality"
+                    value={formData.nationality}
+                    onChange={handleChange}
+                    className={styles.input}
+                  />
+                </label>
 
-              <label className={styles.label}>
-                Age
-                {/* allow typing; block below 18 on submit */}
-                <input
-                  type="number"
-                  name="age"
-                  min="18"
-                  max="100"
-                  value={formData.age}
-                  onChange={handleChange}
-                  className={styles.input}
-                  required
-                />
-              </label>
-
-              <label className={styles.label}>
-                Nationality
-                <input
-                  type="text"
-                  name="nationality"
-                  value={formData.nationality}
-                  onChange={handleChange}
-                  className={styles.input}
-                />
-              </label>
-
-              <label className={styles.label}>
-                County
-                <select
-                  name="county"
-                  value={selectedCounty}
-                  onChange={handleCountyChange}
-                  className={styles.select}
-                >
-                  <option value="">Select County</option>
-                  {countyOptions.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className={styles.label}>
-                City/Town
-                <select
-                  name="ward"
-                  value={selectedWard}
-                  onChange={handleWardChange}
-                  className={styles.select}
-                >
-                  <option value="">Select City/Town</option>
-                  {wardOptions.map((ward) => (
-                    <option key={ward} value={ward}>
-                      {ward}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className={styles.label}>
-                Area
-                <select
-                  name="area"
-                  value={formData.area}
-                  onChange={handleAreaChange}
-                  className={styles.select}
-                  disabled={!selectedWard}
-                >
-                  <option value="">Select Area</option>
-                  {selectedWard &&
-                    areaOptions.map((area) => (
-                      <option key={area} value={area}>
-                        {area}
+                <label className={styles.label}>
+                  County
+                  <select
+                    name="county"
+                    value={selectedCounty}
+                    onChange={handleCountyChange}
+                    className={styles.select}
+                  >
+                    <option value="">Select County</option>
+                    {countyOptions.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
                       </option>
                     ))}
-                </select>
-              </label>
+                  </select>
+                </label>
 
-              <label className={styles.label}>
-                Nearby Places
-                <div className={styles.checkboxGroup}>
-                  {selectedWard &&
-                    areaOptions.map((place) => (
-                      <div key={place}>
+                <label className={styles.label}>
+                  City/Town
+                  <select
+                    name="ward"
+                    value={selectedWard}
+                    onChange={handleWardChange}
+                    className={styles.select}
+                  >
+                    <option value="">Select City/Town</option>
+                    {wardOptions.map((ward) => (
+                      <option key={ward} value={ward}>
+                        {ward}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className={styles.label}>
+                  Area
+                  <select
+                    name="area"
+                    value={formData.area}
+                    onChange={handleAreaChange}
+                    className={styles.select}
+                    disabled={!selectedWard}
+                  >
+                    <option value="">Select Area</option>
+                    {selectedWard &&
+                      areaOptions.map((area) => (
+                        <option key={area} value={area}>
+                          {area}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className={styles.label}>
+                  Nearby Places
+                  <div className={styles.checkboxGroup}>
+                    {selectedWard &&
+                      areaOptions.map((place) => (
+                        <div key={place}>
+                          <input
+                            type="checkbox"
+                            value={place}
+                            checked={(formData.nearby || []).includes(place)}
+                            onChange={handleChange}
+                            name="nearby"
+                          />
+                          <span>{place}</span>
+                        </div>
+                      ))}
+                  </div>
+                </label>
+
+                <label className={styles.label}>
+                  Services
+                  <div className={styles.checkboxGroup}>
+                    {servicesList.map((service) => (
+                      <div key={service}>
                         <input
                           type="checkbox"
-                          value={place}
-                          checked={(formData.nearby || []).includes(place)}
+                          value={service}
+                          checked={(formData.services || []).includes(service)}
                           onChange={handleChange}
-                          name="nearby"
+                          name="services"
                         />
-                        <span>{place}</span>
+                        <span>{service}</span>
                       </div>
                     ))}
-                </div>
-              </label>
+                  </div>
+                </label>
 
-              <label className={styles.label}>
-                Services
-                <div className={styles.checkboxGroup}>
-                  {servicesList.map((service) => (
-                    <div key={service}>
-                      <input
-                        type="checkbox"
-                        value={service}
-                        checked={(formData.services || []).includes(service)}
-                        onChange={handleChange}
-                        name="services"
-                      />
-                      <span>{service}</span>
-                    </div>
-                  ))}
-                </div>
-              </label>
-
-              <button type="submit" className={styles.button}>
-                Save Profile
-              </button>
-            </form>
+                <button type="submit" className={styles.button}>
+                  Save Profile
+                </button>
+              </form>
+            </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </>
   );
 }
-
-
