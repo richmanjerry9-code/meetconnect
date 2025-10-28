@@ -427,6 +427,11 @@ export default function Home() {
           </form>
         </Modal>
       )}
+
+      {/* ✅ Disclaimer added INSIDE component */}
+      <p className="text-xs text-gray-600 mt-4 text-center">
+        MeetConnect is for adults (18+) only. Please use responsibly.
+      </p>
     </div>
   );
 }
@@ -497,8 +502,5 @@ function Modal({ children, title, onClose }) {
     </div>
   );
 }
-<p className="text-xs text-gray-600 mt-2">
-  MeetConnect is for adults (18+) only. Please use responsibly.
-</p>
 
 
