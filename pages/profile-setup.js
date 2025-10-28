@@ -1,5 +1,3 @@
-javascript
-
 // pages/index.js 
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
