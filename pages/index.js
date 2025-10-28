@@ -112,7 +112,7 @@ export default function Home({ initialProfiles = [] }) {
     };
 
     fetchProfiles();
-  }, []);
+  }, [profiles.length]); // Added missing dependency
 
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
@@ -245,7 +245,7 @@ export default function Home({ initialProfiles = [] }) {
     });
 
     return filtered;
-  }, [profiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
+  }, [profiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]); // Added missing dependency
 
   // Abstracted form validation
   const validateForm = (form, isRegister = false) => {
@@ -653,6 +653,8 @@ const ProfileCard = memo(({ p, router }) => {
   );
 });
 
+ProfileCard.displayName = 'ProfileCard';
+
 const Modal = forwardRef(({ children, title, onClose }, ref) => (
   <div className={styles.modal} ref={ref}>
     <div className={styles.modalContent}>
@@ -662,6 +664,8 @@ const Modal = forwardRef(({ children, title, onClose }, ref) => (
     </div>
   </div>
 ));
+
+Modal.displayName = 'Modal';
 
 // SSR for initial profiles
 export async function getServerSideProps() {
