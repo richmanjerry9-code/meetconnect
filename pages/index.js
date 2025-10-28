@@ -667,8 +667,7 @@ const Modal = forwardRef(({ children, title, onClose }, ref) => (
 
 Modal.displayName = 'Modal';
 
-// SSR for initial profiles
-export async function getServerSideProps() {
+export async function getStaticProps() {
   let initialProfiles = [];
   try {
     const q = query(
@@ -685,5 +684,9 @@ export async function getServerSideProps() {
   } catch (err) {
     console.error('Error fetching initial profiles:', err);
   }
-  return { props: { initialProfiles } };
+
+  return {
+    props: { initialProfiles },
+    revalidate: 60, // rebuild the page every 60 seconds
+  };
 }
