@@ -1,5 +1,3 @@
-jsx
-
 // pages/profile-setup.js
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
