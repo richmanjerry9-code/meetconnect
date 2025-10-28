@@ -428,10 +428,6 @@ export default function Home() {
         </Modal>
       )}
 
-      {/* ✅ Disclaimer added INSIDE component */}
-      <p className="text-xs text-gray-600 mt-4 text-center">
-        MeetConnect is for adults (18+) only. Please use responsibly.
-      </p>
     </div>
   );
 }
@@ -502,5 +498,3 @@ function Modal({ children, title, onClose }) {
     </div>
   );
 }
-
-
