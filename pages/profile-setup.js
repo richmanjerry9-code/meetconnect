@@ -7,8 +7,9 @@ import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, storage } from '../lib/firebase';
-import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
+import { doc, setDoc, getDoc, addDoc, collection, onSnapshot, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import toast, { Toaster } from 'react-hot-toast';
 
 const servicesList = [
   '🍽️ Dinner Date',
@@ -56,6 +57,8 @@ export default function ProfileSetup() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
+  // New state for notifications
+  const [notifications, setNotifications] = useState([]);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -91,8 +94,37 @@ export default function ProfileSetup() {
       }
     };
     fetchProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+
+    // Fetch user notifications on load
+    if (!loggedInUser) return;
+
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', loggedInUser.id)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const newNotifs = [];
+
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        newNotifs.push({ id: docSnap.id, ...data });
+
+        // 🚨 Instantly alert user on new rejection
+        if (data.type === 'image_rejection' && !data.read) {
+          toast.error(data.message, { icon: '🚫' });
+
+          // Mark notification as read so alert doesn’t repeat
+          setDoc(docSnap.ref, { read: true }, { merge: true });
+        }
+      });
+
+      // Store only unread notifications for UI display
+      setNotifications(newNotifs.filter((n) => !n.read));
+    });
+
+    return () => unsub();
+  }, [router, loggedInUser]);
 
   // Helper function to format phone for M-Pesa (254xxxxxxxxx)
   const formatPhoneForMpesa = (phone) => {
@@ -472,8 +504,19 @@ export default function ProfileSetup() {
       const data = await res.json();
 
       if (!data.accepted) {
-        await deleteObject(tempRef); // Delete the rejected image from storage
-        alert(data.message); // ❌ Tell the user it's rejected
+        await deleteObject(tempRef); // Delete rejected image
+
+        // Save rejection notice in Firestore for user
+        await addDoc(collection(db, 'notifications'), {
+          userId: loggedInUser.id,
+          type: 'image_rejection',
+          message: `Your profile photo was rejected: ${data.message}`,
+          timestamp: new Date().toISOString(),
+          read: false,
+        });
+
+        setError(`❌ Image rejected: ${data.message}`);
+        alert(`Image rejected: ${data.message}. Please upload a safe photo.`);
         return;
       }
 
@@ -497,6 +540,7 @@ export default function ProfileSetup() {
 
   return (
     <div className={styles.container}>
+      <Toaster />
       <Head>
         <title>Meet Connect Ladies - Profile Setup</title>
         <meta name="description" content="Set up your profile on Meet Connect Ladies for gentlemen." />
@@ -711,6 +755,17 @@ export default function ProfileSetup() {
                 className={styles.profilePicInput}
               />
             </div>
+
+            {/* Notification Banner */}
+            {notifications.length > 0 && (
+              <div className={styles.notificationBanner}>
+                {notifications.map((n) => (
+                  <p key={n.id} className={styles.notificationMessage}>
+                    {n.message}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {error && <p className={styles.error}>{error}</p>}
 
