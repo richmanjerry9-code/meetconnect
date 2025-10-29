@@ -1,3 +1,4 @@
+
 // admin.js
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -67,6 +68,10 @@ export default function AdminPanel() {
   const [globalMenuOpen, setGlobalMenuOpen] = useState(false); // For global 3-dot menu
   const [currentViewers, setCurrentViewers] = useState(0);
   const [allVisits, setAllVisits] = useState([]);
+  // New states for activity viewer
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [activityFilter, setActivityFilter] = useState('all'); // Filter by action type: all, create, update, delete, etc.
+  const [activitySearch, setActivitySearch] = useState(''); // Search term
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -80,6 +85,18 @@ export default function AdminPanel() {
     };
     fetchUsers();
 
+    // New: Fetch activity logs
+    const fetchActivityLogs = async () => {
+      const q = query(collection(db, 'activityLogs'), where('timestamp', '>=', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))); // Last 30 days
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Desc order
+      setActivityLogs(data);
+    };
+    fetchActivityLogs();
+
     const storedVisits = JSON.parse(localStorage.getItem('visits') || '[]');
     const newVisit = { timestamp: new Date().toISOString() };
     const updatedVisits = [...storedVisits, newVisit];
@@ -91,16 +108,41 @@ export default function AdminPanel() {
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [refresh]);
 
+  // New: Function to log activity (call this in existing functions for enhancement)
+  const logActivity = async (action, details = {}) => {
+    try {
+      await addDoc(collection(db, 'activityLogs'), {
+        action,
+        details: { ...details, admin: true }, // Mark as admin action
+        timestamp: new Date(),
+        siteId: 'main-site', // Assume single site; extend for multi
+      });
+      // Optimistically update UI
+      setActivityLogs(prev => [{
+        id: Date.now().toString(),
+        action,
+        details: { ...details, admin: true },
+        timestamp: new Date(),
+      }, ...prev]);
+    } catch (error) {
+      console.error('Failed to log activity:', error);
+    }
+  };
+
   const handleLogin = () => {
     if (passwordInput === ADMIN_PASSWORD) {
       setLoggedIn(true);
       setPasswordInput('');
+      logActivity('admin_login', { timestamp: new Date().toISOString() });
     } else {
       alert('Wrong password!');
     }
   };
 
-  const handleLogout = () => setLoggedIn(false);
+  const handleLogout = () => {
+    logActivity('admin_logout', { timestamp: new Date().toISOString() });
+    setLoggedIn(false);
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -138,6 +180,7 @@ export default function AdminPanel() {
         await updateDoc(doc(db, 'profiles', editId), form);
         alert('✅ Profile updated!');
         setUsers((prev) => prev.map((u) => (u.id === editId ? { ...form, id: editId } : u)));
+        logActivity('profile_update', { userId: editId, username: form.username });
       } else {
         const q = query(collection(db, 'profiles'), where('username', '==', form.username));
         const querySnapshot = await getDocs(q);
@@ -169,6 +212,7 @@ export default function AdminPanel() {
         const docRef = await addDoc(collection(db, 'profiles'), profileData);
         alert(`✅ Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`);
         setUsers((prev) => [...prev, { id: docRef.id, ...profileData }]);
+        logActivity('profile_create', { userId: docRef.id, username: form.username });
       }
 
       setForm({
@@ -218,6 +262,7 @@ export default function AdminPanel() {
       }));
       setUsers(updatedUsers);
       alert('✅ Profile deleted successfully!');
+      logActivity('profile_delete', { userId, username: userToDelete.username });
     } catch (error) {
       console.error('Error deleting profile:', error);
       alert('Failed to delete profile.');
@@ -233,6 +278,7 @@ export default function AdminPanel() {
       alert(
         `Membership updated to ${newMembership} for user ${users.find((u) => u.id === userId)?.username}!`
       );
+      logActivity('membership_update', { userId, newMembership });
       setRefresh(!refresh);
     } catch (error) {
       console.error('Error updating membership:', error);
@@ -249,6 +295,7 @@ export default function AdminPanel() {
       setDeletedUsers((prev) => [...prev, ...users]); // Store all deleted users
       setUsers([]);
       alert('✅ All accounts deleted!');
+      logActivity('bulk_delete_all', { count: users.length });
       setRefresh(!refresh);
     } catch (error) {
       console.error('Error deleting all accounts:', error);
@@ -266,6 +313,7 @@ export default function AdminPanel() {
       setDeletedUsers([]); // Clear deleted users after restoration
       setRefresh(!refresh);
       alert('✅ All deleted accounts restored!');
+      logActivity('bulk_restore_all', { count: deletedUsers.length });
     } catch (error) {
       console.error('Error restoring accounts:', error);
       alert('Failed to restore accounts.');
@@ -282,6 +330,7 @@ export default function AdminPanel() {
         );
         setLastEdit(null); // Clear last edit after revert
         alert('✅ Last edit reverted successfully!');
+        logActivity('revert_edit', { userId });
         setRefresh(!refresh);
       })
       .catch((error) => {
@@ -300,7 +349,15 @@ export default function AdminPanel() {
     setEditId(user.id);
     setShowPassword(false);
     setLastEdit({ userId: user.id, previousData: { ...user } }); // Store original data
+    logActivity('start_edit', { userId: user.id });
   };
+
+  // New: Filtered logs for display
+  const filteredLogs = activityLogs.filter(log => {
+    if (activityFilter !== 'all' && log.action !== activityFilter) return false;
+    if (activitySearch && !JSON.stringify(log).toLowerCase().includes(activitySearch.toLowerCase())) return false;
+    return true;
+  });
 
   if (!loggedIn) {
     return (
@@ -370,6 +427,13 @@ export default function AdminPanel() {
       >
         Logout
       </button>
+
+      {/* New: Current Viewers Display */}
+      <div style={{ textAlign: 'center', marginBottom: '10px', background: '#fff', padding: '10px' }}>
+        <h3>Live Metrics</h3>
+        <p>Current Viewers: {currentViewers}</p>
+        <p>Total Visits Today: {allVisits.filter(v => new Date(v.timestamp).toDateString() === new Date().toDateString()).length}</p>
+      </div>
 
       {/* Global 3-dot menu at top right */}
       <button
@@ -743,6 +807,69 @@ export default function AdminPanel() {
         </table>
       </div>
 
+      {/* New: Activity Dashboard Section */}
+      <div style={{ background: '#fff', padding: '10px', marginTop: '10px' }}>
+        <h2 style={{ color: '#e91e63' }}>Site Activity Dashboard</h2>
+        <div style={{ marginBottom: '10px' }}>
+          <select
+            value={activityFilter}
+            onChange={(e) => setActivityFilter(e.target.value)}
+            style={{ padding: '5px', marginRight: '10px' }}
+          >
+            <option value="all">All Actions</option>
+            <option value="profile_create">Profile Created</option>
+            <option value="profile_update">Profile Updated</option>
+            <option value="profile_delete">Profile Deleted</option>
+            <option value="membership_update">Membership Updated</option>
+            <option value="admin_login">Admin Login</option>
+            <option value="admin_logout">Admin Logout</option>
+          </select>
+          <input
+            type="text"
+            placeholder="Search logs..."
+            value={activitySearch}
+            onChange={(e) => setActivitySearch(e.target.value)}
+            style={{ padding: '5px', width: '200px' }}
+          />
+          <button
+            onClick={() => setRefresh(!refresh)} // Refresh logs
+            style={{ padding: '5px 10px', background: '#2196F3', color: 'white', border: 'none', marginLeft: '10px' }}
+          >
+            Refresh
+          </button>
+        </div>
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            <thead>
+              <tr style={{ background: '#ddd' }}>
+                <th>Timestamp</th>
+                <th>Action</th>
+                <th>Details</th>
+                <th>Site</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLogs.slice(0, 50).map((log) => ( // Limit to last 50 for perf
+                <tr key={log.id}>
+                  <td>{new Date(log.timestamp?.toDate ? log.timestamp.toDate() : log.timestamp).toLocaleString()}</td>
+                  <td style={{ color: log.admin ? '#e91e63' : '#333' }}>{log.action}</td>
+                  <td>{JSON.stringify(log.details).slice(1, -1).replace(/"/g, '') || 'N/A'}</td>
+                  <td>{log.siteId || 'Main'}</td>
+                </tr>
+              ))}
+              {filteredLogs.length === 0 && (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>No activity logs found.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>
+          Showing last 50 logs. Total: {activityLogs.length}
+        </p>
+      </div>
+
       <div style={{ marginTop: '10px' }}>
         <button
           onClick={handleRevertLastEdit}
@@ -760,3 +887,5 @@ export default function AdminPanel() {
     </div>
   );
 }
+
+

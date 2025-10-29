@@ -47,6 +47,7 @@ export default function Home({ initialProfiles = [] }) {
   const [showRegister, setShowRegister] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
+  const [loginLoading, setLoginLoading] = useState(false); // Added loading state for login
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
   const sentinelRef = useRef(null);
@@ -259,6 +260,7 @@ export default function Home({ initialProfiles = [] }) {
       if (!form.email?.trim()) return 'Please enter your email.';
       if (form.email && !/\S+@\S+\.\S+/.test(form.email)) return 'Please enter a valid email.';
       if (!form.password?.trim()) return 'Please enter your password.';
+      if (form.password.length < 6) return 'Password must be at least 6 characters.';
     }
     return null;
   };
@@ -289,7 +291,7 @@ export default function Home({ initialProfiles = [] }) {
       setUser(fullUser);
       setAuthError('✅ Registration successful!');
       setTimeout(() => {
-        router.push('/profile-setup');
+        router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
         setShowRegister(false);
       }, 1500);
     } catch (err) {
@@ -302,18 +304,46 @@ export default function Home({ initialProfiles = [] }) {
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
-    const validationError = validateForm(loginForm);
-    if (validationError) {
-      setAuthError(validationError);
+    setLoginLoading(true); // Start loading
+
+    const { email, password } = loginForm;
+
+    // Client-side validation (prevents unnecessary API calls)
+    if (!email || !password) {
+      setAuthError('Please enter email and password.');
+      setLoginLoading(false);
       return;
     }
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+
+    // Optional: Simple email regex check (Firebase will catch most, but this prevents unnecessary calls)
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setAuthError('Please enter a valid email address.');
+      setLoginLoading(false);
+      return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters.');
+      setLoginLoading(false);
+      return;
+    }
+
     try {
-      const { user } = await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
+      console.log('Attempting login for:', trimmedEmail); // Debug log (remove in prod)
+
+      const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+
+      console.log('Login successful for user:', user.uid); // Debug log
 
       // Fetch Firestore profile
       const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
       if (!profileDoc.exists()) {
         setAuthError('Profile not found. Please register first.');
+        setLoginLoading(false);
         return;
       }
 
@@ -323,16 +353,39 @@ export default function Home({ initialProfiles = [] }) {
 
       setAuthError('Login successful!');
       setTimeout(() => {
-        router.push('/profile-setup');
+        router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
         setShowLogin(false);
       }, 1500);
     } catch (err) {
-      console.error('Login error:', err);
-      setAuthError(
-        err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password'
-          ? 'Invalid email or password!'
-          : 'Error logging in.'
-      );
+      console.error('Login error details:', err.code, err.message); // Full error for debugging
+
+      // User-friendly messages based on Firebase error codes
+      let userMessage = 'Login failed. Please try again.';
+      switch (err.code) {
+        case 'auth/invalid-credential':
+          userMessage = 'Invalid email or password. Check your details and try again.';
+          break;
+        case 'auth/user-not-found':
+          userMessage = 'No account found with this email. Please sign up.';
+          break;
+        case 'auth/wrong-password':
+          userMessage = 'Incorrect password.';
+          break;
+        case 'auth/invalid-email':
+          userMessage = 'Invalid email address.';
+          break;
+        case 'auth/too-many-requests':
+          userMessage = 'Too many failed attempts. Please try again later or reset your password.';
+          break;
+        case 'auth/network-request-failed':
+          userMessage = 'Network error. Check your connection.';
+          break;
+        default:
+          userMessage = err.message; // Fallback
+      }
+      setAuthError(userMessage);
+    } finally {
+      setLoginLoading(false); // Stop loading
     }
   };
 
@@ -409,7 +462,7 @@ export default function Home({ initialProfiles = [] }) {
           )}
           {user && (
             <>
-              <button onClick={() => router.push('/profile-setup')} className={styles.button}>My Profile</button>
+              <button onClick={() => router.push({ pathname: '/profile-setup', query: { t: Date.now() } })} className={styles.button}>My Profile</button>
               <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>Logout</button>
             </>
           )}
@@ -529,6 +582,7 @@ export default function Home({ initialProfiles = [] }) {
               onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
               className={styles.input}
               required
+              disabled={loginLoading}
             />
             <label htmlFor="login-password">Password</label>
             <input
@@ -539,9 +593,12 @@ export default function Home({ initialProfiles = [] }) {
               onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
               className={styles.input}
               required
+              disabled={loginLoading}
             />
             {authError && <p className={styles.error}>{authError}</p>}
-            <button type="submit" className={styles.button}>Login</button>
+            <button type="submit" className={styles.button} disabled={loginLoading}>
+              {loginLoading ? 'Logging in...' : 'Login'}
+            </button>
           </form>
         </Modal>
       )}
@@ -690,3 +747,6 @@ export async function getStaticProps() {
     revalidate: 60, // rebuild the page every 60 seconds
   };
 }
+
+
+

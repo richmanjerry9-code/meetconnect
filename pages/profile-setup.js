@@ -1,397 +1,476 @@
-// pages/index.js 
-import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
+// pages/profile-setup.js
+
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
-import Link from 'next/link';
-import * as Counties from '../data/locations';
-import styles from '../styles/Home.module.css';
-import { db as firestore } from '../lib/firebase.js'; // Renamed for clarity
-import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, limit, getDocs, addDoc, where, startAfter, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { Nairobi } from '../data/locations';
+import styles from '../styles/ProfileSetup.module.css';
+import { db } from '../lib/firebase';
+import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 
-function useDebounce(value, delay) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
+const servicesList = [
+  '🍽️ Dinner Date',
+  '💬 Just Vibes',
+  '❤️ Relationship',
+  '🌆 Night Out',
+  '👥 Friendship',
+];
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [value, delay]);
-
-  return debouncedValue;
-}
-
-export default function Home({ initialProfiles = [] }) {
+export default function ProfileSetup() {
   const router = useRouter();
-  const [profiles, setProfiles] = useState(initialProfiles);
-  const [lastDoc, setLastDoc] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [error, setError] = useState(null);
-  const [authError, setAuthError] = useState('');
-  const [user, setUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(true);
-  const [selectedCounty, setSelectedCounty] = useState('');
+  const [loggedInUser, setLoggedInUser] = useState(null);
+  const [formData, setFormData] = useState({
+    username: '',
+    name: '',
+    phone: '',
+    gender: 'Female',
+    sexualOrientation: 'Straight',
+    age: '18',
+    nationality: '',
+    county: 'Nairobi',
+    ward: '',
+    area: '',
+    nearby: [],
+    services: [], // ensure array so .includes won't crash
+    otherServices: '',
+    profilePic: '',
+  });
   const [selectedWard, setSelectedWard] = useState('');
-  const [selectedArea, setSelectedArea] = useState('');
-  const [searchLocation, setSearchLocation] = useState('');
-  const debouncedSearchLocation = useDebounce(searchLocation, 300);
-  const [filteredLocations, setFilteredLocations] = useState([]);
-  const [showLogin, setShowLogin] = useState(false);
-  const [showRegister, setShowRegister] = useState(false);
-  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
-  const loginModalRef = useRef(null);
-  const registerModalRef = useRef(null);
-  const sentinelRef = useRef(null);
-  const cacheRef = useRef(new Map());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredOptions, setFilteredOptions] = useState([]);
+  const [membership, setMembership] = useState('Regular');
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [error, setError] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState('');
+  const [selectedDuration, setSelectedDuration] = useState('');
+  // New states for Add Fund modal
+  const [showAddFundModal, setShowAddFundModal] = useState(false);
+  const [addFundAmount, setAddFundAmount] = useState('');
+  // New states for Upgrade Payment Choice
+  const [showPaymentChoice, setShowPaymentChoice] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
+  // New states for M-Pesa upgrade waiting
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [checkoutRequestID, setCheckoutRequestID] = useState('');
+  const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
 
-// ✅ Auth state listener with full profile fetch and loading
   useEffect(() => {
-    setUserLoading(true);
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        try {
-          const profileDoc = await getDoc(doc(firestore, 'profiles', currentUser.uid));
-          if (profileDoc.exists()) {
-            setUser({ id: profileDoc.id, ...profileDoc.data() });
-          } else {
-            setUser({ uid: currentUser.uid, email: currentUser.email });
-          }
-        } catch (err) {
-          console.error('Error fetching profile:', err);
-          setUser({ uid: currentUser.uid, email: currentUser.email });
-        }
-      } else {
-        setUser(null);
-      }
-      setUserLoading(false);
-    });
-    return unsubscribe;
-  }, []);
-  
-  // Load first batch of profiles
-  useEffect(() => {
-    const fetchProfiles = async () => {
-      if (profiles.length > 0) return;
-      const cacheKey = 'profiles_initial';
-      if (cacheRef.current.has(cacheKey)) {
-        const cachedData = cacheRef.current.get(cacheKey);
-        setProfiles(cachedData.profiles);
-        setLastDoc(cachedData.lastDoc);
-        setHasMore(cachedData.hasMore);
-        return;
-      }
-      setError(null);
-      try {
-        const q = query(
-          collection(firestore, 'profiles'),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-        const snapshot = await getDocs(q);
-        const data = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
-          .filter(
-            (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
-          );
-        setProfiles(data);
-        setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-        setHasMore(snapshot.size === 20);
-        cacheRef.current.set(cacheKey, { profiles: data, lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, hasMore: snapshot.size === 20 });
-      } catch (err) {
-        console.error('Error fetching profiles:', err);
-        setError('Failed to load profiles. Please try refreshing the page.');
-      }
-    };
-
-    fetchProfiles();
-  }, [profiles.length]); // Added missing dependency
-
-  const loadMoreProfiles = useCallback(async () => {
-    if (isLoadingMore || !hasMore || !lastDoc) return;
-    const cacheKey = `profiles_loadmore_${lastDoc.id}`;
-    if (cacheRef.current.has(cacheKey)) {
-      const cachedData = cacheRef.current.get(cacheKey);
-      setProfiles(prev => [...prev, ...cachedData.profiles]);
-      setLastDoc(cachedData.lastDoc);
-      setHasMore(cachedData.hasMore);
-      setIsLoadingMore(false);
+    const user = JSON.parse(localStorage.getItem('loggedInUser'));
+    if (!user) {
+      router.push('/');
       return;
     }
-    setError(null);
-    setIsLoadingMore(true);
-    try {
-      const q = query(
-        collection(firestore, 'profiles'),
-        orderBy('createdAt', 'desc'),
-        startAfter(lastDoc),
-        limit(20)
-      );
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter(
-          (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
-        );
-      setProfiles(prev => [...prev, ...data]);
-      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-      setHasMore(snapshot.size === 20);
-      cacheRef.current.set(cacheKey, { profiles: data, lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, hasMore: snapshot.size === 20 });
-    } catch (err) {
-      console.error('Error fetching more profiles:', err);
-      setError('Failed to load more profiles. Please try scrolling again.');
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [isLoadingMore, hasMore, lastDoc]);
-
-  // IntersectionObserver for infinite scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasMore && !isLoadingMore) {
-          loadMoreProfiles();
+    setLoggedInUser(user);
+    const fetchProfile = async () => {
+      try {
+        const profileDoc = await getDoc(doc(db, 'profiles', user.id));
+        if (profileDoc.exists()) {
+          const data = profileDoc.data();
+          setFormData((prev) => ({
+            ...prev,
+            ...data,
+            username: user.username,
+            services: data.services || [],
+            nearby: data.nearby || [],
+            age: data.age || prev.age,
+          }));
+          setSelectedWard(data.ward || '');
+          setWalletBalance(data.walletBalance || 0);
+          setMembership(data.membership || 'Regular');
+          setMpesaPhone(data.phone || ''); // Default M-Pesa phone to profile phone
+        } else {
+          setFormData((prev) => ({ ...prev, username: user.username }));
+          setWalletBalance(0);
+          setMembership('Regular');
         }
-      },
-      { threshold: 0 }
-    );
-
-    if (sentinelRef.current) {
-      observer.observe(sentinelRef.current);
-    }
-
-    return () => {
-      if (sentinelRef.current) {
-        observer.unobserve(sentinelRef.current);
+      } catch (err) {
+        console.error('Fetch profile error:', err);
       }
     };
-  }, [hasMore, isLoadingMore, loadMoreProfiles]);
+    fetchProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
-  // Filter locations for search
-  useEffect(() => {
-    if (!debouncedSearchLocation || !Counties) return setFilteredLocations([]);
-    const matches = [];
-    Object.keys(Counties).forEach((county) => {
-      Object.keys(Counties[county]).forEach((ward) => {
-        Counties[county][ward].forEach((area) => {
-          if (
-            area.toLowerCase().includes(debouncedSearchLocation.toLowerCase()) ||
-            ward.toLowerCase().includes(debouncedSearchLocation.toLowerCase()) ||
-            county.toLowerCase().includes(debouncedSearchLocation.toLowerCase())
-          ) {
-            matches.push({ county, ward, area });
+  // Helper function to format phone for M-Pesa (254xxxxxxxxx)
+  const formatPhoneForMpesa = (phone) => {
+    if (!phone) return '';
+    let formatted = phone.replace(/[\s+]/g, ''); // Remove spaces and +
+    if (formatted.startsWith('0')) {
+      formatted = '254' + formatted.slice(1);
+    } else if (formatted.startsWith('254') || formatted.startsWith('7') || formatted.startsWith('1')) {
+      // Already good or needs prefix
+      if (formatted.length === 9 && (formatted.startsWith('7') || formatted.startsWith('1'))) {
+        formatted = '254' + formatted;
+      }
+    }
+    // Validate length
+    if (formatted.length !== 12 || !formatted.match(/^254[0-9]\d{8}$/)) {
+      throw new Error('Invalid phone number. Use format like 254 followed by 9 digits.');
+    }
+    return formatted;
+  };
+
+  // Helper to shorten userId to last 10 chars for ref
+  const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
+
+  const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
+
+    if (type === 'checkbox') {
+      // handle nearby with max 4, services with normal toggle
+      if (name === 'nearby') {
+        setFormData((prev) => {
+          const current = prev.nearby || [];
+          if (checked) {
+            if (current.includes(value)) return prev;
+            if (current.length >= 4) {
+              setError('You can select up to 4 nearby locations only.');
+              // don't add more than 4
+              return prev;
+            }
+            setError('');
+            return { ...prev, nearby: [...current, value] };
+          } else {
+            setError('');
+            return { ...prev, nearby: current.filter((v) => v !== value) };
           }
         });
-      });
-    });
-    setFilteredLocations(matches.slice(0, 5));
-  }, [debouncedSearchLocation]);
-
-  const handleLocationSelect = (ward, area, county) => {
-    setSelectedCounty(county);
-    setSelectedWard(ward);
-    setSelectedArea(area);
-    setSearchLocation(`${county}, ${ward}, ${area}`);
-    setFilteredLocations([]);
-  };
-
-  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }; // TODO: Move to config file
-
-  const filteredProfiles = useMemo(() => {
-    const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
-    let filtered = profiles.filter((p) => {
-      if (!debouncedSearchLocation && !selectedWard && !selectedArea && !selectedCounty) return true;
-      const countyMatch = selectedCounty ? p.county === selectedCounty : true;
-      const wardMatch = selectedWard ? p.ward === selectedWard : true;
-      const areaMatch = selectedArea ? p.area === selectedArea : true;
-      const searchMatch = debouncedSearchLocation
-        ? [p.county, p.ward, p.area, ...(p.nearby || [])]
-            .map(s => s.toLowerCase())
-            .join(' ')
-            .includes(searchTerm)
-        : true;
-      return countyMatch && wardMatch && areaMatch && searchMatch;
-    });
-
-    if (!debouncedSearchLocation && !selectedWard && !selectedArea && !selectedCounty) {
-      const membershipGroups = ['VVIP', 'VIP', 'Prime', 'Regular'];
-      let selectedGroup = [];
-      for (const m of membershipGroups) {
-        selectedGroup = filtered.filter(
-          (p) => p.membership === m || (m === 'Regular' && !p.membership)
-        );
-        if (selectedGroup.length > 0) break;
+      } else {
+        // generic checkbox groups like services
+        setFormData((prev) => ({
+          ...prev,
+          [name]: checked
+            ? [...(prev[name] || []), value]
+            : (prev[name] || []).filter((v) => v !== value),
+        }));
       }
-      filtered = selectedGroup;
-    }
-
-    filtered.sort((a, b) => {
-      const aPriority = membershipPriority[a.membership] || 0;
-      const bPriority = membershipPriority[b.membership] || 0;
-      if (bPriority !== aPriority) {
-        return bPriority - aPriority;
-      }
-      // Fallback sort by createdAt desc
-      const aDate = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
-      const bDate = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
-      return bDate - aDate;
-    });
-
-    return filtered;
-  }, [profiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]); // Added missing dependency
-
-  // Abstracted form validation
-  const validateForm = (form, isRegister = false) => {
-    if (isRegister) {
-      if (!form.name?.trim()) return 'Please enter your full name.';
-      if (!form.email?.trim()) return 'Please enter your email.';
-      if (form.email && !/\S+@\S+\.\S+/.test(form.email)) return 'Please enter a valid email.';
-      if (!form.password?.trim()) return 'Please enter a password.';
-      if (form.password.length < 8) return 'Password must be at least 8 characters.';
     } else {
-      if (!form.email?.trim()) return 'Please enter your email.';
-      if (form.email && !/\S+@\S+\.\S+/.test(form.email)) return 'Please enter a valid email.';
-      if (!form.password?.trim()) return 'Please enter your password.';
+      // normal input/select change
+      setFormData((prev) => ({ ...prev, [name]: value }));
+      // clear error on user interaction
+      if (error) setError('');
     }
-    return null;
   };
 
-  // Registration with Firebase Auth
-  const handleRegister = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    const validationError = validateForm(registerForm, true);
-    if (validationError) {
-      setAuthError(validationError);
+  const handleWardChange = (e) => {
+    const ward = e.target.value;
+    setSelectedWard(ward);
+    setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
+    setSearchQuery('');
+    setFilteredOptions([]);
+    if (error) setError('');
+  };
+
+  const handleAreaChange = (e) => {
+    setFormData((prev) => ({ ...prev, area: e.target.value }));
+    if (error) setError('');
+  };
+
+  const handleSearchChange = (e) => {
+    const query = e.target.value.toLowerCase();
+    setSearchQuery(query);
+    if (!query) {
+      setFilteredOptions([]);
       return;
     }
+
+    const allOptions = [
+      ...Object.keys(Nairobi),
+      ...Object.values(Nairobi).flat(),
+    ].filter((item, index, self) => self.indexOf(item) === index);
+
+    const filtered = allOptions
+      .filter((option) => option.toLowerCase().includes(query))
+      .slice(0, 5);
+    setFilteredOptions(filtered);
+  };
+
+  const handleSelectOption = (option) => {
+    const isWard = Object.keys(Nairobi).includes(option);
+    if (isWard) {
+      setSelectedWard(option);
+      setFormData((prev) => ({ ...prev, ward: option, area: '', nearby: [] }));
+    } else {
+      const wardKey = Object.keys(Nairobi).find((w) => Nairobi[w].includes(option));
+      if (wardKey) {
+        setSelectedWard(wardKey);
+        setFormData((prev) => ({ ...prev, ward: wardKey, area: option }));
+      }
+    }
+    setSearchQuery('');
+    setFilteredOptions([]);
+    if (error) setError('');
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Age validation: allow typing but block below 18
+    const numericAge = parseInt(formData.age, 10);
+    if (isNaN(numericAge) || numericAge < 18) {
+      setError('You must be 18 or older to register.');
+      return;
+    }
+
+    // Require at least 4 selected services
+    if (!formData.services || formData.services.length < 4) {
+      setError('Please select at least 4 services.');
+      return;
+    }
+
+    // Limit nearby places to a maximum of 4
+    if (formData.nearby && formData.nearby.length > 4) {
+      setError('You can select up to 4 nearby locations only.');
+      return;
+    }
+
+    if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward) {
+      setError('Please fill all required fields, including location');
+      return;
+    }
+    setError('');
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, registerForm.email, registerForm.password);
-      // Create profile doc
-      const newUserProfile = {
-        uid: user.uid,
-        name: registerForm.name,
-        email: registerForm.email,
-        username: registerForm.email.split('@')[0],
-        membership: 'Regular',
-        createdAt: serverTimestamp(),
+      const fullData = { ...loggedInUser, ...formData, walletBalance };
+      await setDoc(doc(db, 'profiles', loggedInUser.id), fullData, { merge: true });
+      localStorage.setItem('profileSaved', 'true');
+      alert('Profile updated successfully');
+      router.push('/');
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      setError('Failed to update profile');
+    }
+  };
+
+  const handleUpgrade = (level) => {
+    if (level === 'Regular') {
+      alert('Regular membership is free! No upgrade needed.');
+      return;
+    }
+    setSelectedLevel(level);
+    setSelectedDuration('');
+    setShowModal(true);
+  };
+
+  const handleDurationSelect = (duration) => {
+    setSelectedDuration(duration);
+  };
+
+  const handleProceedToPayment = () => {
+    if (!selectedDuration) {
+      alert('Please select a duration.');
+      return;
+    }
+    const plans = {
+      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+    };
+    const price = plans[selectedLevel][selectedDuration];
+    if (walletBalance >= price) {
+      setSelectedPaymentMethod('wallet');
+      setShowPaymentChoice(true);
+      setShowModal(false);
+    } else {
+      setSelectedPaymentMethod('mpesa');
+      setShowPaymentChoice(true);
+      setShowModal(false);
+    }
+  };
+
+  const handlePaymentMethodChange = (method) => {
+    setSelectedPaymentMethod(method);
+  };
+
+  const handleConfirmWalletUpgrade = async () => {
+    const plans = {
+      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+    };
+    const price = plans[selectedLevel][selectedDuration];
+    if (walletBalance < price) {
+      alert('Insufficient balance');
+      return;
+    }
+    if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
+      const newBalance = walletBalance - price;
+      setWalletBalance(newBalance);
+      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
+        membership: selectedLevel,
+        walletBalance: newBalance 
+      }, { merge: true });
+      setMembership(selectedLevel);
+      setShowPaymentChoice(false);
+      setSelectedDuration('');
+      alert('Upgrade successful!');
+    }
+  };
+
+  const handleConfirmMpesaUpgrade = async () => {
+    try {
+      const formattedPhone = formatPhoneForMpesa(mpesaPhone || formData.phone); // Use mpesaPhone or profile phone
+      const plans = {
+        Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+        VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+        VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
       };
-      await setDoc(doc(firestore, 'profiles', user.uid), newUserProfile);
-      const fullUser = { id: user.uid, ...newUserProfile };
-      localStorage.setItem('loggedInUser', JSON.stringify(fullUser));
-      setUser(fullUser);
-      setAuthError('✅ Registration successful!');
-      setTimeout(() => {
-        router.push('/profile-setup');
-        setShowRegister(false);
-      }, 1500);
-    } catch (err) {
-      console.error('Registration error:', err);
-      setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Error during registration. Try again.');
+      const price = plans[selectedLevel][selectedDuration];
+      const shortUserId = shortenUserId(loggedInUser.id);
+      const shortLevel = selectedLevel.slice(0, 3); // Pri, VIP, VVI
+      const accountRef = `upg_${shortUserId}_${shortLevel}`; // e.g., upg_nxLdK1XA5_Pri (20 chars max)
+
+      // Store pending transaction in Firestore
+      const checkoutRequestID = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await addDoc(collection(db, 'pendingTransactions'), {
+        userId: loggedInUser.id,
+        amount: price,
+        phone: formattedPhone,
+        type: 'upgrade',
+        level: selectedLevel,
+        duration: selectedDuration,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
+
+      // Initiate STK Push
+      const response = await fetch('/api/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: price,
+          phone: formattedPhone,
+          userId: loggedInUser.id,
+          level: selectedLevel,
+          duration: selectedDuration,
+          accountReference: accountRef,
+          transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
+          checkoutRequestID, // Pass to API for storage if needed
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCheckoutRequestID(data.CheckoutRequestID);
+        setShowProcessingModal(true);
+        setShowPaymentChoice(false);
+        setShowModal(false);
+        setSelectedDuration('');
+
+        // Poll for confirmation (auto-upgrade on success)
+        const pollInterval = setInterval(async () => {
+          const profileDoc = await getDoc(doc(db, 'profiles', loggedInUser.id));
+          if (profileDoc.exists()) {
+            const updatedData = profileDoc.data();
+            if (updatedData.membership === selectedLevel) {
+              setMembership(selectedLevel);
+              setShowProcessingModal(false);
+              clearInterval(pollInterval);
+              alert('Upgrade confirmed and applied automatically!');
+            }
+          }
+        }, 5000); // Poll every 5 seconds
+
+        setTimeout(() => clearInterval(pollInterval), 60000); // Stop after 1 min
+      } else {
+        const errorData = await response.json();
+        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
+        alert(`Error: ${errorMsg}`);
+        console.error('Full error data:', errorData);
+      }
+    } catch (error) {
+      console.error('Upgrade M-Pesa error:', error);
+      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
+      alert(`Error: ${errorMsg}`);
+      setError(errorMsg);
     }
   };
 
-  // Login with Firebase Auth and profile fetch
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    const validationError = validateForm(loginForm);
-    if (validationError) {
-      setAuthError(validationError);
+  const handleAddFund = () => {
+    if (!formData.phone) {
+      setError('Please add your phone number to your profile first.');
       return;
     }
     try {
-      const { user } = await signInWithEmailAndPassword(auth, loginForm.email, loginForm.password);
-
-      // Fetch Firestore profile
-      const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
-      if (!profileDoc.exists()) {
-        setAuthError('Profile not found. Please register first.');
-        return;
-      }
-
-      const profileData = { id: profileDoc.id, ...profileDoc.data() };
-      localStorage.setItem('loggedInUser', JSON.stringify(profileData));
-      setUser(profileData);
-
-      setAuthError('Login successful!');
-      setTimeout(() => {
-        router.push('/profile-setup');
-        setShowLogin(false);
-      }, 1500);
-    } catch (err) {
-      console.error('Login error:', err);
-      setAuthError(
-        err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password'
-          ? 'Invalid email or password!'
-          : 'Error logging in.'
-      );
+      formatPhoneForMpesa(formData.phone); // Validate early
+      setAddFundAmount('');
+      setShowAddFundModal(true);
+    } catch (error) {
+      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
+      setError(errorMsg);
     }
   };
 
-  const handleLogout = async () => {
+  const handleConfirmAddFund = async () => {
+    if (!addFundAmount || parseInt(addFundAmount) < 10) {
+      setError('Minimum amount is KSh 10.');
+      return;
+    }
+    try {
+      const formattedPhone = formatPhoneForMpesa(formData.phone);
+      const shortUserId = shortenUserId(loggedInUser.id);
+      const accountRef = `wal_${shortUserId}`; // e.g., wal_nxLdK1XA5 (15 chars)
+      const response = await fetch('/api/addFunds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseInt(addFundAmount),
+          phone: formattedPhone,
+          userId: loggedInUser.id,
+          accountReference: accountRef,
+          transactionDesc: 'Add funds to wallet'
+        }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
+        setShowAddFundModal(false);
+      } else {
+        const errorData = await response.json();
+        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
+        alert(`Error: ${errorMsg}`);
+        console.error('Full error data:', errorData);
+      }
+    } catch (error) {
+      console.error('Add fund error:', error);
+      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
+      alert(`Error: ${errorMsg}`);
+      setError(errorMsg);
+    }
+  };
+
+  const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
-    await signOut(auth);
+    setLoggedInUser(null);
+    router.push('/');
   };
 
-  // Handle ESC key for modals
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        setShowLogin(false);
-        setShowRegister(false);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Click outside to close modals
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) {
-        setShowLogin(false);
-      }
-      if (showRegister && registerModalRef.current && !registerModalRef.current.contains(e.target)) {
-        setShowRegister(false);
-      }
-    };
-    if (showLogin || showRegister) {
-      document.addEventListener('mousedown', handleClickOutside);
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, profilePic: reader.result }));
+      };
+      reader.readAsDataURL(file);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showLogin, showRegister]);
+  };
 
-  const countyOptions = Object.keys(Counties);
-  const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
-  const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
+  const wards = Nairobi ? Object.keys(Nairobi) : [];
+  const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
 
-  if (userLoading) {
-    return <div className={styles.container}>Loading...</div>; // Simple loader
-  }
+  const plans = {
+    Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+    VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+    VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+  };
 
   return (
     <div className={styles.container}>
       <Head>
-        <title>Meet Connect Ladies - For Gentlemen</title>
-        <meta
-          name="description"
-          content="Discover stunning ladies across Kenya on Meet Connect Ladies, designed for gentlemen seeking meaningful connections."
-        />
-        <meta name="keywords" content="dating Kenya, ladies Nairobi, meet connect, gentlemen profiles" />
-        <meta property="og:title" content="Meet Connect Ladies - For Gentlemen" />
-        <meta property="og:description" content="Connect with elegant ladies across Kenya." />
-        <meta property="og:type" content="website" />
+        <title>Meet Connect Ladies - Profile Setup</title>
+        <meta name="description" content="Set up your profile on Meet Connect Ladies for gentlemen." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="robots" content="index, follow" />
-        <link rel="canonical" href="https://yourdomain.com" /> {/* TODO: Replace with actual domain */}
       </Head>
 
       <header className={styles.header}>
@@ -401,293 +480,419 @@ export default function Home({ initialProfiles = [] }) {
           </h1>
         </div>
         <div className={styles.authButtons}>
-          {!user && (
-            <>
-              <button onClick={() => setShowRegister(true)} className={styles.button}>Register</button>
-              <button onClick={() => setShowLogin(true)} className={`${styles.button} ${styles.login}`}>Login</button>
-            </>
-          )}
-          {user && (
-            <>
-              <button onClick={() => router.push('/profile-setup')} className={styles.button}>My Profile</button>
-              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>Logout</button>
-            </>
-          )}
+          <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
+            Logout
+          </button>
         </div>
       </header>
 
       <main className={styles.main}>
-        <div className={styles.searchContainer}>
-          <input
-            type="text"
-            placeholder="Search ladies by location (e.g., 'Kilimani', 'Busia')..."
-            value={searchLocation}
-            onChange={(e) => setSearchLocation(e.target.value)}
-            className={styles.searchInput}
-            aria-label="Search by location"
-          />
-          {filteredLocations.length > 0 && (
-            <div className={styles.dropdown} role="listbox">
-              {filteredLocations.map((loc, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => handleLocationSelect(loc.ward, loc.area, loc.county)}
-                  className={styles.dropdownItem}
-                  role="option"
-                  aria-selected="false"
-                >
-                  {loc.county}, {loc.ward}, {loc.area}
-                </div>
-              ))}
+        <div className={styles.profileSetupContainer}>
+          <aside className={styles.membershipSection}>
+            <div className={styles.walletSection}>
+              <div className={styles.walletStripe}></div>
+              <p className={styles.walletLabel}>Available Wallet Balance</p>
+              <p className={styles.walletBalance}>KSh{walletBalance}</p>
+              <button onClick={handleAddFund} className={styles.addFundButton}>
+                Add Fund
+              </button>
             </div>
-          )}
-        </div>
-
-        <div className={styles.filters}>
-          <select
-            value={selectedCounty}
-            onChange={(e) => {
-              setSelectedCounty(e.target.value);
-              setSelectedWard('');
-              setSelectedArea('');
-            }}
-            className={styles.select}
-            aria-label="Select County"
-          >
-            <option value="">All Counties</option>
-            {countyOptions.map((county) => (
-              <option key={county} value={county}>{county}</option>
-            ))}
-          </select>
-
-          <select
-            value={selectedWard}
-            onChange={(e) => {
-              setSelectedWard(e.target.value);
-              setSelectedArea('');
-            }}
-            className={styles.select}
-            disabled={!selectedCounty}
-            aria-label="Select Ward"
-          >
-            <option value="">All Wards</option>
-            {wardOptions.map((ward) => (
-              <option key={ward} value={ward}>{ward}</option>
-            ))}
-          </select>
-
-          <select
-            value={selectedArea}
-            onChange={(e) => setSelectedArea(e.target.value)}
-            className={styles.select}
-            disabled={!selectedWard}
-            aria-label="Select Area"
-          >
-            <option value="">All Areas</option>
-            {areaOptions.map((area) => (
-              <option key={area} value={area}>{area}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className={styles.profiles} role="list">
-          {filteredProfiles.map((p) => <ProfileCard key={p.id} p={p} router={router} />)}
-          {error && <p className={styles.noProfiles} style={{ color: 'red' }}>{error}</p>}
-          {isLoadingMore && (
-            <>
-              <p className={styles.noProfiles}>Loading more profiles...</p>
-              {/* Simple skeleton loaders */}
-              {[1,2,3].map((i) => (
-                <div key={i} className={styles.skeletonCard}>
-                  <div className={styles.skeletonImage}></div>
-                  <div className={styles.skeletonInfo}>
-                    <div className={styles.skeletonText}></div>
-                    <div className={styles.skeletonTextSmall}></div>
+            <h2 className={styles.sectionTitle}>My Membership</h2>
+            <p>Current: {membership}</p>
+            <p>Regular: Free</p>
+            <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
+              Upgrade to Prime
+            </button>
+            <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
+              Upgrade to VIP
+            </button>
+            <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
+              Upgrade to VVIP
+            </button>
+            {showModal && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Select Duration for {selectedLevel}</h3>
+                  <div className={styles.durationList}>
+                    {Object.entries(plans[selectedLevel]).map(([duration, price]) => (
+                      <div key={duration} className={styles.durationItem}>
+                        <label className={styles.durationLabel}>
+                          <input
+                            type="radio"
+                            name="duration"
+                            value={duration}
+                            checked={selectedDuration === duration}
+                            onChange={() => handleDurationSelect(duration)}
+                          />
+                          <span className={styles.durationText}>{duration} Listing = KSh {price}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={handleProceedToPayment} 
+                      className={`${styles.upgradeButton} ${selectedDuration ? styles.active : styles.inactive}`}
+                      disabled={!selectedDuration}
+                    >
+                      Proceed to Payment
+                    </button>
+                    <button onClick={() => setShowModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
                   </div>
                 </div>
-              ))}
-            </>
-          )}
-          {filteredProfiles.length === 0 && !isLoadingMore && !error && (
-            <p className={styles.noProfiles}>
-              No ladies found. Complete your profile with a photo to appear here.
-            </p>
-          )}
-          {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
+              </div>
+            )}
+            {/* Payment Choice Modal */}
+            {showPaymentChoice && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Choose Payment Method for {selectedLevel} - {selectedDuration}</h3>
+                  <p className={styles.durationText}>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
+                  <div className={styles.durationList}>
+                    <div className={styles.durationItem}>
+                      <label className={styles.durationLabel}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="wallet"
+                          checked={selectedPaymentMethod === 'wallet'}
+                          onChange={() => handlePaymentMethodChange('wallet')}
+                        />
+                        <span className={styles.durationText}>Wallet Balance (KSh {walletBalance})</span>
+                      </label>
+                    </div>
+                    <div className={styles.durationItem}>
+                      <label className={styles.durationLabel}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="mpesa"
+                          checked={selectedPaymentMethod === 'mpesa'}
+                          onChange={() => handlePaymentMethodChange('mpesa')}
+                        />
+                        <span className={styles.durationText}>M-Pesa (STK Push)</span>
+                      </label>
+                    </div>
+                  </div>
+                  {selectedPaymentMethod === 'mpesa' && (
+                    <label className={styles.label}>
+                      M-Pesa Phone Number <small>(for prompt)</small>
+                      <input
+                        type="text"
+                        value={mpesaPhone}
+                        onChange={(e) => setMpesaPhone(e.target.value)}
+                        placeholder="0712345678"
+                        className={styles.input}
+                      />
+                    </label>
+                  )}
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={selectedPaymentMethod === 'wallet' ? handleConfirmWalletUpgrade : handleConfirmMpesaUpgrade} 
+                      className={styles.upgradeButton}
+                      disabled={selectedPaymentMethod === 'wallet' && walletBalance < plans[selectedLevel][selectedDuration]}
+                    >
+                      Confirm Payment
+                    </button>
+                    <button onClick={() => { setShowPaymentChoice(false); setShowModal(true); }} className={styles.closeButton}>
+                      Back
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Processing Modal for M-Pesa Confirmation */}
+            {showProcessingModal && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Processing Upgrade</h3>
+                  <p>Check your phone for M-Pesa prompt. CheckoutRequestID: {checkoutRequestID}</p>
+                  <p>Upgrade will auto-apply after payment confirmation.</p>
+                  <div className={styles.modalButtons}>
+                    <button onClick={() => setShowProcessingModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+            {/* Add Fund Modal */}
+            {showAddFundModal && (
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Add Funds to Wallet</h3>
+                  <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
+                  <label className={styles.label}>
+                    Amount (KSh)
+                    <input
+                      type="number"
+                      value={addFundAmount}
+                      onChange={(e) => setAddFundAmount(e.target.value)}
+                      min="10"
+                      className={styles.input}
+                      required
+                    />
+                  </label>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={handleConfirmAddFund} 
+                      className={styles.upgradeButton}
+                      disabled={!addFundAmount || parseInt(addFundAmount) < 10}
+                    >
+                      Pay with M-Pesa
+                    </button>
+                    <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </aside>
+
+          <div className={styles.profileFormContainer}>
+            <h1 className={styles.setupTitle}>My Profile</h1>
+            <div className={styles.profilePicSection}>
+              <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
+                {formData.profilePic ? (
+                  <Image
+                    src={formData.profilePic}
+                    alt="Profile Picture"
+                    width={150}
+                    height={150}
+                    className={styles.profilePic}
+                  />
+                ) : (
+                  <div className={styles.profilePicPlaceholder}>📷</div>
+                )}
+              </label>
+              <input
+                id="profilePicUpload"
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className={styles.profilePicInput}
+              />
+            </div>
+
+            {error && <p className={styles.error}>{error}</p>}
+
+            <form onSubmit={handleSubmit} className={styles.profileForm}>
+              <label className={styles.label}>
+                Name
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  className={styles.input}
+                  required
+                />
+              </label>
+
+              <label className={styles.label}>
+                Phone Number <small>(254 followed by 9 digits, e.g., 0712345678)</small>
+                <input
+                  type="text"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  className={styles.input}
+                  required
+                  placeholder="0712345678"
+                />
+              </label>
+
+              <label className={styles.label}>
+                Gender
+                <select
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                </select>
+              </label>
+
+              <label className={styles.label}>
+                Sexual Orientation
+                <select
+                  name="sexualOrientation"
+                  value={formData.sexualOrientation}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
+                  <option value="Straight">Straight</option>
+                  <option value="Gay">Gay</option>
+                  <option value="Bisexual">Bisexual</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className={styles.label}>
+                Age
+                {/* allow typing; block below 18 on submit */}
+                <input
+                  type="number"
+                  name="age"
+                  min="18"
+                  max="100"
+                  value={formData.age}
+                  onChange={handleChange}
+                  className={styles.input}
+                  required
+                />
+              </label>
+
+              <label className={styles.label}>
+                Nationality
+                <input
+                  type="text"
+                  name="nationality"
+                  value={formData.nationality}
+                  onChange={handleChange}
+                  className={styles.input}
+                />
+              </label>
+
+              <label className={styles.label}>
+                County
+                <input
+                  type="text"
+                  name="county"
+                  value={formData.county}
+                  onChange={handleChange}
+                  className={styles.input}
+                  disabled
+                />
+              </label>
+
+              <label className={styles.label}>
+                Location Search
+                <div className={styles.locationInput}>
+                  <input
+                    type="text"
+                    placeholder="Search City/Town or Area..."
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    className={styles.input}
+                  />
+                </div>
+                {filteredOptions.length > 0 && (
+                  <div className={styles.dropdown}>
+                    {filteredOptions.map((option, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleSelectOption(option)}
+                        className={styles.dropdownItem}
+                      >
+                        {option}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </label>
+
+              <label className={styles.label}>
+                City/Town
+                <select
+                  name="ward"
+                  value={selectedWard}
+                  onChange={handleWardChange}
+                  className={styles.select}
+                >
+                  <option value="">Select City/Town</option>
+                  {Object.keys(Nairobi).map((ward) => (
+                    <option key={ward} value={ward}>
+                      {ward}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className={styles.label}>
+                Area
+                <select
+                  name="area"
+                  value={formData.area}
+                  onChange={handleAreaChange}
+                  className={styles.select}
+                  disabled={!selectedWard}
+                >
+                  <option value="">Select Area</option>
+                  {selectedWard &&
+                    Nairobi[selectedWard].map((area) => (
+                      <option key={area} value={area}>
+                        {area}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+              <label className={styles.label}>
+                Nearby Places
+                <div className={styles.checkboxGroup}>
+                  {selectedWard &&
+                    Nairobi[selectedWard].map((place) => (
+                      <div key={place}>
+                        <input
+                          type="checkbox"
+                          value={place}
+                          checked={(formData.nearby || []).includes(place)}
+                          onChange={handleChange}
+                          name="nearby"
+                        />
+                        <span>{place}</span>
+                      </div>
+                    ))}
+                </div>
+              </label>
+
+              <label className={styles.label}>
+                Services
+                <div className={styles.checkboxGroup}>
+                  {servicesList.map((service) => (
+                    <div key={service}>
+                      <input
+                        type="checkbox"
+                        value={service}
+                        checked={(formData.services || []).includes(service)}
+                        onChange={handleChange}
+                        name="services"
+                      />
+                      <span>{service}</span>
+                    </div>
+                  ))}
+                </div>
+              </label>
+
+              {formData.services?.includes('Other Services') && (
+                <label className={styles.label}>
+                  Add other services
+                  <input
+                    type="text"
+                    name="otherServices"
+                    value={formData.otherServices}
+                    onChange={handleChange}
+                    className={styles.input}
+                  />
+                </label>
+              )}
+
+              <button type="submit" className={styles.button}>
+                Save Profile
+              </button>
+            </form>
+          </div>
         </div>
       </main>
-
-      {showLogin && (
-        <Modal title="Login" onClose={() => setShowLogin(false)} ref={loginModalRef}>
-          <form onSubmit={handleLogin}>
-            <label htmlFor="login-email">Email</label>
-            <input
-              id="login-email"
-              type="email"
-              placeholder="Email"
-              value={loginForm.email}
-              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              className={styles.input}
-              required
-            />
-            <label htmlFor="login-password">Password</label>
-            <input
-              type="password"
-              id="login-password"
-              placeholder="Password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              className={styles.input}
-              required
-            />
-            {authError && <p className={styles.error}>{authError}</p>}
-            <button type="submit" className={styles.button}>Login</button>
-          </form>
-        </Modal>
-      )}
-
-      {showRegister && (
-        <Modal title="Register" onClose={() => setShowRegister(false)} ref={registerModalRef}>
-          <form onSubmit={handleRegister}>
-            <label htmlFor="reg-name">Full Name</label>
-            <input
-              id="reg-name"
-              type="text"
-              placeholder="Full Name"
-              value={registerForm.name}
-              onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
-              className={styles.input}
-              required
-            />
-            <label htmlFor="reg-email">Email</label>
-            <input
-              id="reg-email"
-              type="email"
-              placeholder="Email"
-              value={registerForm.email}
-              onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
-              className={styles.input}
-              required
-            />
-            <label htmlFor="reg-password">Password</label>
-            <input
-              type="password"
-              id="reg-password"
-              placeholder="Password"
-              value={registerForm.password}
-              onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-              className={styles.input}
-              required
-              minLength={8}
-            />
-            {authError && <p className={styles.error}>{authError}</p>}
-            <button type="submit" className={styles.button}>Register</button>
-          </form>
-        </Modal>
-      )}
-
-      <footer className={styles.footer}>
-        <div className={styles.footerLinks}>
-          <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
-          <Link href="/terms" className={styles.footerLink}>Terms of Service</Link>
-        </div>
-      </footer>
     </div>
   );
 }
 
-const ProfileCard = memo(({ p, router }) => {
-  const { username = '', profilePic = null, name = 'Anonymous Lady', membership = 'Regular', verified = false, area = '', ward = '', county = 'Nairobi', services = [], phone = '' } = p;
-  const handleClick = () => {
-    if (!username || username.trim() === '') {
-      console.error('Missing or empty username for profile:', p);
-      // TODO: Replace with toast notification
-      alert('This profile lacks a username. Please update it in Profile Setup.');
-      return;
-    }
-    router.push(`/view-profile/${encodeURIComponent(username)}`);
-  };
 
-  const handleImageError = (e) => {
-    // Set to a default placeholder image instead of hiding
-    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
-  };
-
-  return (
-    <div className={styles.profileCard} onClick={handleClick} role="listitem">
-      <div className={styles.imageContainer}>
-        <Image 
-          src={profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='} 
-          alt={`${name} Profile`} 
-          width={150} 
-          height={150} 
-          className={styles.profileImage}
-          loading="lazy"
-          sizes="(max-width: 768px) 100vw, 150px"
-          quality={75}
-          onError={handleImageError}
-          placeholder="blur"
-          blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q==" 
-        />
-        {verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
-      </div>
-      <div className={styles.profileInfo}>
-        <h3>{name}</h3>
-        {membership && membership !== 'Regular' && (
-          <span className={`${styles.badge} ${styles[membership.toLowerCase()]}`}>{membership}</span>
-        )}
-      </div>
-      <p className={styles.location}>{area || ward || county}</p>
-      {services && services.length > 0 && (
-        <div className={styles.services}>
-          {services.slice(0, 3).map((s, idx) => (
-            <span key={idx} className={styles.serviceTag}>{s}</span>
-          ))}
-          {services.length > 3 && <span className={styles.moreTags}>+{services.length - 3}</span>}
-        </div>
-      )}
-      {phone && (
-        <p><a href={`tel:${phone}`} className={styles.phoneLink}>{phone}</a></p>
-      )}
-    </div>
-  );
-});
-
-ProfileCard.displayName = 'ProfileCard';
-
-const Modal = forwardRef(({ children, title, onClose }, ref) => (
-  <div className={styles.modal} ref={ref}>
-    <div className={styles.modalContent}>
-      <h2>{title}</h2>
-      <span onClick={onClose} className={styles.close} role="button" aria-label="Close modal">×</span>
-      {children}
-    </div>
-  </div>
-));
-
-Modal.displayName = 'Modal';
-
-export async function getStaticProps() {
-  let initialProfiles = [];
-  try {
-    const q = query(
-      collection(firestore, 'profiles'),
-      orderBy('createdAt', 'desc'),
-      limit(20)
-    );
-    const snapshot = await getDocs(q);
-    initialProfiles = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .filter(
-        (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
-      );
-  } catch (err) {
-    console.error('Error fetching initial profiles:', err);
-  }
-
-  return {
-    props: { initialProfiles },
-    revalidate: 60, // rebuild the page every 60 seconds
-  };
-}
 
