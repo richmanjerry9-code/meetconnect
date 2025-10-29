@@ -98,7 +98,14 @@ export default function Home({ initialProfiles = [] }) {
         );
         const snapshot = await getDocs(q);
         const data = snapshot.docs
-          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .map((doc) => {
+            const profileData = doc.data();
+            // Normalize createdAt to ISO string for consistency
+            if (profileData.createdAt && profileData.createdAt.toDate) {
+              profileData.createdAt = profileData.createdAt.toDate().toISOString();
+            }
+            return { id: doc.id, ...profileData };
+          })
           .filter(
             (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
           );
@@ -137,7 +144,14 @@ export default function Home({ initialProfiles = [] }) {
       );
       const snapshot = await getDocs(q);
       const data = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .map((doc) => {
+          const profileData = doc.data();
+          // Normalize createdAt to ISO string for consistency
+          if (profileData.createdAt && profileData.createdAt.toDate) {
+            profileData.createdAt = profileData.createdAt.toDate().toISOString();
+          }
+          return { id: doc.id, ...profileData };
+        })
         .filter(
           (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
         );
@@ -239,9 +253,9 @@ export default function Home({ initialProfiles = [] }) {
       if (bPriority !== aPriority) {
         return bPriority - aPriority;
       }
-      // Fallback sort by createdAt desc
-      const aDate = a.createdAt ? (a.createdAt.toDate ? a.createdAt.toDate() : new Date(a.createdAt)) : new Date(0);
-      const bDate = b.createdAt ? (b.createdAt.toDate ? b.createdAt.toDate() : new Date(b.createdAt)) : new Date(0);
+      // Fallback sort by createdAt desc (now all are ISO strings)
+      const aDate = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const bDate = b.createdAt ? new Date(b.createdAt) : new Date(0);
       return bDate - aDate;
     });
 
@@ -734,7 +748,14 @@ export async function getStaticProps() {
     );
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .map((doc) => {
+        const data = doc.data();
+        // Convert Timestamp to ISO string for serialization
+        if (data.createdAt && data.createdAt.toDate) {
+          data.createdAt = data.createdAt.toDate().toISOString();
+        }
+        return { id: doc.id, ...data };
+      })
       .filter(
         (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
       );
@@ -747,6 +768,4 @@ export async function getStaticProps() {
     revalidate: 60, // rebuild the page every 60 seconds
   };
 }
-
-
 
