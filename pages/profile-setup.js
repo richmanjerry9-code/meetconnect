@@ -6,8 +6,9 @@ import Head from 'next/head';
 import Image from 'next/image';
 import { Nairobi } from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
 const servicesList = [
   '🍽️ Dinner Date',
@@ -445,14 +446,43 @@ export default function ProfileSetup() {
     router.push('/');
   };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, profilePic: reader.result }));
-      };
-      reader.readAsDataURL(file);
+  const uploadToTempStorage = async (file) => {
+    const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    return { url, storageRef };
+  };
+
+  const saveToUserProfile = (tempUrl) => {
+    setFormData((prev) => ({ ...prev, profilePic: tempUrl }));
+  };
+
+  const handleImageUpload = async (file) => {
+    try {
+      // Step 1: Upload temporarily (Firebase Storage or cloud)
+      const { url: tempUrl, storageRef: tempRef } = await uploadToTempStorage(file);
+
+      // Step 2: Check image via API
+      const res = await fetch('/api/upload-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: tempUrl })
+      });
+
+      const data = await res.json();
+
+      if (!data.accepted) {
+        await deleteObject(tempRef); // Delete the rejected image from storage
+        alert(data.message); // ❌ Tell the user it's rejected
+        return;
+      }
+
+      // ✅ Safe image, save permanently or update profile
+      saveToUserProfile(tempUrl);
+      alert(data.message);
+    } catch (err) {
+      console.error('Image upload error:', err);
+      alert('Failed to upload image. Please try again.');
     }
   };
 
@@ -672,7 +702,12 @@ export default function ProfileSetup() {
                 id="profilePicUpload"
                 type="file"
                 accept="image/*"
-                onChange={handleImageUpload}
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    handleImageUpload(file);
+                  }
+                }}
                 className={styles.profilePicInput}
               />
             </div>
@@ -893,6 +928,3 @@ export default function ProfileSetup() {
     </div>
   );
 }
-
-
-
