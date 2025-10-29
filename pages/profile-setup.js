@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
-import { Nairobi } from '../data/locations';
+import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, storage } from '../lib/firebase';
 import { doc, setDoc, getDoc, addDoc, collection, onSnapshot, query, where } from 'firebase/firestore';
@@ -30,7 +30,7 @@ export default function ProfileSetup() {
     sexualOrientation: 'Straight',
     age: '18',
     nationality: '',
-    county: 'Nairobi',
+    county: '',
     ward: '',
     area: '',
     nearby: [],
@@ -187,6 +187,15 @@ export default function ProfileSetup() {
     }
   };
 
+  const handleCountyChange = (e) => {
+    const county = e.target.value;
+    setFormData((prev) => ({ ...prev, county, ward: '', area: '', nearby: [] }));
+    setSelectedWard('');
+    setSearchQuery('');
+    setFilteredOptions([]);
+    if (error) setError('');
+  };
+
   const handleWardChange = (e) => {
     const ward = e.target.value;
     setSelectedWard(ward);
@@ -210,8 +219,9 @@ export default function ProfileSetup() {
     }
 
     const allOptions = [
-      ...Object.keys(Nairobi),
-      ...Object.values(Nairobi).flat(),
+      ...Object.keys(locations),
+      ...Object.values(locations).flatMap((county) => Object.keys(county)),
+      ...Object.values(locations).flatMap((county) => Object.values(county).flat()),
     ].filter((item, index, self) => self.indexOf(item) === index);
 
     const filtered = allOptions
@@ -221,15 +231,42 @@ export default function ProfileSetup() {
   };
 
   const handleSelectOption = (option) => {
-    const isWard = Object.keys(Nairobi).includes(option);
-    if (isWard) {
-      setSelectedWard(option);
-      setFormData((prev) => ({ ...prev, ward: option, area: '', nearby: [] }));
+    // Check if it's a county
+    if (Object.keys(locations).includes(option)) {
+      setFormData((prev) => ({ ...prev, county: option, ward: '', area: '', nearby: [] }));
+      setSelectedWard('');
     } else {
-      const wardKey = Object.keys(Nairobi).find((w) => Nairobi[w].includes(option));
-      if (wardKey) {
-        setSelectedWard(wardKey);
-        setFormData((prev) => ({ ...prev, ward: wardKey, area: option }));
+      // Check if it's a ward
+      let foundCounty = null;
+      let isWard = false;
+      for (const [county, wardsObj] of Object.entries(locations)) {
+        if (Object.keys(wardsObj).includes(option)) {
+          foundCounty = county;
+          isWard = true;
+          break;
+        }
+      }
+      if (isWard) {
+        setFormData((prev) => ({ ...prev, county: foundCounty, ward: option, area: '', nearby: [] }));
+        setSelectedWard(option);
+      } else {
+        // Assume it's an area
+        let foundCounty = null;
+        let foundWard = null;
+        for (const [county, wardsObj] of Object.entries(locations)) {
+          for (const [ward, areas] of Object.entries(wardsObj)) {
+            if (areas.includes(option)) {
+              foundCounty = county;
+              foundWard = ward;
+              break;
+            }
+          }
+          if (foundWard) break;
+        }
+        if (foundWard) {
+          setFormData((prev) => ({ ...prev, county: foundCounty, ward: foundWard, area: option, nearby: [] }));
+          setSelectedWard(foundWard);
+        }
       }
     }
     setSearchQuery('');
@@ -259,7 +296,7 @@ export default function ProfileSetup() {
       return;
     }
 
-    if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward) {
+    if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward || !formData.county) {
       setError('Please fill all required fields, including location');
       return;
     }
@@ -529,8 +566,9 @@ export default function ProfileSetup() {
     }
   };
 
-  const wards = Nairobi ? Object.keys(Nairobi) : [];
-  const areas = selectedWard && Nairobi ? Nairobi[selectedWard] : [];
+  const counties = Object.keys(locations);
+  const wards = formData.county ? Object.keys(locations[formData.county]) : [];
+  const areas = selectedWard && formData.county ? locations[formData.county][selectedWard] : [];
 
   const plans = {
     Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
@@ -851,14 +889,19 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 County
-                <input
-                  type="text"
+                <select
                   name="county"
                   value={formData.county}
-                  onChange={handleChange}
-                  className={styles.input}
-                  disabled
-                />
+                  onChange={handleCountyChange}
+                  className={styles.select}
+                >
+                  <option value="">Select County</option>
+                  {counties.map((county) => (
+                    <option key={county} value={county}>
+                      {county}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <label className={styles.label}>
@@ -866,7 +909,7 @@ export default function ProfileSetup() {
                 <div className={styles.locationInput}>
                   <input
                     type="text"
-                    placeholder="Search City/Town or Area..."
+                    placeholder="Search County, City/Town or Area..."
                     value={searchQuery}
                     onChange={handleSearchChange}
                     className={styles.input}
@@ -894,9 +937,10 @@ export default function ProfileSetup() {
                   value={selectedWard}
                   onChange={handleWardChange}
                   className={styles.select}
+                  disabled={!formData.county}
                 >
                   <option value="">Select City/Town</option>
-                  {Object.keys(Nairobi).map((ward) => (
+                  {wards.map((ward) => (
                     <option key={ward} value={ward}>
                       {ward}
                     </option>
@@ -914,31 +958,29 @@ export default function ProfileSetup() {
                   disabled={!selectedWard}
                 >
                   <option value="">Select Area</option>
-                  {selectedWard &&
-                    Nairobi[selectedWard].map((area) => (
-                      <option key={area} value={area}>
-                        {area}
-                      </option>
-                    ))}
+                  {areas.map((area) => (
+                    <option key={area} value={area}>
+                      {area}
+                    </option>
+                  ))}
                 </select>
               </label>
 
               <label className={styles.label}>
                 Nearby Places
                 <div className={styles.checkboxGroup}>
-                  {selectedWard &&
-                    Nairobi[selectedWard].map((place) => (
-                      <div key={place}>
-                        <input
-                          type="checkbox"
-                          value={place}
-                          checked={(formData.nearby || []).includes(place)}
-                          onChange={handleChange}
-                          name="nearby"
-                        />
-                        <span>{place}</span>
-                      </div>
-                    ))}
+                  {areas.map((place) => (
+                    <div key={place}>
+                      <input
+                        type="checkbox"
+                        value={place}
+                        checked={(formData.nearby || []).includes(place)}
+                        onChange={handleChange}
+                        name="nearby"
+                      />
+                      <span>{place}</span>
+                    </div>
+                  ))}
                 </div>
               </label>
 
