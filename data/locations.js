@@ -344,6 +344,7 @@ export const Mombasa = {
   'Port Reitz': ['Port Reitz'],
   Ukunda: ['Ukunda'],
   Watamu: ['Watamu'],
+  Bamburi: ['Bamburi'],
 };
 
 export const Muranga = {
