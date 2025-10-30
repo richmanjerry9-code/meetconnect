@@ -7,8 +7,8 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, storage } from '../lib/firebase';
-import { doc, setDoc, getDoc, addDoc, collection, onSnapshot, query, where } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import toast, { Toaster } from 'react-hot-toast';
 
 const servicesList = [
@@ -57,12 +57,9 @@ export default function ProfileSetup() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  // New state for notifications
-  const [notifications, setNotifications] = useState([]);
-  // New states for robust image upload
+  // New states for robust image upload (simplified)
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [imagePreview, setImagePreview] = useState(''); // For preview before moderation
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -100,38 +97,6 @@ export default function ProfileSetup() {
     };
     fetchProfile();
   }, [router]);
-
-  // Separate useEffect for notifications, dependent on loggedInUser
-  useEffect(() => {
-    if (!loggedInUser) return;
-
-    const q = query(
-      collection(db, 'notifications'),
-      where('userId', '==', loggedInUser.id)
-    );
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const newNotifs = [];
-
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        newNotifs.push({ id: docSnap.id, ...data });
-
-        // 🚨 Instantly alert user on new rejection
-        if (data.type === 'image_rejection' && !data.read) {
-          toast.error(data.message, { icon: '🚫' });
-
-          // Mark notification as read so alert doesn’t repeat
-          setDoc(docSnap.ref, { read: true }, { merge: true });
-        }
-      });
-
-      // Store only unread notifications for UI display
-      setNotifications(newNotifs.filter((n) => !n.read));
-    });
-
-    return () => unsub();
-  }, [loggedInUser]);
 
   // Helper function to format phone for M-Pesa (254xxxxxxxxx)
   const formatPhoneForMpesa = (phone) => {
@@ -358,16 +323,18 @@ export default function ProfileSetup() {
 
       // Store pending transaction in Firestore
       const checkoutRequestID = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await addDoc(collection(db, 'pendingTransactions'), {
-        userId: loggedInUser.id,
-        amount: price,
-        phone: formattedPhone,
-        type: 'upgrade',
-        level: selectedLevel,
-        duration: selectedDuration,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      });
+      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
+        pendingTransaction: {
+          userId: loggedInUser.id,
+          amount: price,
+          phone: formattedPhone,
+          type: 'upgrade',
+          level: selectedLevel,
+          duration: selectedDuration,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        }
+      }, { merge: true });
 
       // Initiate STK Push
       const response = await fetch('/api/upgrade', {
@@ -485,63 +452,6 @@ export default function ProfileSetup() {
     router.push('/');
   };
 
-  const uploadToTempStorage = async (file) => {
-    if (!file) throw new Error('No file provided for upload');
-    const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
-    if (!storageRef) throw new Error('Failed to create storage reference');
-    return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      uploadTask.on(
-        'state_changed',
-        (snapshot) => {
-          // Observe state change events
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress(progress);
-          console.log('Upload progress:', progress + '% done');
-          switch (snapshot.state) {
-            case 'paused':
-              console.log('Upload paused');
-              break;
-            case 'running':
-              console.log('Upload running');
-              break;
-            default:
-              break;
-          }
-        },
-        (uploadError) => {
-          // Handle unsuccessful uploads
-          console.error('Temp upload error:', uploadError);
-          reject(uploadError);
-        },
-        () => {
-          // Handle successful uploads on complete
-          getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-            console.log('Temp file available at:', downloadURL);
-            resolve({ url: downloadURL, storageRef: uploadTask.snapshot.ref });
-          }).catch((downloadError) => {
-            console.error('Download URL error:', downloadError);
-            reject(downloadError);
-          });
-        }
-      );
-    });
-  };
-
-  const uploadToPermanentStorage = async (file) => {
-    const extension = file.name.split('.').pop();
-    const permanentRef = ref(storage, `profiles/${loggedInUser.id}/profilePic_${Date.now()}.${extension}`);
-    await uploadBytes(permanentRef, file);
-    const permanentUrl = await getDownloadURL(permanentRef);
-    console.log('Permanent file uploaded at:', permanentUrl);
-    return permanentUrl;
-  };
-
-  const saveToUserProfile = (url) => {
-    setFormData((prev) => ({ ...prev, profilePic: url }));
-  };
-
   const handleImageUpload = async (file) => {
     // Initial validations
     if (!file) {
@@ -557,112 +467,68 @@ export default function ProfileSetup() {
       return;
     }
 
-    // Preview image immediately
-    const previewUrl = URL.createObjectURL(file);
-    setImagePreview(previewUrl);
-
     setIsUploading(true);
     setUploadProgress(0);
     setError('');
 
-    let tempRef = null; // Declare outside try-catch for cleanup
-
     try {
-      console.log('Starting robust image upload for file:', file.name, 'Size:', file.size);
+      console.log('Starting direct image upload for file:', file.name, 'Size:', file.size);
 
-      // Step 1: Upload to temporary storage for moderation (with progress)
-      console.log('Uploading to temp storage...');
-      const { url: tempUrl, storageRef } = await uploadToTempStorage(file);
-      tempRef = storageRef;
+      // Generate ref for permanent storage
+      const extension = file.name.split('.').pop();
+      const storageRef = ref(storage, `profiles/${loggedInUser.id}/profilePic_${Date.now()}.${extension}`);
 
-      // Step 2: Integrate with OpenAI moderation via API (assumes /api/upload-check uses OpenAI Vision/Moderation)
-      console.log('Initiating OpenAI moderation check for:', tempUrl);
-      const moderationRes = await fetch('/api/upload-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: tempUrl })
+      // Upload with progress
+      return new Promise((resolve, reject) => {
+        const uploadTask = uploadBytesResumable(storageRef, file);
+
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            // Observe state change events
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setUploadProgress(progress);
+            console.log('Upload progress:', progress + '% done');
+            switch (snapshot.state) {
+              case 'paused':
+                console.log('Upload paused');
+                break;
+              case 'running':
+                console.log('Upload running');
+                break;
+              default:
+                break;
+            }
+          },
+          (uploadError) => {
+            // Handle unsuccessful uploads
+            console.error('Upload error:', uploadError);
+            reject(new Error(`Upload failed: ${uploadError.message || 'Permission denied (check Firebase Auth)'}`));
+          },
+          async () => {
+            // Handle successful uploads on complete
+            try {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              console.log('File available at:', downloadURL);
+              // Save to form data
+              setFormData((prev) => ({ ...prev, profilePic: downloadURL }));
+              toast.success('Image uploaded successfully!');
+              resolve(downloadURL);
+            } catch (downloadError) {
+              console.error('Download URL error:', downloadError);
+              reject(downloadError);
+            }
+          }
+        );
       });
-
-      if (!moderationRes.ok) {
-        const errorText = await moderationRes.text();
-        const moderationError = new Error(`Moderation API failed: ${moderationRes.status} - ${errorText}`);
-        console.error('OpenAI Moderation API error details:', {
-          status: moderationRes.status,
-          statusText: moderationRes.statusText,
-          responseText: errorText,
-          url: tempUrl
-        });
-        throw moderationError;
-      }
-
-      const moderationData = await moderationRes.json();
-      console.log('OpenAI Moderation response:', moderationData);
-
-      if (!moderationData.accepted) {
-        console.warn('Image rejected by OpenAI moderation:', {
-          message: moderationData.message,
-          categories: moderationData.categories || {},
-          flagged: moderationData.flaggedCategories || {}
-        });
-
-        // Enhanced notification with details
-        const rejectionMessage = `Your profile photo was rejected: ${moderationData.message}. Flagged for: ${moderationData.flaggedCategories ? Object.keys(moderationData.flaggedCategories).join(', ') : 'content violation'}. Please upload a safe, appropriate photo.`;
-        await addDoc(collection(db, 'notifications'), {
-          userId: loggedInUser.id,
-          type: 'image_rejection',
-          message: rejectionMessage,
-          timestamp: new Date().toISOString(),
-          read: false,
-          details: moderationData // Store full details for admin review
-        });
-
-        toast.error(`🚫 ${moderationData.message}`, { duration: 6000 });
-        setError(`❌ Image rejected by moderation: ${moderationData.message}`);
-        return;
-      }
-
-      // Step 3: Image passed moderation - upload to permanent storage
-      console.log('Image passed OpenAI moderation. Uploading to permanent storage...');
-      const permanentUrl = await uploadToPermanentStorage(file);
-
-      // Step 5: Save to profile
-      saveToUserProfile(permanentUrl);
-      toast.success(moderationData.message || '✅ Image uploaded and moderated successfully!');
-
-      console.log('Image upload completed successfully:', { permanentUrl, fileName: file.name });
-
     } catch (err) {
-      // Detailed error logging
-      console.error('Comprehensive image upload error:', {
-        message: err.message,
-        stack: err.stack,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        userId: loggedInUser?.id,
-        timestamp: new Date().toISOString()
-      });
-
-      const userFriendlyError = err.message.includes('Moderation') 
-        ? 'Moderation check failed. Please try a different image.' 
+      console.error('Upload error:', err);
+      const userFriendlyError = err.message.includes('Permission denied') 
+        ? 'Permission denied. Please log in again or contact support.' 
         : `Upload failed: ${err.message}. Please check your connection and try again.`;
       setError(userFriendlyError);
-      toast.error('Upload failed. See console for details.');
+      toast.error(userFriendlyError);
     } finally {
-      // Clean up temp file safely
-      if (tempRef) {
-        try {
-          await deleteObject(tempRef);
-          console.log('Temp file deleted after processing.');
-        } catch (deleteErr) {
-          console.error('Failed to delete temp file:', deleteErr);
-        }
-      }
-      // Clean up preview URL
-      if (imagePreview) {
-        URL.revokeObjectURL(imagePreview);
-        setImagePreview('');
-      }
       setIsUploading(false);
       setUploadProgress(0);
     }
@@ -870,10 +736,10 @@ export default function ProfileSetup() {
             <h1 className={styles.setupTitle}>My Profile</h1>
             <div className={styles.profilePicSection}>
               <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
-                {imagePreview || formData.profilePic ? (
+                {formData.profilePic ? (
                   <Image
-                    src={imagePreview || formData.profilePic}
-                    alt="Profile Picture Preview"
+                    src={formData.profilePic}
+                    alt="Profile Picture"
                     width={150}
                     height={150}
                     className={styles.profilePic}
@@ -883,7 +749,7 @@ export default function ProfileSetup() {
                 )}
                 {isUploading && (
                   <div className={styles.uploadStatus}>
-                    <p>Moderating with OpenAI...</p>
+                    <p>Uploading...</p>
                     <div className={styles.progressBar}>
                       <div 
                         className={styles.progressFill} 
@@ -909,17 +775,6 @@ export default function ProfileSetup() {
                 aria-label="Upload profile picture"
               />
             </div>
-
-            {/* Notification Banner */}
-            {notifications.length > 0 && (
-              <div className={styles.notificationBanner}>
-                {notifications.map((n) => (
-                  <p key={n.id} className={styles.notificationMessage}>
-                    {n.message}
-                  </p>
-                ))}
-              </div>
-            )}
 
             {error && <p className={styles.error}>{error}</p>}
 
