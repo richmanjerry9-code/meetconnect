@@ -1,9 +1,8 @@
-
 // admin.js
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
-import { Nairobi } from '../data/locations';
+import * as locations from '../data/locations';
 import { db } from '../lib/firebase.js';
 import {
   collection,
@@ -18,22 +17,14 @@ import {
 
 // Add servicesList definition
 const servicesList = [
-  'Dinner Date',
-  'Travel Companion',
-  'Lesbian Show',
-  'Rimming',
-  'Raw BJ',
-  'BJ',
-  'GFE',
-  'COB – Cum On Body',
-  'CIM – Cum In Mouth',
-  '3 Some',
-  'Anal',
-  'Massage',
-  'Other Services',
+  '🍽️ Dinner Date',
+  '💬 Just Vibes',
+  '❤️ Relationship',
+  '🌆 Night Out',
+  '👥 Friendship',
 ];
 
-const ADMIN_PASSWORD = '447962Pa$$word';
+const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
 
 export default function AdminPanel() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -47,8 +38,9 @@ export default function AdminPanel() {
     role: 'User',
     membership: 'Regular',
     name: '',
-    gender: '',
-    age: '',
+    gender: 'Female',
+    sexualOrientation: 'Straight',
+    age: '18',
     nationality: '',
     county: '',
     ward: '',
@@ -56,13 +48,13 @@ export default function AdminPanel() {
     nearby: [],
     services: [],
     otherServices: '',
-    incallsRate: '',
-    outcallsRate: '',
     profilePic: null,
   });
+  const [selectedWard, setSelectedWard] = useState('');
   const [isEdit, setIsEdit] = useState(false);
   const [editId, setEditId] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswords, setShowPasswords] = useState({}); // For table password toggles
   const [deletedUsers, setDeletedUsers] = useState([]); // Track deleted users
   const [lastEdit, setLastEdit] = useState(null); // Track last edited profile
   const [globalMenuOpen, setGlobalMenuOpen] = useState(false); // For global 3-dot menu
@@ -130,6 +122,10 @@ export default function AdminPanel() {
   };
 
   const handleLogin = () => {
+    if (!ADMIN_PASSWORD) {
+      alert('Admin password not configured! Check environment variables.');
+      return;
+    }
     if (passwordInput === ADMIN_PASSWORD) {
       setLoggedIn(true);
       setPasswordInput('');
@@ -159,6 +155,22 @@ export default function AdminPanel() {
     } else {
       setForm({ ...form, [name]: value });
     }
+  };
+
+  const handleCountyChange = (e) => {
+    const county = e.target.value;
+    setForm((prev) => ({ ...prev, county, ward: '', area: '', nearby: [] }));
+    setSelectedWard('');
+  };
+
+  const handleWardChange = (e) => {
+    const ward = e.target.value;
+    setSelectedWard(ward);
+    setForm((prev) => ({ ...prev, ward, area: '', nearby: [] }));
+  };
+
+  const handleAreaChange = (e) => {
+    setForm((prev) => ({ ...prev, area: e.target.value }));
   };
 
   const handleProfilePic = (e) => {
@@ -197,10 +209,7 @@ export default function AdminPanel() {
           email: fakeEmail,
           password: fakePassword,
           createdAt: Date.now(),
-          sexualOrientation: '', // Added from profileSetup
-          incallsRate: form.incallsRate, // Renamed to match profileSetup
-          outcallsRate: form.outcallsRate, // Renamed to match profileSetup
-          county: form.county || 'Nairobi', // Default to Nairobi if empty
+          county: form.county || '',
           ward: form.ward || '',
           area: form.area || '',
           nearby: form.nearby || [],
@@ -222,8 +231,9 @@ export default function AdminPanel() {
         role: 'User',
         membership: 'Regular',
         name: '',
-        gender: '',
-        age: '',
+        gender: 'Female',
+        sexualOrientation: 'Straight',
+        age: '18',
         nationality: '',
         county: '',
         ward: '',
@@ -231,8 +241,6 @@ export default function AdminPanel() {
         nearby: [],
         services: [],
         otherServices: '',
-        incallsRate: '',
-        outcallsRate: '',
         profilePic: null,
       });
       setIsEdit(false);
@@ -249,7 +257,7 @@ export default function AdminPanel() {
     const userToDelete = users.find((u) => u.id === userId);
     if (!userToDelete) return alert('User not found.');
     if (userToDelete.role === 'Admin') return alert('Cannot delete admin account!');
-    if (!confirm('Delete this profile?')) return;
+    if (!confirm('Delete this profile??')) return;
 
     try {
       await deleteDoc(doc(db, 'profiles', userId));
@@ -345,6 +353,7 @@ export default function AdminPanel() {
       services: user.services || [],
       nearby: user.nearby || [],
     });
+    setSelectedWard(user.ward || '');
     setIsEdit(true);
     setEditId(user.id);
     setShowPassword(false);
@@ -401,8 +410,9 @@ export default function AdminPanel() {
     );
   }
 
-  const wards = Nairobi ? Object.keys(Nairobi) : [];
-  const areasForWard = form.ward && Nairobi ? Nairobi[form.ward] : [];
+  const counties = Object.keys(locations);
+  const wards = form.county ? Object.keys(locations[form.county]) : [];
+  const areas = selectedWard && form.county ? locations[form.county][selectedWard] : [];
 
   return (
     <div
@@ -585,23 +595,30 @@ export default function AdminPanel() {
           onChange={handleChange}
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
         >
-          <option value="">Select Gender</option>
           <option value="Female">Female</option>
           <option value="Male">Male</option>
         </select>
         <select
-          name="age"
-          value={form.age}
+          name="sexualOrientation"
+          value={form.sexualOrientation}
           onChange={handleChange}
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
         >
-          <option value="">Select Age</option>
-          {Array.from({ length: 82 }, (_, i) => 18 + i).map((age) => (
-            <option key={age} value={age}>
-              {age}
-            </option>
-          ))}
+          <option value="Straight">Straight</option>
+          <option value="Gay">Gay</option>
+          <option value="Bisexual">Bisexual</option>
+          <option value="Other">Other</option>
         </select>
+        <input
+          type="number"
+          name="age"
+          min="18"
+          max="100"
+          placeholder="Age"
+          value={form.age}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
         <input
           name="nationality"
           placeholder="Nationality (optional)"
@@ -609,20 +626,27 @@ export default function AdminPanel() {
           onChange={handleChange}
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
         />
-        <input
+        <select
           name="county"
-          placeholder="County"
           value={form.county}
-          onChange={handleChange}
+          onChange={handleCountyChange}
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
+        >
+          <option value="">Select County</option>
+          {counties.map((county) => (
+            <option key={county} value={county}>
+              {county}
+            </option>
+          ))}
+        </select>
         <select
           name="ward"
           value={form.ward}
-          onChange={handleChange}
+          onChange={handleWardChange}
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+          disabled={!form.county}
         >
-          <option value="">Select Ward</option>
+          <option value="">Select City/Town</option>
           {wards.map((ward) => (
             <option key={ward} value={ward}>
               {ward}
@@ -632,12 +656,12 @@ export default function AdminPanel() {
         <select
           name="area"
           value={form.area}
-          onChange={handleChange}
+          onChange={handleAreaChange}
           style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-          disabled={!form.ward}
+          disabled={!selectedWard}
         >
           <option value="">Select Area</option>
-          {areasForWard.map((area) => (
+          {areas.map((area) => (
             <option key={area} value={area}>
               {area}
             </option>
@@ -645,19 +669,18 @@ export default function AdminPanel() {
         </select>
         <div>
           <label>Nearby Places:</label>
-          {form.ward &&
-            Nairobi[form.ward].map((place) => (
-              <div key={place}>
-                <input
-                  type="checkbox"
-                  name="nearby"
-                  value={place}
-                  checked={(form.nearby || []).includes(place)}
-                  onChange={handleChange}
-                />
-                <span>{place}</span>
-              </div>
-            ))}
+          {areas.map((place) => (
+            <div key={place}>
+              <input
+                type="checkbox"
+                name="nearby"
+                value={place}
+                checked={(form.nearby || []).includes(place)}
+                onChange={handleChange}
+              />
+              <span>{place}</span>
+            </div>
+          ))}
         </div>
         <div>
           <label>Services:</label>
@@ -674,27 +697,6 @@ export default function AdminPanel() {
             </div>
           ))}
         </div>
-        <input
-          name="otherServices"
-          placeholder="Other Services (optional)"
-          value={form.otherServices}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <input
-          name="incallsRate"
-          placeholder="Incalls Rate (KSh/hr)"
-          value={form.incallsRate}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <input
-          name="outcallsRate"
-          placeholder="Outcalls Rate (KSh/hr)"
-          value={form.outcallsRate}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
         <input
           type="file"
           accept="image/*"
@@ -747,7 +749,22 @@ export default function AdminPanel() {
               <tr key={u.id}>
                 <td>{u.username || 'N/A'}</td>
                 <td>{u.email || 'N/A'}</td>
-                <td>********</td>
+                <td style={{ display: 'flex', alignItems: 'center' }}>
+                  {showPasswords[u.id] ? u.password || 'N/A' : '********'}
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswords(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      marginLeft: '10px',
+                    }}
+                  >
+                    {showPasswords[u.id] ? '🙈' : '👁️'}
+                  </button>
+                </td>
                 <td>{u.phone || 'N/A'}</td>
                 <td>{u.role || 'User'}</td>
                 <td>
@@ -887,5 +904,3 @@ export default function AdminPanel() {
     </div>
   );
 }
-
-
