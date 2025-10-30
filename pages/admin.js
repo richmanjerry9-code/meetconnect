@@ -24,7 +24,7 @@ const servicesList = [
   '👥 Friendship',
 ];
 
-const ADMIN_PASSWORD = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
+const ADMIN_PASSWORD = '447962Pa$$word';
 
 export default function AdminPanel() {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -122,10 +122,6 @@ export default function AdminPanel() {
   };
 
   const handleLogin = () => {
-    if (!ADMIN_PASSWORD) {
-      alert('Admin password not configured! Check environment variables.');
-      return;
-    }
     if (passwordInput === ADMIN_PASSWORD) {
       setLoggedIn(true);
       setPasswordInput('');
