@@ -16,6 +16,7 @@ const servicesList = [
   '❤️ Relationship',
   '🌆 Night Out',
   '👥 Friendship',
+  '🤝 Companionship / Meetup'
 ];
 
 const initialFormData = {
