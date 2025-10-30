@@ -486,8 +486,10 @@ export default function ProfileSetup() {
   };
 
   const uploadToTempStorage = async (file) => {
+    if (!file) throw new Error('No file provided for upload');
+    const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
+    if (!storageRef) throw new Error('Failed to create storage reference');
     return new Promise((resolve, reject) => {
-      const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
       const uploadTask = uploadBytesResumable(storageRef, file);
 
       uploadTask.on(
@@ -898,11 +900,9 @@ export default function ProfileSetup() {
                 accept="image/*"
                 onChange={(e) => {
                   const file = e.target.files[0];
-                  if (file) {
-                    handleImageUpload(file);
-                    // Reset input value to allow re-upload same file
-                    e.target.value = '';
-                  }
+                  if (!file) return setError('No file selected');
+                  handleImageUpload(file);
+                  e.target.value = '';
                 }}
                 className={styles.profilePicInput}
                 disabled={isUploading}
