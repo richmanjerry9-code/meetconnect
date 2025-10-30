@@ -8,7 +8,7 @@ import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, storage } from '../lib/firebase';
 import { doc, setDoc, getDoc, addDoc, collection, onSnapshot, query, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
 import toast, { Toaster } from 'react-hot-toast';
 
 const servicesList = [
@@ -19,28 +19,28 @@ const servicesList = [
   '👥 Friendship',
 ];
 
+const initialFormData = {
+  username: '',
+  name: '',
+  phone: '',
+  gender: 'Female',
+  sexualOrientation: 'Straight',
+  age: '18',
+  nationality: '',
+  county: '',
+  ward: '',
+  area: '',
+  nearby: [],
+  services: [], // ensure array so .includes won't crash
+  otherServices: '',
+  profilePic: '',
+};
+
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
-  const [formData, setFormData] = useState({
-    username: '',
-    name: '',
-    phone: '',
-    gender: 'Female',
-    sexualOrientation: 'Straight',
-    age: '18',
-    nationality: '',
-    county: '',
-    ward: '',
-    area: '',
-    nearby: [],
-    services: [], // ensure array so .includes won't crash
-    otherServices: '',
-    profilePic: '',
-  });
+  const [formData, setFormData] = useState(initialFormData);
   const [selectedWard, setSelectedWard] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filteredOptions, setFilteredOptions] = useState([]);
   const [membership, setMembership] = useState('Regular');
   const [walletBalance, setWalletBalance] = useState(0);
   const [error, setError] = useState('');
@@ -59,6 +59,10 @@ export default function ProfileSetup() {
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
   // New state for notifications
   const [notifications, setNotifications] = useState([]);
+  // New states for robust image upload
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [imagePreview, setImagePreview] = useState(''); // For preview before moderation
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -91,11 +95,14 @@ export default function ProfileSetup() {
         }
       } catch (err) {
         console.error('Fetch profile error:', err);
+        toast.error('Failed to load profile data.');
       }
     };
     fetchProfile();
+  }, [router]);
 
-    // Fetch user notifications on load
+  // Separate useEffect for notifications, dependent on loggedInUser
+  useEffect(() => {
     if (!loggedInUser) return;
 
     const q = query(
@@ -124,7 +131,7 @@ export default function ProfileSetup() {
     });
 
     return () => unsub();
-  }, [router, loggedInUser]);
+  }, [loggedInUser]);
 
   // Helper function to format phone for M-Pesa (254xxxxxxxxx)
   const formatPhoneForMpesa = (phone) => {
@@ -191,8 +198,6 @@ export default function ProfileSetup() {
     const county = e.target.value;
     setFormData((prev) => ({ ...prev, county, ward: '', area: '', nearby: [] }));
     setSelectedWard('');
-    setSearchQuery('');
-    setFilteredOptions([]);
     if (error) setError('');
   };
 
@@ -200,8 +205,6 @@ export default function ProfileSetup() {
     const ward = e.target.value;
     setSelectedWard(ward);
     setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
-    setSearchQuery('');
-    setFilteredOptions([]);
     if (error) setError('');
   };
 
@@ -210,112 +213,54 @@ export default function ProfileSetup() {
     if (error) setError('');
   };
 
-  const handleSearchChange = (e) => {
-    const query = e.target.value.toLowerCase();
-    setSearchQuery(query);
-    if (!query) {
-      setFilteredOptions([]);
-      return;
-    }
-
-    const allOptions = [
-      ...Object.keys(locations),
-      ...Object.values(locations).flatMap((county) => Object.keys(county)),
-      ...Object.values(locations).flatMap((county) => Object.values(county).flat()),
-    ].filter((item, index, self) => self.indexOf(item) === index);
-
-    const filtered = allOptions
-      .filter((option) => option.toLowerCase().includes(query))
-      .slice(0, 5);
-    setFilteredOptions(filtered);
-  };
-
-  const handleSelectOption = (option) => {
-    // Check if it's a county
-    if (Object.keys(locations).includes(option)) {
-      setFormData((prev) => ({ ...prev, county: option, ward: '', area: '', nearby: [] }));
-      setSelectedWard('');
-    } else {
-      // Check if it's a ward
-      let foundCounty = null;
-      let isWard = false;
-      for (const [county, wardsObj] of Object.entries(locations)) {
-        if (Object.keys(wardsObj).includes(option)) {
-          foundCounty = county;
-          isWard = true;
-          break;
-        }
-      }
-      if (isWard) {
-        setFormData((prev) => ({ ...prev, county: foundCounty, ward: option, area: '', nearby: [] }));
-        setSelectedWard(option);
-      } else {
-        // Assume it's an area
-        let foundCounty = null;
-        let foundWard = null;
-        for (const [county, wardsObj] of Object.entries(locations)) {
-          for (const [ward, areas] of Object.entries(wardsObj)) {
-            if (areas.includes(option)) {
-              foundCounty = county;
-              foundWard = ward;
-              break;
-            }
-          }
-          if (foundWard) break;
-        }
-        if (foundWard) {
-          setFormData((prev) => ({ ...prev, county: foundCounty, ward: foundWard, area: option, nearby: [] }));
-          setSelectedWard(foundWard);
-        }
-      }
-    }
-    setSearchQuery('');
-    setFilteredOptions([]);
-    if (error) setError('');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Combined validation errors
+    const validationErrors = [];
 
     // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
-      setError('You must be 18 or older to register.');
-      return;
+      validationErrors.push('You must be 18 or older to register.');
     }
 
     // Require at least 1 selected service
     if (!formData.services || formData.services.length < 1) {
-      setError('Please select at least 1 service.');
-      return;
+      validationErrors.push('Please select at least 1 service.');
     }
 
     // Require profile picture
     if (!formData.profilePic) {
-      setError('Please upload a profile picture.');
-      return;
+      validationErrors.push('Please upload a profile picture.');
     }
 
     // Limit nearby places to a maximum of 4
     if (formData.nearby && formData.nearby.length > 4) {
-      setError('You can select up to 4 nearby locations only.');
-      return;
+      validationErrors.push('You can select up to 4 nearby locations only.');
     }
 
     if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward || !formData.county) {
-      setError('Please fill all required fields, including location');
+      validationErrors.push('Please fill all required fields, including location');
+    }
+
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(' '));
       return;
     }
+
     setError('');
     try {
       const fullData = { ...loggedInUser, ...formData, walletBalance };
+      // Note: Ensure Firebase Security Rules restrict writes to own profile only (e.g., allow write: if request.auth.uid == resource.id)
       await setDoc(doc(db, 'profiles', loggedInUser.id), fullData, { merge: true });
       localStorage.setItem('profileSaved', 'true');
-      alert('Profile updated successfully');
+      toast.success('Profile updated successfully');
       router.push('/');
     } catch (error) {
       console.error('Error updating profile:', error);
       setError('Failed to update profile');
+      toast.error('Failed to update profile');
     }
   };
 
@@ -373,20 +318,34 @@ export default function ProfileSetup() {
     if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
       const newBalance = walletBalance - price;
       setWalletBalance(newBalance);
-      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
-        membership: selectedLevel,
-        walletBalance: newBalance 
-      }, { merge: true });
-      setMembership(selectedLevel);
-      setShowPaymentChoice(false);
-      setSelectedDuration('');
-      alert('Upgrade successful!');
+      try {
+        // Note: Ensure Firebase Security Rules restrict writes to own profile only
+        await setDoc(doc(db, 'profiles', loggedInUser.id), { 
+          membership: selectedLevel,
+          walletBalance: newBalance 
+        }, { merge: true });
+        setMembership(selectedLevel);
+        setShowPaymentChoice(false);
+        setSelectedDuration('');
+        toast.success('Upgrade successful!');
+      } catch (error) {
+        console.error('Wallet upgrade error:', error);
+        toast.error('Failed to process wallet upgrade.');
+      }
     }
   };
 
   const handleConfirmMpesaUpgrade = async () => {
     try {
-      const formattedPhone = formatPhoneForMpesa(mpesaPhone || formData.phone); // Use mpesaPhone or profile phone
+      // Validate phone before proceeding
+      const phoneToUse = mpesaPhone || formData.phone;
+      if (!phoneToUse) {
+        toast.error('Phone number is required for M-Pesa payment.');
+        return;
+      }
+      formatPhoneForMpesa(phoneToUse); // Throws if invalid
+
+      const formattedPhone = formatPhoneForMpesa(phoneToUse);
       const plans = {
         Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
         VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
@@ -442,7 +401,7 @@ export default function ProfileSetup() {
               setMembership(selectedLevel);
               setShowProcessingModal(false);
               clearInterval(pollInterval);
-              alert('Upgrade confirmed and applied automatically!');
+              toast.success('Upgrade confirmed and applied automatically!');
             }
           }
         }, 5000); // Poll every 5 seconds
@@ -451,13 +410,13 @@ export default function ProfileSetup() {
       } else {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
-        alert(`Error: ${errorMsg}`);
+        toast.error(`Payment initiation failed: ${errorMsg}`);
         console.error('Full error data:', errorData);
       }
     } catch (error) {
       console.error('Upgrade M-Pesa error:', error);
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
-      alert(`Error: ${errorMsg}`);
+      toast.error(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
   };
@@ -474,6 +433,7 @@ export default function ProfileSetup() {
     } catch (error) {
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
       setError(errorMsg);
+      toast.error(errorMsg);
     }
   };
 
@@ -483,6 +443,9 @@ export default function ProfileSetup() {
       return;
     }
     try {
+      // Validate phone before proceeding
+      formatPhoneForMpesa(formData.phone); // Throws if invalid
+
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       const shortUserId = shortenUserId(loggedInUser.id);
       const accountRef = `wal_${shortUserId}`; // e.g., wal_nxLdK1XA5 (15 chars)
@@ -499,18 +462,18 @@ export default function ProfileSetup() {
       });
       if (response.ok) {
         const data = await response.json();
-        alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
+        toast.success(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
         setShowAddFundModal(false);
       } else {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
-        alert(`Error: ${errorMsg}`);
+        toast.error(`Error: ${errorMsg}`);
         console.error('Full error data:', errorData);
       }
     } catch (error) {
       console.error('Add fund error:', error);
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
-      alert(`Error: ${errorMsg}`);
+      toast.error(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
   };
@@ -518,62 +481,188 @@ export default function ProfileSetup() {
   const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
     setLoggedInUser(null);
+    setFormData(initialFormData); // Reset form data to avoid stale data on re-login
     router.push('/');
   };
 
   const uploadToTempStorage = async (file) => {
-    const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
-    const url = await getDownloadURL(storageRef);
-    return { url, storageRef };
+    return new Promise((resolve, reject) => {
+      const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          // Observe state change events
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+          console.log('Upload progress:', progress + '% done');
+          switch (snapshot.state) {
+            case 'paused':
+              console.log('Upload paused');
+              break;
+            case 'running':
+              console.log('Upload running');
+              break;
+            default:
+              break;
+          }
+        },
+        (uploadError) => {
+          // Handle unsuccessful uploads
+          console.error('Temp upload error:', uploadError);
+          reject(uploadError);
+        },
+        () => {
+          // Handle successful uploads on complete
+          getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
+            console.log('Temp file available at:', downloadURL);
+            resolve({ url: downloadURL, storageRef: uploadTask.snapshot.ref });
+          }).catch((downloadError) => {
+            console.error('Download URL error:', downloadError);
+            reject(downloadError);
+          });
+        }
+      );
+    });
   };
 
-  const saveToUserProfile = (tempUrl) => {
-    setFormData((prev) => ({ ...prev, profilePic: tempUrl }));
+  const uploadToPermanentStorage = async (file) => {
+    const extension = file.name.split('.').pop();
+    const permanentRef = ref(storage, `profiles/${loggedInUser.id}/profilePic_${Date.now()}.${extension}`);
+    await uploadBytes(permanentRef, file);
+    const permanentUrl = await getDownloadURL(permanentRef);
+    console.log('Permanent file uploaded at:', permanentUrl);
+    return permanentUrl;
+  };
+
+  const saveToUserProfile = (url) => {
+    setFormData((prev) => ({ ...prev, profilePic: url }));
   };
 
   const handleImageUpload = async (file) => {
-    try {
-      // Step 1: Upload temporarily (Firebase Storage or cloud)
-      const { url: tempUrl, storageRef: tempRef } = await uploadToTempStorage(file);
+    // Initial validations
+    if (!file) {
+      setError('No file selected.');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      setError('Please select a valid image file (JPEG, PNG, etc.).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      setError('Image size too large. Maximum allowed is 5MB.');
+      return;
+    }
 
-      // Step 2: Check image via API
-      const res = await fetch('/api/upload-check', {
+    // Preview image immediately
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreview(previewUrl);
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setError('');
+
+    let tempRef = null; // Declare outside try-catch for cleanup
+
+    try {
+      console.log('Starting robust image upload for file:', file.name, 'Size:', file.size);
+
+      // Step 1: Upload to temporary storage for moderation (with progress)
+      console.log('Uploading to temp storage...');
+      const { url: tempUrl, storageRef } = await uploadToTempStorage(file);
+      tempRef = storageRef;
+
+      // Step 2: Integrate with OpenAI moderation via API (assumes /api/upload-check uses OpenAI Vision/Moderation)
+      console.log('Initiating OpenAI moderation check for:', tempUrl);
+      const moderationRes = await fetch('/api/upload-check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: tempUrl })
       });
 
-      if (!res.ok) {
-        throw new Error(`API check failed with status: ${res.status}`);
+      if (!moderationRes.ok) {
+        const errorText = await moderationRes.text();
+        const moderationError = new Error(`Moderation API failed: ${moderationRes.status} - ${errorText}`);
+        console.error('OpenAI Moderation API error details:', {
+          status: moderationRes.status,
+          statusText: moderationRes.statusText,
+          responseText: errorText,
+          url: tempUrl
+        });
+        throw moderationError;
       }
 
-      const data = await res.json();
+      const moderationData = await moderationRes.json();
+      console.log('OpenAI Moderation response:', moderationData);
 
-      if (!data.accepted) {
-        await deleteObject(tempRef); // Delete rejected image
+      if (!moderationData.accepted) {
+        console.warn('Image rejected by OpenAI moderation:', {
+          message: moderationData.message,
+          categories: moderationData.categories || {},
+          flagged: moderationData.flaggedCategories || {}
+        });
 
-        // Save rejection notice in Firestore for user
+        // Enhanced notification with details
+        const rejectionMessage = `Your profile photo was rejected: ${moderationData.message}. Flagged for: ${moderationData.flaggedCategories ? Object.keys(moderationData.flaggedCategories).join(', ') : 'content violation'}. Please upload a safe, appropriate photo.`;
         await addDoc(collection(db, 'notifications'), {
           userId: loggedInUser.id,
           type: 'image_rejection',
-          message: `Your profile photo was rejected: ${data.message}`,
+          message: rejectionMessage,
           timestamp: new Date().toISOString(),
           read: false,
+          details: moderationData // Store full details for admin review
         });
 
-        setError(`❌ Image rejected: ${data.message}`);
-        alert(`Image rejected: ${data.message}. Please upload a safe photo.`);
+        toast.error(`🚫 ${moderationData.message}`, { duration: 6000 });
+        setError(`❌ Image rejected by moderation: ${moderationData.message}`);
         return;
       }
 
-      // ✅ Safe image, save permanently or update profile
-      saveToUserProfile(tempUrl);
-      alert(data.message);
+      // Step 3: Image passed moderation - upload to permanent storage
+      console.log('Image passed OpenAI moderation. Uploading to permanent storage...');
+      const permanentUrl = await uploadToPermanentStorage(file);
+
+      // Step 5: Save to profile
+      saveToUserProfile(permanentUrl);
+      toast.success(moderationData.message || '✅ Image uploaded and moderated successfully!');
+
+      console.log('Image upload completed successfully:', { permanentUrl, fileName: file.name });
+
     } catch (err) {
-      console.error('Image upload error:', err);
-      setError('Failed to upload image. Please try again or check console for details.');
-      alert('Failed to upload image. Please try again.');
+      // Detailed error logging
+      console.error('Comprehensive image upload error:', {
+        message: err.message,
+        stack: err.stack,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        userId: loggedInUser?.id,
+        timestamp: new Date().toISOString()
+      });
+
+      const userFriendlyError = err.message.includes('Moderation') 
+        ? 'Moderation check failed. Please try a different image.' 
+        : `Upload failed: ${err.message}. Please check your connection and try again.`;
+      setError(userFriendlyError);
+      toast.error('Upload failed. See console for details.');
+    } finally {
+      // Clean up temp file safely
+      if (tempRef) {
+        try {
+          await deleteObject(tempRef);
+          console.log('Temp file deleted after processing.');
+        } catch (deleteErr) {
+          console.error('Failed to delete temp file:', deleteErr);
+        }
+      }
+      // Clean up preview URL
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+        setImagePreview('');
+      }
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -779,16 +868,28 @@ export default function ProfileSetup() {
             <h1 className={styles.setupTitle}>My Profile</h1>
             <div className={styles.profilePicSection}>
               <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
-                {formData.profilePic ? (
+                {imagePreview || formData.profilePic ? (
                   <Image
-                    src={formData.profilePic}
-                    alt="Profile Picture"
+                    src={imagePreview || formData.profilePic}
+                    alt="Profile Picture Preview"
                     width={150}
                     height={150}
                     className={styles.profilePic}
                   />
                 ) : (
                   <div className={styles.profilePicPlaceholder}>📷</div>
+                )}
+                {isUploading && (
+                  <div className={styles.uploadStatus}>
+                    <p>Moderating with OpenAI...</p>
+                    <div className={styles.progressBar}>
+                      <div 
+                        className={styles.progressFill} 
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                    <p>{Math.round(uploadProgress)}%</p>
+                  </div>
                 )}
               </label>
               <input
@@ -799,9 +900,13 @@ export default function ProfileSetup() {
                   const file = e.target.files[0];
                   if (file) {
                     handleImageUpload(file);
+                    // Reset input value to allow re-upload same file
+                    e.target.value = '';
                   }
                 }}
                 className={styles.profilePicInput}
+                disabled={isUploading}
+                aria-label="Upload profile picture"
               />
             </div>
 
@@ -913,32 +1018,6 @@ export default function ProfileSetup() {
                     </option>
                   ))}
                 </select>
-              </label>
-
-              <label className={styles.label}>
-                Location Search
-                <div className={styles.locationInput}>
-                  <input
-                    type="text"
-                    placeholder="Search County, City/Town or Area..."
-                    value={searchQuery}
-                    onChange={handleSearchChange}
-                    className={styles.input}
-                  />
-                </div>
-                {filteredOptions.length > 0 && (
-                  <div className={styles.dropdown}>
-                    {filteredOptions.map((option, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => handleSelectOption(option)}
-                        className={styles.dropdownItem}
-                      >
-                        {option}
-                      </div>
-                    ))}
-                  </div>
-                )}
               </label>
 
               <label className={styles.label}>
