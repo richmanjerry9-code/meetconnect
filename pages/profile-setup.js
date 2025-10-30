@@ -6,9 +6,8 @@ import Head from 'next/head';
 import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db, storage } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import toast, { Toaster } from 'react-hot-toast';
 
 const servicesList = [
@@ -57,9 +56,6 @@ export default function ProfileSetup() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  // New states for robust image upload (simplified)
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -452,85 +448,14 @@ export default function ProfileSetup() {
     router.push('/');
   };
 
-  const handleImageUpload = async (file) => {
-    // Initial validations
-    if (!file) {
-      setError('No file selected.');
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      setError('Please select a valid image file (JPEG, PNG, etc.).');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      setError('Image size too large. Maximum allowed is 5MB.');
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-    setError('');
-
-    try {
-      console.log('Starting direct image upload for file:', file.name, 'Size:', file.size);
-
-      // Generate ref for permanent storage
-      const extension = file.name.split('.').pop();
-      const storageRef = ref(storage, `profiles/${loggedInUser.id}/profilePic_${Date.now()}.${extension}`);
-
-      // Upload with progress
-      return new Promise((resolve, reject) => {
-        const uploadTask = uploadBytesResumable(storageRef, file);
-
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            // Observe state change events
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(progress);
-            console.log('Upload progress:', progress + '% done');
-            switch (snapshot.state) {
-              case 'paused':
-                console.log('Upload paused');
-                break;
-              case 'running':
-                console.log('Upload running');
-                break;
-              default:
-                break;
-            }
-          },
-          (uploadError) => {
-            // Handle unsuccessful uploads
-            console.error('Upload error:', uploadError);
-            reject(new Error(`Upload failed: ${uploadError.message || 'Permission denied (check Firebase Auth)'}`));
-          },
-          async () => {
-            // Handle successful uploads on complete
-            try {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              console.log('File available at:', downloadURL);
-              // Save to form data
-              setFormData((prev) => ({ ...prev, profilePic: downloadURL }));
-              toast.success('Image uploaded successfully!');
-              resolve(downloadURL);
-            } catch (downloadError) {
-              console.error('Download URL error:', downloadError);
-              reject(downloadError);
-            }
-          }
-        );
-      });
-    } catch (err) {
-      console.error('Upload error:', err);
-      const userFriendlyError = err.message.includes('Permission denied') 
-        ? 'Permission denied. Please log in again or contact support.' 
-        : `Upload failed: ${err.message}. Please check your connection and try again.`;
-      setError(userFriendlyError);
-      toast.error(userFriendlyError);
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, profilePic: reader.result }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -747,32 +672,13 @@ export default function ProfileSetup() {
                 ) : (
                   <div className={styles.profilePicPlaceholder}>📷</div>
                 )}
-                {isUploading && (
-                  <div className={styles.uploadStatus}>
-                    <p>Uploading...</p>
-                    <div className={styles.progressBar}>
-                      <div 
-                        className={styles.progressFill} 
-                        style={{ width: `${uploadProgress}%` }}
-                      ></div>
-                    </div>
-                    <p>{Math.round(uploadProgress)}%</p>
-                  </div>
-                )}
               </label>
               <input
                 id="profilePicUpload"
                 type="file"
                 accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (!file) return setError('No file selected');
-                  handleImageUpload(file);
-                  e.target.value = '';
-                }}
+                onChange={handleImageUpload}
                 className={styles.profilePicInput}
-                disabled={isUploading}
-                aria-label="Upload profile picture"
               />
             </div>
 
