@@ -284,9 +284,15 @@ export default function ProfileSetup() {
       return;
     }
 
-    // Require at least 4 selected services
-    if (!formData.services || formData.services.length < 4) {
-      setError('Please select at least 4 services.');
+    // Require at least 1 selected service
+    if (!formData.services || formData.services.length < 1) {
+      setError('Please select at least 1 service.');
+      return;
+    }
+
+    // Require profile picture
+    if (!formData.profilePic) {
+      setError('Please upload a profile picture.');
       return;
     }
 
@@ -538,6 +544,10 @@ export default function ProfileSetup() {
         body: JSON.stringify({ imageUrl: tempUrl })
       });
 
+      if (!res.ok) {
+        throw new Error(`API check failed with status: ${res.status}`);
+      }
+
       const data = await res.json();
 
       if (!data.accepted) {
@@ -562,6 +572,7 @@ export default function ProfileSetup() {
       alert(data.message);
     } catch (err) {
       console.error('Image upload error:', err);
+      setError('Failed to upload image. Please try again or check console for details.');
       alert('Failed to upload image. Please try again.');
     }
   };
