@@ -714,7 +714,6 @@ const ProfileCard = memo(({ p, router }) => {
           {services.slice(0, 3).map((s, idx) => (
             <span key={idx} className={styles.serviceTag}>{s}</span>
           ))}
-          {services.length > 3 && <span className={styles.moreTags}>+{services.length - 3}</span>}
         </div>
       )}
       {phone && (
@@ -768,4 +767,3 @@ export async function getStaticProps() {
     revalidate: 60, // rebuild the page every 60 seconds
   };
 }
-
