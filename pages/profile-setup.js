@@ -485,13 +485,12 @@ export default function ProfileSetup() {
     router.push('/');
   };
 
-  const uploadToPermanentStorage = async (file) => {
+  const uploadToTempStorage = async (file) => {
     if (!file) throw new Error('No file provided for upload');
-    const extension = file.name.split('.').pop();
-    const permanentRef = ref(storage, `profiles/${loggedInUser.id}/profilePic_${Date.now()}.${extension}`);
-    if (!permanentRef) throw new Error('Failed to create storage reference');
+    const storageRef = ref(storage, `temp/${Date.now()}_${file.name}`);
+    if (!storageRef) throw new Error('Failed to create storage reference');
     return new Promise((resolve, reject) => {
-      const uploadTask = uploadBytesResumable(permanentRef, file);
+      const uploadTask = uploadBytesResumable(storageRef, file);
 
       uploadTask.on(
         'state_changed',
@@ -513,14 +512,14 @@ export default function ProfileSetup() {
         },
         (uploadError) => {
           // Handle unsuccessful uploads
-          console.error('Permanent upload error:', uploadError);
+          console.error('Temp upload error:', uploadError);
           reject(uploadError);
         },
         () => {
           // Handle successful uploads on complete
           getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-            console.log('Permanent file available at:', downloadURL);
-            resolve(downloadURL);
+            console.log('Temp file available at:', downloadURL);
+            resolve({ url: downloadURL, storageRef: uploadTask.snapshot.ref });
           }).catch((downloadError) => {
             console.error('Download URL error:', downloadError);
             reject(downloadError);
@@ -528,6 +527,15 @@ export default function ProfileSetup() {
         }
       );
     });
+  };
+
+  const uploadToPermanentStorage = async (file) => {
+    const extension = file.name.split('.').pop();
+    const permanentRef = ref(storage, `profiles/${loggedInUser.id}/profilePic_${Date.now()}.${extension}`);
+    await uploadBytes(permanentRef, file);
+    const permanentUrl = await getDownloadURL(permanentRef);
+    console.log('Permanent file uploaded at:', permanentUrl);
+    return permanentUrl;
   };
 
   const saveToUserProfile = (url) => {
@@ -557,16 +565,69 @@ export default function ProfileSetup() {
     setUploadProgress(0);
     setError('');
 
-    try {
-      console.log('Starting direct image upload for file:', file.name, 'Size:', file.size);
+    let tempRef = null; // Declare outside try-catch for cleanup
 
-      // Direct upload to permanent storage with progress
-      console.log('Uploading to permanent storage...');
+    try {
+      console.log('Starting robust image upload for file:', file.name, 'Size:', file.size);
+
+      // Step 1: Upload to temporary storage for moderation (with progress)
+      console.log('Uploading to temp storage...');
+      const { url: tempUrl, storageRef } = await uploadToTempStorage(file);
+      tempRef = storageRef;
+
+      // Step 2: Integrate with OpenAI moderation via API (assumes /api/upload-check uses OpenAI Vision/Moderation)
+      console.log('Initiating OpenAI moderation check for:', tempUrl);
+      const moderationRes = await fetch('/api/upload-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: tempUrl })
+      });
+
+      if (!moderationRes.ok) {
+        const errorText = await moderationRes.text();
+        const moderationError = new Error(`Moderation API failed: ${moderationRes.status} - ${errorText}`);
+        console.error('OpenAI Moderation API error details:', {
+          status: moderationRes.status,
+          statusText: moderationRes.statusText,
+          responseText: errorText,
+          url: tempUrl
+        });
+        throw moderationError;
+      }
+
+      const moderationData = await moderationRes.json();
+      console.log('OpenAI Moderation response:', moderationData);
+
+      if (!moderationData.accepted) {
+        console.warn('Image rejected by OpenAI moderation:', {
+          message: moderationData.message,
+          categories: moderationData.categories || {},
+          flagged: moderationData.flaggedCategories || {}
+        });
+
+        // Enhanced notification with details
+        const rejectionMessage = `Your profile photo was rejected: ${moderationData.message}. Flagged for: ${moderationData.flaggedCategories ? Object.keys(moderationData.flaggedCategories).join(', ') : 'content violation'}. Please upload a safe, appropriate photo.`;
+        await addDoc(collection(db, 'notifications'), {
+          userId: loggedInUser.id,
+          type: 'image_rejection',
+          message: rejectionMessage,
+          timestamp: new Date().toISOString(),
+          read: false,
+          details: moderationData // Store full details for admin review
+        });
+
+        toast.error(`🚫 ${moderationData.message}`, { duration: 6000 });
+        setError(`❌ Image rejected by moderation: ${moderationData.message}`);
+        return;
+      }
+
+      // Step 3: Image passed moderation - upload to permanent storage
+      console.log('Image passed OpenAI moderation. Uploading to permanent storage...');
       const permanentUrl = await uploadToPermanentStorage(file);
 
-      // Save to profile
+      // Step 5: Save to profile
       saveToUserProfile(permanentUrl);
-      toast.success('✅ Image uploaded successfully!');
+      toast.success(moderationData.message || '✅ Image uploaded and moderated successfully!');
 
       console.log('Image upload completed successfully:', { permanentUrl, fileName: file.name });
 
@@ -582,10 +643,21 @@ export default function ProfileSetup() {
         timestamp: new Date().toISOString()
       });
 
-      const userFriendlyError = `Upload failed: ${err.message}. Please check your connection and try again.`;
+      const userFriendlyError = err.message.includes('Moderation') 
+        ? 'Moderation check failed. Please try a different image.' 
+        : `Upload failed: ${err.message}. Please check your connection and try again.`;
       setError(userFriendlyError);
       toast.error('Upload failed. See console for details.');
     } finally {
+      // Clean up temp file safely
+      if (tempRef) {
+        try {
+          await deleteObject(tempRef);
+          console.log('Temp file deleted after processing.');
+        } catch (deleteErr) {
+          console.error('Failed to delete temp file:', deleteErr);
+        }
+      }
       // Clean up preview URL
       if (imagePreview) {
         URL.revokeObjectURL(imagePreview);
@@ -811,7 +883,7 @@ export default function ProfileSetup() {
                 )}
                 {isUploading && (
                   <div className={styles.uploadStatus}>
-                    <p>Uploading...</p>
+                    <p>Moderating with OpenAI...</p>
                     <div className={styles.progressBar}>
                       <div 
                         className={styles.progressFill} 
