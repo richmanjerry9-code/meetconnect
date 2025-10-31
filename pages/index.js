@@ -464,7 +464,7 @@ export default function Home({ initialProfiles = [] }) {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect Ladies ❤️
+            Meet Connect ❤️
           </h1>
         </div>
         <div className={styles.authButtons}>
