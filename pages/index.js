@@ -684,6 +684,9 @@ const ProfileCard = memo(({ p, router }) => {
     e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
   };
 
+  // Format location: Ward (Area) if ward exists, else Area, else County
+  const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county);
+
   return (
     <div className={styles.profileCard} onClick={handleClick} role="listitem">
       <div className={styles.imageContainer}>
@@ -708,7 +711,7 @@ const ProfileCard = memo(({ p, router }) => {
           <span className={`${styles.badge} ${styles[membership.toLowerCase()]}`}>{membership}</span>
         )}
       </div>
-      <p className={styles.location}>{area || ward || county}</p>
+      <p className={styles.location}>{locationDisplay}</p>
       {services && services.length > 0 && (
         <div className={styles.services}>
           {services.slice(0, 3).map((s, idx) => (
