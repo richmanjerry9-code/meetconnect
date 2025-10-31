@@ -1,3 +1,5 @@
+// pages/_document.js
+
 import { Html, Head, Main, NextScript } from 'next/document';
 
 export default function Document() {
@@ -19,6 +21,9 @@ export default function Document() {
         <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
         <meta httpEquiv="Pragma" content="no-cache" />
         <meta httpEquiv="Expires" content="0" />
+
+        {/* Fix deprecated meta tag warning */}
+        <meta name="mobile-web-app-capable" content="yes" />
       </Head>
       <body>
         <Main />
