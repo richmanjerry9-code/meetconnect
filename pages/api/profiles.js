@@ -10,6 +10,7 @@ const ProfileSchema = new mongoose.Schema(
     phone: { type: String, default: '' },
     profilePic: { type: String, default: '' },
     county: { type: String, default: '' },
+    ward: { type: String, default: '' }, // Added this for ward support
     area: { type: String, default: '' },
     services: { type: [String], default: [] },
     nearby: { type: [String], default: [] },
