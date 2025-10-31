@@ -333,7 +333,7 @@ export const Migori = {
 };
 
 export const Mombasa = {
-  Mombasa: ['Mombasa'],
+  Mombasa: ['Mombasa', 'Bamburi'],
   Changamwe: ['Changamwe'],
   Jomvu: ['Jomvu'],
   Kisauni: ['Kisauni'],
@@ -344,7 +344,6 @@ export const Mombasa = {
   'Port Reitz': ['Port Reitz'],
   Ukunda: ['Ukunda'],
   Watamu: ['Watamu'],
-  Bamburi: ['Bamburi'],
 };
 
 export const Muranga = {
