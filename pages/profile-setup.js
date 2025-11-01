@@ -449,14 +449,33 @@ export default function ProfileSetup() {
     router.push('/');
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData((prev) => ({ ...prev, profilePic: reader.result }));
-      };
-      reader.readAsDataURL(file);
+      const formData = new FormData();
+      formData.append('profilePic', file);
+      formData.append('userId', loggedInUser.id); // For auth/validation in backend
+  
+      try {
+        const response = await fetch('/api/upload-profile-pic', {
+          method: 'POST',
+          body: formData,
+        });
+  
+        if (response.ok) {
+          const data = await response.json();
+          setFormData((prev) => ({ ...prev, profilePic: data.url }));
+          toast.success('Profile picture uploaded and moderated successfully.');
+        } else {
+          const errorData = await response.json();
+          setError(errorData.message || 'Failed to upload image.');
+          toast.error(errorData.message || 'Failed to upload image.');
+        }
+      } catch (err) {
+        console.error('Image upload error:', err);
+        setError('Failed to upload image.');
+        toast.error('Failed to upload image.');
+      }
     }
   };
 
