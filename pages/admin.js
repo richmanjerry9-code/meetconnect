@@ -732,6 +732,9 @@ export default function AdminPanel() {
           <thead>
             <tr style={{ background: '#ddd' }}>
               <th>Username</th>
+              <th>Name</th>
+              <th>Age</th>
+              <th>Area</th>
               <th>Email</th>
               <th>Password</th>
               <th>Phone</th>
@@ -744,6 +747,9 @@ export default function AdminPanel() {
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.username || 'N/A'}</td>
+                <td>{u.name || 'N/A'}</td>
+                <td>{u.age || 'N/A'}</td>
+                <td>{u.area || 'N/A'}</td>
                 <td>{u.email || 'N/A'}</td>
                 <td style={{ display: 'flex', alignItems: 'center' }}>
                   {showPasswords[u.id] ? u.password || 'N/A' : '********'}
