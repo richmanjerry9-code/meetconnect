@@ -1,4 +1,3 @@
-// pages/index.js 
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -8,7 +7,7 @@ import * as Counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js'; // Renamed for clarity
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, limit, getDocs, addDoc, where, startAfter, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, addDoc, where, startAfter, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 
 function useDebounce(value, delay) {
@@ -27,9 +26,28 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+// ✅ Helper to check profile completeness
+const isProfileComplete = (p) => {
+  return (
+    p &&
+    p.username &&
+    p.username.trim() !== '' &&
+    p.name &&
+    p.name.trim() !== '' &&
+    p.profilePic &&
+    p.profilePic.trim() !== '' && // Ensure it's not empty string
+    p.county &&
+    p.county.trim() !== '' &&
+    p.ward &&
+    p.ward.trim() !== '' &&
+    p.area &&
+    p.area.trim() !== ''
+  );
+};
+
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
-  const [profiles, setProfiles] = useState(initialProfiles);
+  const [allProfiles, setAllProfiles] = useState(initialProfiles);
   const [lastDoc, setLastDoc] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -47,24 +65,37 @@ export default function Home({ initialProfiles = [] }) {
   const [showRegister, setShowRegister] = useState(false);
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
-  const [loginLoading, setLoginLoading] = useState(false); // Added loading state for login
+  const [loginLoading, setLoginLoading] = useState(false);
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
   const sentinelRef = useRef(null);
   const cacheRef = useRef(new Map());
+  const unsubscribeRef = useRef(null);
 
-// ✅ Auth state listener with full profile fetch and loading
+  // ✅ Auth state listener with auto-fix for missing profiles
   useEffect(() => {
     setUserLoading(true);
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
           const profileDoc = await getDoc(doc(firestore, 'profiles', currentUser.uid));
+          let userData;
           if (profileDoc.exists()) {
-            setUser({ id: profileDoc.id, ...profileDoc.data() });
+            userData = { id: profileDoc.id, ...profileDoc.data() };
           } else {
-            setUser({ uid: currentUser.uid, email: currentUser.email });
+            // Auto-make basic profile if missing
+            const basicProfile = {
+              uid: currentUser.uid,
+              name: currentUser.email.split('@')[0],
+              email: currentUser.email,
+              username: currentUser.email.split('@')[0],
+              membership: 'Regular',
+              createdAt: serverTimestamp(),
+            };
+            await setDoc(doc(firestore, 'profiles', currentUser.uid), basicProfile);
+            userData = { id: currentUser.uid, ...basicProfile };
           }
+          setUser(userData);
         } catch (err) {
           console.error('Error fetching profile:', err);
           setUser({ uid: currentUser.uid, email: currentUser.email });
@@ -76,58 +107,47 @@ export default function Home({ initialProfiles = [] }) {
     });
     return unsubscribe;
   }, []);
-  
-  // Load first batch of profiles
+
+  // ✅ Real-time listener for profiles with onSnapshot (filter complete profiles)
   useEffect(() => {
-    const fetchProfiles = async () => {
-      if (profiles.length > 0) return;
-      const cacheKey = 'profiles_initial';
-      if (cacheRef.current.has(cacheKey)) {
-        const cachedData = cacheRef.current.get(cacheKey);
-        setProfiles(cachedData.profiles);
-        setLastDoc(cachedData.lastDoc);
-        setHasMore(cachedData.hasMore);
-        return;
-      }
-      setError(null);
-      try {
-        const q = query(
-          collection(firestore, 'profiles'),
-          orderBy('createdAt', 'desc'),
-          limit(20)
-        );
-        const snapshot = await getDocs(q);
-        const data = snapshot.docs
-          .map((doc) => {
-            const profileData = doc.data();
-            // Normalize createdAt to ISO string for consistency
-            if (profileData.createdAt && profileData.createdAt.toDate) {
-              profileData.createdAt = profileData.createdAt.toDate().toISOString();
-            }
-            return { id: doc.id, ...profileData };
-          })
-          .filter(
-            (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
-          );
-        setProfiles(data);
-        setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-        setHasMore(snapshot.size === 20);
-        cacheRef.current.set(cacheKey, { profiles: data, lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, hasMore: snapshot.size === 20 });
-      } catch (err) {
-        console.error('Error fetching profiles:', err);
-        setError('Failed to load profiles. Please try refreshing the page.');
+    const q = query(
+      collection(firestore, 'profiles'),
+      orderBy('createdAt', 'desc'),
+      limit(100) // Fetch more initially for better coverage
+    );
+    unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => {
+        const profileData = doc.data();
+        if (profileData.createdAt && profileData.createdAt.toDate) {
+          profileData.createdAt = profileData.createdAt.toDate().toISOString();
+        }
+        return { id: doc.id, ...profileData };
+      });
+
+      // ✅ Only keep fully filled profiles
+      const validProfiles = data.filter(isProfileComplete);
+      setAllProfiles(validProfiles);
+      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
+      setHasMore(snapshot.size === 100);
+      setError(null); // Clear errors on successful snapshot
+    }, (err) => {
+      console.error('Snapshot error:', err);
+      setError('Failed to load profiles in real-time. Please refresh.');
+    });
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
       }
     };
-
-    fetchProfiles();
-  }, [profiles.length]); // Added missing dependency
+  }, []);
 
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
     const cacheKey = `profiles_loadmore_${lastDoc.id}`;
     if (cacheRef.current.has(cacheKey)) {
       const cachedData = cacheRef.current.get(cacheKey);
-      setProfiles(prev => [...prev, ...cachedData.profiles]);
+      setAllProfiles(prev => [...prev, ...cachedData.profiles]);
       setLastDoc(cachedData.lastDoc);
       setHasMore(cachedData.hasMore);
       setIsLoadingMore(false);
@@ -143,22 +163,25 @@ export default function Home({ initialProfiles = [] }) {
         limit(20)
       );
       const snapshot = await getDocs(q);
-      const data = snapshot.docs
-        .map((doc) => {
-          const profileData = doc.data();
-          // Normalize createdAt to ISO string for consistency
-          if (profileData.createdAt && profileData.createdAt.toDate) {
-            profileData.createdAt = profileData.createdAt.toDate().toISOString();
-          }
-          return { id: doc.id, ...profileData };
-        })
-        .filter(
-          (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
-        );
-      setProfiles(prev => [...prev, ...data]);
+      const data = snapshot.docs.map((doc) => {
+        const profileData = doc.data();
+        if (profileData.createdAt && profileData.createdAt.toDate) {
+          profileData.createdAt = profileData.createdAt.toDate().toISOString();
+        }
+        return { id: doc.id, ...profileData };
+      });
+
+      // ✅ Only fully filled profiles
+      const validProfiles = data.filter(isProfileComplete);
+
+      setAllProfiles(prev => [...prev, ...validProfiles]);
       setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
       setHasMore(snapshot.size === 20);
-      cacheRef.current.set(cacheKey, { profiles: data, lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, hasMore: snapshot.size === 20 });
+      cacheRef.current.set(cacheKey, { 
+        profiles: validProfiles, 
+        lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, 
+        hasMore: snapshot.size === 20 
+      });
     } catch (err) {
       console.error('Error fetching more profiles:', err);
       setError('Failed to load more profiles. Please try scrolling again.');
@@ -217,17 +240,17 @@ export default function Home({ initialProfiles = [] }) {
     setFilteredLocations([]);
   };
 
-  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }; // TODO: Move to config file
+  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
 
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
-    let filtered = profiles.filter((p) => {
-      if (!debouncedSearchLocation && !selectedWard && !selectedArea && !selectedCounty) return true;
+    let filtered = allProfiles.filter((p) => {
+      // Minimal filter: always include (since source is already complete), but check location/search matches
       const countyMatch = selectedCounty ? p.county === selectedCounty : true;
       const wardMatch = selectedWard ? p.ward === selectedWard : true;
       const areaMatch = selectedArea ? p.area === selectedArea : true;
       const searchMatch = debouncedSearchLocation
-        ? [p.county, p.ward, p.area, ...(p.nearby || [])]
+        ? [p.county || '', p.ward || '', p.area || '', ...(p.nearby || [])]
             .map(s => s.toLowerCase())
             .join(' ')
             .includes(searchTerm)
@@ -235,32 +258,20 @@ export default function Home({ initialProfiles = [] }) {
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
 
-    if (!debouncedSearchLocation && !selectedWard && !selectedArea && !selectedCounty) {
-      const membershipGroups = ['VVIP', 'VIP', 'Prime', 'Regular'];
-      let selectedGroup = [];
-      for (const m of membershipGroups) {
-        selectedGroup = filtered.filter(
-          (p) => p.membership === m || (m === 'Regular' && !p.membership)
-        );
-        if (selectedGroup.length > 0) break;
-      }
-      filtered = selectedGroup;
-    }
-
+    // Sort ALL by priority and date
     filtered.sort((a, b) => {
-      const aPriority = membershipPriority[a.membership] || 0;
-      const bPriority = membershipPriority[b.membership] || 0;
+      const aPriority = membershipPriority[a.membership] || 1; // Default to Regular
+      const bPriority = membershipPriority[b.membership] || 1;
       if (bPriority !== aPriority) {
         return bPriority - aPriority;
       }
-      // Fallback sort by createdAt desc (now all are ISO strings)
       const aDate = a.createdAt ? new Date(a.createdAt) : new Date(0);
       const bDate = b.createdAt ? new Date(b.createdAt) : new Date(0);
       return bDate - aDate;
     });
 
     return filtered;
-  }, [profiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]); // Added missing dependency
+  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]);
 
   // Abstracted form validation
   const validateForm = (form, isRegister = false) => {
@@ -290,7 +301,6 @@ export default function Home({ initialProfiles = [] }) {
     }
     try {
       const { user } = await createUserWithEmailAndPassword(auth, registerForm.email, registerForm.password);
-      // Create profile doc
       const newUserProfile = {
         uid: user.uid,
         name: registerForm.name,
@@ -314,15 +324,14 @@ export default function Home({ initialProfiles = [] }) {
     }
   };
 
-  // Login with Firebase Auth and profile fetch
+  // Login with Firebase Auth and auto-fix for missing profile
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
-    setLoginLoading(true); // Start loading
+    setLoginLoading(true);
 
     const { email, password } = loginForm;
 
-    // Client-side validation (prevents unnecessary API calls)
     if (!email || !password) {
       setAuthError('Please enter email and password.');
       setLoginLoading(false);
@@ -332,7 +341,6 @@ export default function Home({ initialProfiles = [] }) {
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
 
-    // Optional: Simple email regex check (Firebase will catch most, but this prevents unnecessary calls)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(trimmedEmail)) {
       setAuthError('Please enter a valid email address.');
@@ -347,21 +355,30 @@ export default function Home({ initialProfiles = [] }) {
     }
 
     try {
-      console.log('Attempting login for:', trimmedEmail); // Debug log (remove in prod)
+      console.log('Attempting login for:', trimmedEmail);
 
       const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
 
-      console.log('Login successful for user:', user.uid); // Debug log
+      console.log('Login successful for user:', user.uid);
 
-      // Fetch Firestore profile
       const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
-      if (!profileDoc.exists()) {
-        setAuthError('Profile not found. Please register first.');
-        setLoginLoading(false);
-        return;
+      let profileData;
+      if (profileDoc.exists()) {
+        profileData = { id: profileDoc.id, ...profileDoc.data() };
+      } else {
+        const basicProfile = {
+          uid: user.uid,
+          name: user.email.split('@')[0],
+          email: user.email,
+          username: user.email.split('@')[0],
+          membership: 'Regular',
+          createdAt: serverTimestamp(),
+        };
+        await setDoc(doc(firestore, 'profiles', user.uid), basicProfile);
+        profileData = { id: user.uid, ...basicProfile };
+        alert('Welcome back! Quick setup needed—let\'s add your details.');  // Friendly nudge
       }
 
-      const profileData = { id: profileDoc.id, ...profileDoc.data() };
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
 
@@ -371,35 +388,34 @@ export default function Home({ initialProfiles = [] }) {
         setShowLogin(false);
       }, 1500);
     } catch (err) {
-      console.error('Login error details:', err.code, err.message); // Full error for debugging
+      console.error('Login error details:', err.code, err.message);
 
-      // User-friendly messages based on Firebase error codes
       let userMessage = 'Login failed. Please try again.';
       switch (err.code) {
         case 'auth/invalid-credential':
-          userMessage = 'Invalid email or password. Check your details and try again.';
+          userMessage = 'Oops! Wrong email or password. Double-check and try again.';
           break;
         case 'auth/user-not-found':
-          userMessage = 'No account found with this email. Please sign up.';
+          userMessage = 'No account here yet. Hit Register to join the fun!';
           break;
         case 'auth/wrong-password':
-          userMessage = 'Incorrect password.';
+          userMessage = 'Password doesn\'t match. Forgot it? We can add reset later.';
           break;
         case 'auth/invalid-email':
-          userMessage = 'Invalid email address.';
+          userMessage = 'That email looks funny—try again?';
           break;
         case 'auth/too-many-requests':
-          userMessage = 'Too many failed attempts. Please try again later or reset your password.';
+          userMessage = 'Whoa, too many tries! Wait a bit or use a different email.';
           break;
         case 'auth/network-request-failed':
-          userMessage = 'Network error. Check your connection.';
+          userMessage = 'Spotty connection? Check WiFi and retry.';
           break;
         default:
-          userMessage = err.message; // Fallback
+          userMessage = 'Something wiggly—try refresh or email support@yourapp.com.';
       }
       setAuthError(userMessage);
     } finally {
-      setLoginLoading(false); // Stop loading
+      setLoginLoading(false);
     }
   };
 
@@ -441,7 +457,7 @@ export default function Home({ initialProfiles = [] }) {
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
 
   if (userLoading) {
-    return <div className={styles.container}>Loading...</div>; // Simple loader
+    return <div className={styles.container}>Loading...</div>;
   }
 
   return (
@@ -563,7 +579,6 @@ export default function Home({ initialProfiles = [] }) {
           {isLoadingMore && (
             <>
               <p className={styles.noProfiles}>Loading more profiles...</p>
-              {/* Simple skeleton loaders */}
               {[1,2,3].map((i) => (
                 <div key={i} className={styles.skeletonCard}>
                   <div className={styles.skeletonImage}></div>
@@ -669,29 +684,26 @@ export default function Home({ initialProfiles = [] }) {
 
 const ProfileCard = memo(({ p, router }) => {
   const { username = '', profilePic = null, name = 'Anonymous Lady', membership = 'Regular', verified = false, area = '', ward = '', county = 'Nairobi', services = [], phone = '' } = p;
+  
   const handleClick = () => {
     if (!username || username.trim() === '') {
-      console.error('Missing or empty username for profile:', p);
-      // TODO: Replace with toast notification
-      alert('This profile lacks a username. Please update it in Profile Setup.');
-      return;
+      console.warn('Skipping click: Missing username for profile:', p.id);
+      return;  // Quiet skip—no alert
     }
     router.push(`/view-profile/${encodeURIComponent(username)}`);
   };
 
   const handleImageError = (e) => {
-    // Set to a default placeholder image instead of hiding
-    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg==';
+    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pc3NpbmcgUGljPC90ZXh0Pjwvc3ZnPg==';
   };
 
-  // Format location: Ward (Area) if ward exists, else Area, else County
-  const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county);
+  const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county || 'Location TBD');
 
   return (
     <div className={styles.profileCard} onClick={handleClick} role="listitem">
       <div className={styles.imageContainer}>
         <Image 
-          src={profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPk5vIEltYWdlPC90ZXh0Pjwvc3ZnPg=='} 
+          src={profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='} 
           alt={`${name} Profile`} 
           width={150} 
           height={150} 
@@ -746,21 +758,18 @@ export async function getStaticProps() {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
-      limit(20)
+      limit(100) // More for initial
     );
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
       .map((doc) => {
         const data = doc.data();
-        // Convert Timestamp to ISO string for serialization
         if (data.createdAt && data.createdAt.toDate) {
           data.createdAt = data.createdAt.toDate().toISOString();
         }
         return { id: doc.id, ...data };
       })
-      .filter(
-        (p) => p.username && p.name && p.email && p.phone && p.age && parseInt(p.age) >= 18
-      );
+      .filter(isProfileComplete); // ✅ Filter incomplete
   } catch (err) {
     console.error('Error fetching initial profiles:', err);
   }

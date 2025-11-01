@@ -1,5 +1,3 @@
-// pages/profile-setup.js
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -7,8 +5,7 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db } from '../lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import toast, { Toaster } from 'react-hot-toast';
+import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
 
 const servicesList = [
   '🍽️ Dinner Date',
@@ -19,27 +16,25 @@ const servicesList = [
   '🥂 Companionship / Meetup'
 ];
 
-const initialFormData = {
-  username: '',
-  name: '',
-  phone: '',
-  gender: 'Female',
-  sexualOrientation: 'Straight',
-  age: '18',
-  nationality: '',
-  county: '',
-  ward: '',
-  area: '',
-  nearby: [],
-  services: [], // ensure array so .includes won't crash
-  otherServices: '',
-  profilePic: '',
-};
-
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
-  const [formData, setFormData] = useState(initialFormData);
+  const [formData, setFormData] = useState({
+    username: '',
+    name: '',
+    phone: '',
+    gender: 'Female',
+    sexualOrientation: 'Straight',
+    age: '18',
+    nationality: '',
+    county: '',
+    ward: '',
+    area: '',
+    nearby: [],
+    services: [], // ensure array so .includes won't crash
+    otherServices: '',
+    profilePic: '',
+  });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
   const [walletBalance, setWalletBalance] = useState(0);
@@ -57,7 +52,6 @@ export default function ProfileSetup() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  const [preview, setPreview] = useState('');
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -90,10 +84,10 @@ export default function ProfileSetup() {
         }
       } catch (err) {
         console.error('Fetch profile error:', err);
-        toast.error('Failed to load profile data.');
       }
     };
     fetchProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
   // Helper function to format phone for M-Pesa (254xxxxxxxxx)
@@ -151,17 +145,21 @@ export default function ProfileSetup() {
       }
     } else {
       // normal input/select change
-      setFormData((prev) => ({ ...prev, [name]: value }));
+      if (name === 'county') {
+        setFormData((prev) => ({
+          ...prev,
+          county: value,
+          ward: '',
+          area: '',
+          nearby: [],
+        }));
+        setSelectedWard('');
+      } else {
+        setFormData((prev) => ({ ...prev, [name]: value }));
+      }
       // clear error on user interaction
       if (error) setError('');
     }
-  };
-
-  const handleCountyChange = (e) => {
-    const county = e.target.value;
-    setFormData((prev) => ({ ...prev, county, ward: '', area: '', nearby: [] }));
-    setSelectedWard('');
-    if (error) setError('');
   };
 
   const handleWardChange = (e) => {
@@ -179,51 +177,39 @@ export default function ProfileSetup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Combined validation errors
-    const validationErrors = [];
-
     // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
-      validationErrors.push('You must be 18 or older to register.');
+      setError('You must be 18 or older to register.');
+      return;
     }
 
-    // Require at least 1 selected service
+    // Require at least 1 selected service (changed from 4 since new list is shorter)
     if (!formData.services || formData.services.length < 1) {
-      validationErrors.push('Please select at least 1 service.');
-    }
-
-    // Require profile picture
-    if (!formData.profilePic) {
-      validationErrors.push('Please upload a profile picture.');
+      setError('Please select at least 1 service.');
+      return;
     }
 
     // Limit nearby places to a maximum of 4
     if (formData.nearby && formData.nearby.length > 4) {
-      validationErrors.push('You can select up to 4 nearby locations only.');
-    }
-
-    if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward || !formData.county) {
-      validationErrors.push('Please fill all required fields, including location');
-    }
-
-    if (validationErrors.length > 0) {
-      setError(validationErrors.join(' '));
+      setError('You can select up to 4 nearby locations only.');
       return;
     }
 
+    if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward || !formData.county) {
+      setError('Please fill all required fields, including location');
+      return;
+    }
     setError('');
     try {
       const fullData = { ...loggedInUser, ...formData, walletBalance };
-      // Note: Ensure Firebase Security Rules restrict writes to own profile only (e.g., allow write: if request.auth.uid == resource.id)
       await setDoc(doc(db, 'profiles', loggedInUser.id), fullData, { merge: true });
       localStorage.setItem('profileSaved', 'true');
-      toast.success('Profile updated successfully');
+      alert('Profile updated successfully');
       router.push('/');
     } catch (error) {
       console.error('Error updating profile:', error);
       setError('Failed to update profile');
-      toast.error('Failed to update profile');
     }
   };
 
@@ -281,34 +267,20 @@ export default function ProfileSetup() {
     if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
       const newBalance = walletBalance - price;
       setWalletBalance(newBalance);
-      try {
-        // Note: Ensure Firebase Security Rules restrict writes to own profile only
-        await setDoc(doc(db, 'profiles', loggedInUser.id), { 
-          membership: selectedLevel,
-          walletBalance: newBalance 
-        }, { merge: true });
-        setMembership(selectedLevel);
-        setShowPaymentChoice(false);
-        setSelectedDuration('');
-        toast.success('Upgrade successful!');
-      } catch (error) {
-        console.error('Wallet upgrade error:', error);
-        toast.error('Failed to process wallet upgrade.');
-      }
+      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
+        membership: selectedLevel,
+        walletBalance: newBalance 
+      }, { merge: true });
+      setMembership(selectedLevel);
+      setShowPaymentChoice(false);
+      setSelectedDuration('');
+      alert('Upgrade successful!');
     }
   };
 
   const handleConfirmMpesaUpgrade = async () => {
     try {
-      // Validate phone before proceeding
-      const phoneToUse = mpesaPhone || formData.phone;
-      if (!phoneToUse) {
-        toast.error('Phone number is required for M-Pesa payment.');
-        return;
-      }
-      formatPhoneForMpesa(phoneToUse); // Throws if invalid
-
-      const formattedPhone = formatPhoneForMpesa(phoneToUse);
+      const formattedPhone = formatPhoneForMpesa(mpesaPhone || formData.phone); // Use mpesaPhone or profile phone
       const plans = {
         Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
         VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
@@ -321,18 +293,16 @@ export default function ProfileSetup() {
 
       // Store pending transaction in Firestore
       const checkoutRequestID = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await setDoc(doc(db, 'profiles', loggedInUser.id), { 
-        pendingTransaction: {
-          userId: loggedInUser.id,
-          amount: price,
-          phone: formattedPhone,
-          type: 'upgrade',
-          level: selectedLevel,
-          duration: selectedDuration,
-          status: 'pending',
-          createdAt: new Date().toISOString(),
-        }
-      }, { merge: true });
+      await addDoc(collection(db, 'pendingTransactions'), {
+        userId: loggedInUser.id,
+        amount: price,
+        phone: formattedPhone,
+        type: 'upgrade',
+        level: selectedLevel,
+        duration: selectedDuration,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      });
 
       // Initiate STK Push
       const response = await fetch('/api/upgrade', {
@@ -366,7 +336,7 @@ export default function ProfileSetup() {
               setMembership(selectedLevel);
               setShowProcessingModal(false);
               clearInterval(pollInterval);
-              toast.success('Upgrade confirmed and applied automatically!');
+              alert('Upgrade confirmed and applied automatically!');
             }
           }
         }, 5000); // Poll every 5 seconds
@@ -375,13 +345,13 @@ export default function ProfileSetup() {
       } else {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
-        toast.error(`Payment initiation failed: ${errorMsg}`);
+        alert(`Error: ${errorMsg}`);
         console.error('Full error data:', errorData);
       }
     } catch (error) {
       console.error('Upgrade M-Pesa error:', error);
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
-      toast.error(`Error: ${errorMsg}`);
+      alert(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
   };
@@ -398,7 +368,6 @@ export default function ProfileSetup() {
     } catch (error) {
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
       setError(errorMsg);
-      toast.error(errorMsg);
     }
   };
 
@@ -408,9 +377,6 @@ export default function ProfileSetup() {
       return;
     }
     try {
-      // Validate phone before proceeding
-      formatPhoneForMpesa(formData.phone); // Throws if invalid
-
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       const shortUserId = shortenUserId(loggedInUser.id);
       const accountRef = `wal_${shortUserId}`; // e.g., wal_nxLdK1XA5 (15 chars)
@@ -427,18 +393,18 @@ export default function ProfileSetup() {
       });
       if (response.ok) {
         const data = await response.json();
-        toast.success(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
+        alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
         setShowAddFundModal(false);
       } else {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
-        toast.error(`Error: ${errorMsg}`);
+        alert(`Error: ${errorMsg}`);
         console.error('Full error data:', errorData);
       }
     } catch (error) {
       console.error('Add fund error:', error);
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
-      toast.error(`Error: ${errorMsg}`);
+      alert(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
   };
@@ -446,53 +412,24 @@ export default function ProfileSetup() {
   const handleLogout = () => {
     localStorage.removeItem('loggedInUser');
     setLoggedInUser(null);
-    setFormData(initialFormData); // Reset form data to avoid stale data on re-login
     router.push('/');
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const tempUrl = URL.createObjectURL(file);
-      setPreview(tempUrl);
-      const formDataToSend = new FormData();
-      formDataToSend.append('profilePic', file);
-      formDataToSend.append('userId', loggedInUser.id); // For auth/validation in backend
-  
-      try {
-        const response = await fetch('/api/upload-profile-pic', {
-          method: 'POST',
-          body: formDataToSend,
-        });
-  
-        if (response.ok) {
-          const data = await response.json();
-          setFormData((prev) => ({ ...prev, profilePic: data.url }));
-          toast.success('Profile picture uploaded and moderated successfully.');
-          setPreview('');
-          URL.revokeObjectURL(tempUrl);
-        } else {
-          const errorData = await response.json();
-          const rejectionReason = errorData.error || 'Failed to upload image.';
-          setError(rejectionReason);
-          toast.error(rejectionReason);
-          setPreview('');
-          URL.revokeObjectURL(tempUrl);
-        }
-      } catch (err) {
-        console.error('Image upload error:', err);
-        const rejectionReason = 'Failed to upload image due to network error.';
-        setError(rejectionReason);
-        toast.error(rejectionReason);
-        setPreview('');
-        URL.revokeObjectURL(tempUrl);
-      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, profilePic: reader.result }));
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const counties = Object.keys(locations);
-  const wards = formData.county ? Object.keys(locations[formData.county]) : [];
-  const areas = selectedWard && formData.county ? locations[formData.county][selectedWard] : [];
+  const countyList = Object.keys(locations).sort();
+  const selectedCounty = formData.county || '';
+  const wards = selectedCounty && locations[selectedCounty] ? Object.keys(locations[selectedCounty]) : [];
+  const areas = selectedWard && locations[selectedCounty] ? locations[selectedCounty][selectedWard] : [];
 
   const plans = {
     Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
@@ -502,7 +439,6 @@ export default function ProfileSetup() {
 
   return (
     <div className={styles.container}>
-      <Toaster />
       <Head>
         <title>Meet Connect Ladies - Profile Setup</title>
         <meta name="description" content="Set up your profile on Meet Connect Ladies for gentlemen." />
@@ -692,9 +628,9 @@ export default function ProfileSetup() {
             <h1 className={styles.setupTitle}>My Profile</h1>
             <div className={styles.profilePicSection}>
               <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
-                {preview || formData.profilePic ? (
+                {formData.profilePic ? (
                   <Image
-                    src={preview || formData.profilePic}
+                    src={formData.profilePic}
                     alt="Profile Picture"
                     width={150}
                     height={150}
@@ -800,11 +736,11 @@ export default function ProfileSetup() {
                 <select
                   name="county"
                   value={formData.county}
-                  onChange={handleCountyChange}
+                  onChange={handleChange}
                   className={styles.select}
                 >
                   <option value="">Select County</option>
-                  {counties.map((county) => (
+                  {countyList.map((county) => (
                     <option key={county} value={county}>
                       {county}
                     </option>
@@ -883,19 +819,6 @@ export default function ProfileSetup() {
                   ))}
                 </div>
               </label>
-
-              {formData.services?.includes('Other Services') && (
-                <label className={styles.label}>
-                  Add other services
-                  <input
-                    type="text"
-                    name="otherServices"
-                    value={formData.otherServices}
-                    onChange={handleChange}
-                    className={styles.input}
-                  />
-                </label>
-              )}
 
               <button type="submit" className={styles.button}>
                 Save Profile
