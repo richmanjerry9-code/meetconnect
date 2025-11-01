@@ -57,6 +57,7 @@ export default function ProfileSetup() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
+  const [preview, setPreview] = useState('');
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -452,29 +453,39 @@ export default function ProfileSetup() {
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const formData = new FormData();
-      formData.append('profilePic', file);
-      formData.append('userId', loggedInUser.id); // For auth/validation in backend
+      const tempUrl = URL.createObjectURL(file);
+      setPreview(tempUrl);
+      const formDataToSend = new FormData();
+      formDataToSend.append('profilePic', file);
+      formDataToSend.append('userId', loggedInUser.id); // For auth/validation in backend
   
       try {
         const response = await fetch('/api/upload-profile-pic', {
           method: 'POST',
-          body: formData,
+          body: formDataToSend,
         });
   
         if (response.ok) {
           const data = await response.json();
           setFormData((prev) => ({ ...prev, profilePic: data.url }));
           toast.success('Profile picture uploaded and moderated successfully.');
+          setPreview('');
+          URL.revokeObjectURL(tempUrl);
         } else {
           const errorData = await response.json();
-          setError(errorData.message || 'Failed to upload image.');
-          toast.error(errorData.message || 'Failed to upload image.');
+          const rejectionReason = errorData.error || 'Failed to upload image.';
+          setError(rejectionReason);
+          toast.error(rejectionReason);
+          setPreview('');
+          URL.revokeObjectURL(tempUrl);
         }
       } catch (err) {
         console.error('Image upload error:', err);
-        setError('Failed to upload image.');
-        toast.error('Failed to upload image.');
+        const rejectionReason = 'Failed to upload image due to network error.';
+        setError(rejectionReason);
+        toast.error(rejectionReason);
+        setPreview('');
+        URL.revokeObjectURL(tempUrl);
       }
     }
   };
@@ -681,9 +692,9 @@ export default function ProfileSetup() {
             <h1 className={styles.setupTitle}>My Profile</h1>
             <div className={styles.profilePicSection}>
               <label htmlFor="profilePicUpload" className={styles.profilePicLabel}>
-                {formData.profilePic ? (
+                {preview || formData.profilePic ? (
                   <Image
-                    src={formData.profilePic}
+                    src={preview || formData.profilePic}
                     alt="Profile Picture"
                     width={150}
                     height={150}

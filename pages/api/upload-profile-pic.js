@@ -1,96 +1,115 @@
 // pages/api/upload-profile-pic.js
-
+import { createRouter, expressWrapper } from 'next-connect';
 import multer from 'multer';
-import { Sightengine } from 'sightengine'; // SDK for moderation
-import admin from '../../lib/firebase-admin'; // Your Firebase Admin init
 import fs from 'fs';
 import path from 'path';
+import sightengine from 'sightengine';
 
-// Temp storage with Multer (disk storage for Sightengine compatibility)
-const upload = multer({ dest: '/tmp/uploads/' }); // Use /tmp for Vercel/serverless
+// Configure Sightengine
+const sightengineClient = sightengine(
+  process.env.SIGHTENGINE_USER,
+  process.env.SIGHTENGINE_SECRET
+);
 
-// Sightengine client (use env vars for security)
-const sightengineClient = new Sightengine({
-  apiUser: process.env.SIGHTENGINE_USER,
-  apiSecret: process.env.SIGHTENGINE_SECRET,
+// Multer config (temp storage)
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: './public/uploads', // Temp folder
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
 });
 
-// API handler
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
+// Create NextConnect router
+const router = createRouter();
+
+// Apply Multer middleware with expressWrapper
+router.use(expressWrapper(upload.single('profilePic')));
+
+// POST upload route
+router.post(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  const fullPath = path.resolve(req.file.path);
+  const filename = req.file.filename;
+  const permanentDir = path.join(process.cwd(), 'public', 'uploads', 'profiles');
+  const permanentPath = path.join(permanentDir, filename);
+
+  // Ensure permanent dir exists
+  if (!fs.existsSync(permanentDir)) {
+    fs.mkdirSync(permanentDir, { recursive: true });
   }
 
-  // Multer middleware (parse form data)
-  upload.single('profilePic')(req, res, async (err) => {
-    if (err) {
-      return res.status(500).json({ message: 'File upload error' });
+  try {
+    // Moderate image with multiple models
+    const moderation = await sightengineClient.check(['nudity-2.1', 'wad', 'scam', 'offensive']).set_file(fullPath);
+    console.log('Full moderation response:', moderation);
+
+    // Handle invalid API credentials or errors
+    if (moderation.status !== 'success') {
+      throw new Error(`Sightengine API error: ${moderation.error?.message || JSON.stringify(moderation)}`);
     }
 
-    const { userId } = req.body; // Validate user
-    const file = req.file;
+    let errorMessage = null;
 
-    if (!file) {
-      return res.status(400).json({ message: 'No file uploaded' });
+    // Check for nudity (using advanced model)
+    const nudity = moderation.nudity || {};
+    if (nudity.sexual_activity > 0.5 || nudity.sexual_display > 0.5 || nudity.erotica > 0.5) {
+      errorMessage = 'Nudity or pornographic content is prohibited. Please choose another picture.';
+    } else if (nudity.suggestive > 0.5) {
+      errorMessage = 'Suggestive content is not allowed. Please choose another picture.';
     }
 
-    const imagePath = file.path;
-
-    try {
-      // Step 1: Moderate with Sightengine
-      const moderationResult = await sightengineClient.check([
-        'nudity',       // Detect nudity
-        'wad',          // Weapons, alcohol, drugs
-        'scam',         // Text-based scams
-        'face-attributes', // Age/gender if needed
-        'offensive',    // Hate symbols
-      ]).set_file(imagePath);
-
-      // Check results (customize thresholds based on your policy)
-      const isSafe = 
-        moderationResult.nudity.none > 0.9 &&  // High confidence no nudity
-        !moderationResult.weapon && 
-        !moderationResult.alcohol && 
-        !moderationResult.drugs &&
-        moderationResult.scam.probability < 0.5 &&  // Low scam probability
-        moderationResult.offensive.prob < 0.5;
-
-      if (!isSafe) {
-        // Delete temp file
-        fs.unlinkSync(imagePath);
-        return res.status(400).json({ message: 'Image contains inappropriate content. Please upload a different one.' });
-      }
-
-      // Step 2: Upload to Firebase Storage if safe
-      const bucket = admin.storage().bucket();
-      const fileName = `profiles/${userId}/${Date.now()}_${file.originalname}`;
-      const uploadedFile = await bucket.upload(imagePath, {
-        destination: fileName,
-        metadata: { contentType: file.mimetype },
-      });
-
-      // Get public URL
-      const url = await uploadedFile[0].getSignedUrl({
-        action: 'read',
-        expires: '03-09-2491', // Long expiration
-      });
-
-      // Delete temp file
-      fs.unlinkSync(imagePath);
-
-      // Return URL to frontend
-      res.status(200).json({ url: url[0] });
-    } catch (error) {
-      console.error('Moderation/Upload error:', error);
-      // Clean up temp file on error
-      if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-      res.status(500).json({ message: 'Server error during image processing' });
+    // Check for WAD (Weapons, Alcohol, Drugs)
+    if (!errorMessage && (moderation.weapon > 0.5 || moderation.alcohol > 0.5 || moderation.drugs > 0.5)) {
+      errorMessage = 'Images containing weapons, alcohol, or drugs are not allowed. Please choose another picture.';
     }
-  });
-}
 
-export const config = {
-  api: {
-    bodyParser: false, // Disable Next.js body parser for Multer
+    // Check for scam
+    if (!errorMessage && moderation.scam?.probability > 0.5) {
+      errorMessage = 'Image may contain scam-related content. Please choose another picture.';
+    }
+
+    // Check for offensive content
+    if (!errorMessage && moderation.offensive?.prob > 0.5) {
+      errorMessage = 'Image contains offensive content. Please choose another picture.';
+    }
+
+    if (errorMessage) {
+      fs.unlinkSync(fullPath);
+      return res.status(400).json({ error: errorMessage });
+    }
+
+    // Move to permanent storage if safe
+    fs.renameSync(fullPath, permanentPath);
+    const imageUrl = `/uploads/profiles/${filename}`;
+
+    res.status(200).json({
+      message: 'Upload successful',
+      url: imageUrl,
+      moderation: moderation,
+    });
+  } catch (err) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Upload failed', details: err.message });
+    if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+  }
+});
+
+export default router.handler({
+  onError(err, req, res) {
+    console.error(err);
+    res.status(500).json({ error: 'Something went wrong' });
   },
+  onNoMatch(req, res) {
+    res.status(405).json({ error: `Method ${req.method} not allowed` });
+  },
+});
+
+// Disable bodyParser for Multer
+export const config = {
+  api: { bodyParser: false },
 };
