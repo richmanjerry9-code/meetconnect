@@ -1,3 +1,6 @@
+// Updated: profilesetup.js
+// Fixed syntax error in handleChange: missing closing parenthesis in setFormData call.
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -87,7 +90,7 @@ export default function ProfileSetup() {
       }
     };
     fetchProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [router]);
 
   // Helper function to format phone for M-Pesa (254xxxxxxxxx)
@@ -201,15 +204,56 @@ export default function ProfileSetup() {
       return;
     }
     setError('');
+
+    let profilePicUrl = formData.profilePic;
+
+    if (profilePicUrl && profilePicUrl.startsWith('data:image')) {
+      try {
+        // Upload to Cloudinary
+        const res = await fetch('/api/uploadProfilePic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: profilePicUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) {
+          setError(data.error || 'Failed to upload image to Cloudinary');
+          return;
+        }
+        profilePicUrl = data.url;
+
+        // Moderate the image
+        const modRes = await fetch('/api/moderateImage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: profilePicUrl }),
+        });
+        const modData = await modRes.json();
+        if (!modRes.ok || !modData.isSafe) {
+          setError(modData.error || 'Image contains inappropriate content. Please upload a different photo.');
+          return;
+        }
+      } catch (uploadError) {
+        console.error('Upload or moderation error:', uploadError);
+        setError('Failed to process image. Please try again.');
+        return;
+      }
+    }
+
     try {
-      const fullData = { ...loggedInUser, ...formData, walletBalance };
+      const fullData = { 
+        ...loggedInUser, 
+        ...formData, 
+        profilePic: profilePicUrl, 
+        walletBalance 
+      };
       await setDoc(doc(db, 'profiles', loggedInUser.id), fullData, { merge: true });
       localStorage.setItem('profileSaved', 'true');
       alert('Profile updated successfully');
       router.push('/');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      setError('Failed to update profile');
+    } catch (saveError) {
+      console.error('Error saving profile:', saveError);
+      setError('Failed to save profile');
     }
   };
 

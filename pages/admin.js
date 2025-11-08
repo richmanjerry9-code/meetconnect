@@ -37,6 +37,7 @@ export default function AdminPanel() {
     phone: '',
     role: 'User',
     membership: 'Regular',
+    active: true, // ✅ New: Active status
     name: '',
     gender: 'Female',
     sexualOrientation: 'Straight',
@@ -202,6 +203,7 @@ export default function AdminPanel() {
 
         const profileData = {
           ...form,
+          active: form.active, // ✅ Include active status
           email: fakeEmail,
           password: fakePassword,
           createdAt: Date.now(),
@@ -226,6 +228,7 @@ export default function AdminPanel() {
         phone: '',
         role: 'User',
         membership: 'Regular',
+        active: true, // ✅ Reset to active
         name: '',
         gender: 'Female',
         sexualOrientation: 'Straight',
@@ -246,6 +249,26 @@ export default function AdminPanel() {
     } catch (error) {
       console.error('Error saving profile:', error);
       alert('Failed to save profile.');
+    }
+  };
+
+  // ✅ New: Handle toggle active/inactive
+  const handleToggleActive = async (userId) => {
+    const user = users.find((u) => u.id === userId);
+    if (!user) return alert('User not found.');
+    if (user.role === 'Admin') return alert('Cannot disable admin account!');
+    const newActive = !user.active;
+    try {
+      await updateDoc(doc(db, 'profiles', userId), { active: newActive });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, active: newActive } : u))
+      );
+      alert(`Account ${newActive ? 'activated' : 'disabled'} successfully!`);
+      logActivity('toggle_active', { userId, active: newActive, username: user.username });
+      setRefresh(!refresh);
+    } catch (error) {
+      console.error('Error toggling active status:', error);
+      alert('Failed to toggle account status.');
     }
   };
 
@@ -348,6 +371,7 @@ export default function AdminPanel() {
       ...user,
       services: user.services || [],
       nearby: user.nearby || [],
+      active: user.active || true, // ✅ Include active
     });
     setSelectedWard(user.ward || '');
     setIsEdit(true);
@@ -578,6 +602,17 @@ export default function AdminPanel() {
           <option>VIP</option>
           <option>VVIP</option>
         </select>
+        {/* ✅ New: Active toggle in form */}
+        <label style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
+          Active Account:
+          <input
+            type="checkbox"
+            name="active"
+            checked={form.active}
+            onChange={handleChange}
+            style={{ marginLeft: '10px' }}
+          />
+        </label>
         <input
           name="name"
           placeholder="Full Name"
@@ -740,6 +775,8 @@ export default function AdminPanel() {
               <th>Phone</th>
               <th>Role</th>
               <th>Membership</th>
+              {/* ✅ New: Status column */}
+              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -785,6 +822,12 @@ export default function AdminPanel() {
                     <option>VVIP</option>
                   </select>
                 </td>
+                {/* ✅ New: Status toggle */}
+                <td>
+                  <span style={{ color: u.active ? 'green' : 'red', fontWeight: 'bold' }}>
+                    {u.active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
                 <td style={{ position: 'relative' }}>
                   <button
                     onClick={(e) => {
@@ -802,6 +845,25 @@ export default function AdminPanel() {
                     }}
                   >
                     Edit
+                  </button>
+                  {/* ✅ New: Toggle Active button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleActive(u.id);
+                    }}
+                    style={{
+                      background: u.active ? '#f44336' : '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      padding: '5px 10px',
+                      marginRight: '5px',
+                      cursor: 'pointer',
+                      pointerEvents: 'auto',
+                      fontSize: '0.8rem',
+                    }}
+                  >
+                    {u.active ? 'Disable' : 'Activate'}
                   </button>
                   <button
                     onClick={(e) => {
@@ -840,6 +902,8 @@ export default function AdminPanel() {
             <option value="profile_update">Profile Updated</option>
             <option value="profile_delete">Profile Deleted</option>
             <option value="membership_update">Membership Updated</option>
+            {/* ✅ New: Add toggle_active to filter options */}
+            <option value="toggle_active">Account Toggled</option>
             <option value="admin_login">Admin Login</option>
             <option value="admin_logout">Admin Logout</option>
           </select>
