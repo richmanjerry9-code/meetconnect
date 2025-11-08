@@ -201,13 +201,14 @@ export default function Home({ initialProfiles = [] }) {
       { threshold: 0 }
     );
 
-    if (sentinelRef.current) {
-      observer.observe(sentinelRef.current);
+    const currentSentinel = sentinelRef.current; // Copy ref here
+    if (currentSentinel) {
+      observer.observe(currentSentinel);
     }
 
     return () => {
-      if (sentinelRef.current) {
-        observer.unobserve(sentinelRef.current);
+      if (currentSentinel) { // Use copied value in cleanup
+        observer.unobserve(currentSentinel);
       }
     };
   }, [hasMore, isLoadingMore, loadMoreProfiles]);
@@ -240,7 +241,7 @@ export default function Home({ initialProfiles = [] }) {
     setFilteredLocations([]);
   };
 
-  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
+  const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
 
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');

@@ -13,6 +13,7 @@
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.8.0",
     "dotenv": "^17.2.3",
     "express-rate-limit": "^8.1.0",
     "firebase": "^12.4.0",
@@ -36,12 +37,15 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "autoprefixer": "^10.4.21",
     "eslint": "^9.39.0",
     "eslint-config-next": "15.5.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react": "^7.37.5",
-    "prettier": "^3.6.2"
+    "postcss": "^8.5.6",
+    "prettier": "^3.6.2",
+    "tailwindcss": "^4.1.17"
   },
   "overrides": {
     "multer": "^2.0.0"
