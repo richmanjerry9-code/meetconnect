@@ -233,6 +233,40 @@ export default function Home({ initialProfiles = [] }) {
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
 
+  // ✅ NEW: Auto-detect and set filters if search term exactly matches a known ward
+  useEffect(() => {
+    if (!debouncedSearchLocation) {
+      setSelectedWard('');
+      setSelectedCounty('');
+      return;
+    }
+
+    const lowerSearch = debouncedSearchLocation.trim().toLowerCase();
+    let foundWard = null;
+    let foundCounty = null;
+
+    // Search for exact ward match across counties
+    Object.keys(Counties).some((county) => {
+      return Object.keys(Counties[county]).some((ward) => {
+        if (ward.toLowerCase() === lowerSearch) {
+          foundWard = ward;
+          foundCounty = county;
+          return true; // Break inner loop
+        }
+        return false;
+      });
+    });
+
+    if (foundWard && foundCounty) {
+      setSelectedCounty(foundCounty);
+      setSelectedWard(foundWard);
+      setSelectedArea('');
+      // Optionally auto-update search input to full format
+      setSearchLocation(`${foundCounty}, ${foundWard}`);
+      setFilteredLocations([]); // Hide dropdown since exact match
+    }
+  }, [debouncedSearchLocation]);
+
   const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
@@ -695,7 +729,7 @@ const ProfileCard = memo(({ p, router }) => {
   };
 
   const handleImageError = (e) => {
-    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pc3NpbmcgUGljPC90ZXh0Pjwvc3ZnPg==';
+    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pc3NpbmcgUGljPC90ZXh0Pjwvc3ZnPg==';
   };
 
   const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county || 'Location TBD');
