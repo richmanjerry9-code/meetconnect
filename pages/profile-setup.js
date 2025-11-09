@@ -1,22 +1,20 @@
-// Updated: profilesetup.js
-// Fixed syntax error in handleChange: missing closing parenthesis in setFormData call.
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase'; // Added auth
 import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
+import { signOut } from 'firebase/auth'; // Added signOut import
 
 const servicesList = [
-  '🍽️ Dinner Date',
-  '💬 Just Vibes',
-  '❤️ Relationship',
-  '🌆 Night Out',
-  '👥 Friendship',
-  '🥂 Companionship / Meetup'
+  'Dinner Date',
+  'Just Vibes',
+  'Relationship',
+  'Night Out',
+  'Friendship',
+  'Companionship / Meetup'
 ];
 
 export default function ProfileSetup() {
@@ -55,6 +53,8 @@ export default function ProfileSetup() {
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
+  const [loading, setLoading] = useState(true); // ✅ New loading state for profile fetch
+  const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -86,14 +86,15 @@ export default function ProfileSetup() {
           setMembership('Regular');
         }
       } catch (err) {
-        console.error('Fetch profile error:', err);
+        setError('Failed to load profile. Please refresh.');
+      } finally {
+        setLoading(false);
       }
     };
     fetchProfile();
-     
   }, [router]);
 
-  // Helper function to format phone for M-Pesa (254xxxxxxxxx)
+  // ✅ Helper to format phone for M-Pesa (254xxxxxxxxx)
   const formatPhoneForMpesa = (phone) => {
     if (!phone) return '';
     let formatted = phone.replace(/[\s+]/g, ''); // Remove spaces and +
@@ -112,7 +113,7 @@ export default function ProfileSetup() {
     return formatted;
   };
 
-  // Helper to shorten userId to last 10 chars for ref
+  // ✅ Helper to shorten userId to last 10 chars for ref
   const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
   const handleChange = (e) => {
@@ -179,28 +180,33 @@ export default function ProfileSetup() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setSaveLoading(true);
 
     // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
       setError('You must be 18 or older to register.');
+      setSaveLoading(false);
       return;
     }
 
     // Require at least 1 selected service (changed from 4 since new list is shorter)
     if (!formData.services || formData.services.length < 1) {
       setError('Please select at least 1 service.');
+      setSaveLoading(false);
       return;
     }
 
     // Limit nearby places to a maximum of 4
     if (formData.nearby && formData.nearby.length > 4) {
       setError('You can select up to 4 nearby locations only.');
+      setSaveLoading(false);
       return;
     }
 
     if (!formData.name || !formData.phone || !formData.age || !formData.area || !formData.ward || !formData.county) {
       setError('Please fill all required fields, including location');
+      setSaveLoading(false);
       return;
     }
     setError('');
@@ -218,6 +224,7 @@ export default function ProfileSetup() {
         const data = await res.json();
         if (!res.ok || !data.url) {
           setError(data.error || 'Failed to upload image to Cloudinary');
+          setSaveLoading(false);
           return;
         }
         profilePicUrl = data.url;
@@ -231,11 +238,12 @@ export default function ProfileSetup() {
         const modData = await modRes.json();
         if (!modRes.ok || !modData.isSafe) {
           setError(modData.error || 'Image contains inappropriate content. Please upload a different photo.');
+          setSaveLoading(false);
           return;
         }
       } catch (uploadError) {
-        console.error('Upload or moderation error:', uploadError);
         setError('Failed to process image. Please try again.');
+        setSaveLoading(false);
         return;
       }
     }
@@ -252,8 +260,9 @@ export default function ProfileSetup() {
       alert('Profile updated successfully');
       router.push('/');
     } catch (saveError) {
-      console.error('Error saving profile:', saveError);
       setError('Failed to save profile');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -390,10 +399,8 @@ export default function ProfileSetup() {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
         alert(`Error: ${errorMsg}`);
-        console.error('Full error data:', errorData);
       }
     } catch (error) {
-      console.error('Upgrade M-Pesa error:', error);
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
       alert(`Error: ${errorMsg}`);
       setError(errorMsg);
@@ -443,19 +450,18 @@ export default function ProfileSetup() {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
         alert(`Error: ${errorMsg}`);
-        console.error('Full error data:', errorData);
       }
     } catch (error) {
-      console.error('Add fund error:', error);
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
       alert(`Error: ${errorMsg}`);
       setError(errorMsg);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     setLoggedInUser(null);
+    await signOut(auth);
     router.push('/');
   };
 
@@ -470,16 +476,19 @@ export default function ProfileSetup() {
     }
   };
 
-  const countyList = Object.keys(locations).sort();
-  const selectedCounty = formData.county || '';
-  const wards = selectedCounty && locations[selectedCounty] ? Object.keys(locations[selectedCounty]) : [];
-  const areas = selectedWard && locations[selectedCounty] ? locations[selectedCounty][selectedWard] : [];
+  const countyList = useMemo(() => Object.keys(locations).sort(), []);
+  const wards = useMemo(() => formData.county && locations[formData.county] ? Object.keys(locations[formData.county]) : [], [formData.county]);
+  const areas = useMemo(() => selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : [], [formData.county, selectedWard]);
 
-  const plans = {
+  const plans = useMemo(() => ({
     Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
     VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
     VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
-  };
+  }), []);
+
+  if (loading) {
+    return <div className={styles.container}>Loading profile...</div>;
+  }
 
   return (
     <div className={styles.container}>
@@ -492,7 +501,7 @@ export default function ProfileSetup() {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect Ladies ❤️
+            Meet Connect Ladies 
           </h1>
         </div>
         <div className={styles.authButtons}>
@@ -508,7 +517,7 @@ export default function ProfileSetup() {
             <div className={styles.walletSection}>
               <div className={styles.walletStripe}></div>
               <p className={styles.walletLabel}>Available Wallet Balance</p>
-              <p className={styles.walletBalance}>KSh{walletBalance}</p>
+              <p className={styles.walletBalance}>KSh {walletBalance}</p>
               <button onClick={handleAddFund} className={styles.addFundButton}>
                 Add Fund
               </button>
@@ -681,7 +690,7 @@ export default function ProfileSetup() {
                     className={styles.profilePic}
                   />
                 ) : (
-                  <div className={styles.profilePicPlaceholder}>📷</div>
+                  <div className={styles.profilePicPlaceholder}></div>
                 )}
               </label>
               <input
@@ -864,8 +873,8 @@ export default function ProfileSetup() {
                 </div>
               </label>
 
-              <button type="submit" className={styles.button}>
-                Save Profile
+              <button type="submit" className={styles.button} disabled={saveLoading}>
+                {saveLoading ? 'Saving...' : 'Save Profile'}
               </button>
             </form>
           </div>
@@ -874,3 +883,4 @@ export default function ProfileSetup() {
     </div>
   );
 }
+
