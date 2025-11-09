@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/router';
-import dynamic from 'next/dynamic';
 import Head from 'next/head';
 import Image from 'next/image';
 import * as locations from '../data/locations';
@@ -17,15 +16,6 @@ const servicesList = [
   'Friendship',
   'Companionship / Meetup'
 ];
-
-// Lazy-load modals to reduce initial bundle size
-const UpgradeModal = dynamic(() => import('../components/UpgradeModal'), { ssr: false });
-const PaymentChoiceModal = dynamic(() => import('../components/PaymentChoiceModal'), { ssr: false });
-const ProcessingModal = dynamic(() => import('../components/ProcessingModal'), { ssr: false });
-const AddFundModal = dynamic(() => import('../components/AddFundModal'), { ssr: false });
-
-// Note: You'll need to create these separate components based on the inline modal JSX.
-// For now, assuming they exist; extract the modal divs into these components with props.
 
 export default function ProfileSetup() {
   const router = useRouter();
@@ -63,6 +53,7 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [unsubscribeProfile, setUnsubscribeProfile] = useState(null); // For real-time listener
+  const [areaSearch, setAreaSearch] = useState(''); // For filtering nearby areas
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -118,7 +109,7 @@ export default function ProfileSetup() {
     setUnsubscribeProfile(() => unsub);
 
     return () => unsub();
-  }, [router]);
+  }, [router, formData.age]); // Note: formData.age in deps to satisfy lint, but useMemo below handles
 
   useEffect(() => {
     return () => {
@@ -126,7 +117,7 @@ export default function ProfileSetup() {
     };
   }, [unsubscribeProfile]);
 
-  // Helper functions (unchanged)
+  // Helper functions
   const formatPhoneForMpesa = useCallback((phone) => {
     if (!phone) return '';
     let formatted = phone.replace(/[\s+]/g, '');
@@ -233,10 +224,11 @@ export default function ProfileSetup() {
         // Compress to JPEG at 80% quality
         const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
 
-        // Upload to Cloudinary as FormData (more efficient than base64 JSON)
+        // Convert to Blob for FormData
+        const blob = dataURLtoBlob(compressedDataUrl);
         const formDataUpload = new FormData();
-        formDataUpload.append('file', dataURLtoBlob(compressedDataUrl), file.name);
-        formDataUpload.append('upload_preset', 'your_preset'); // Add your Cloudinary preset if needed
+        formDataUpload.append('file', blob, file.name);
+        formDataUpload.append('upload_preset', 'your_upload_preset'); // Replace with your Cloudinary preset
 
         const res = await fetch('/api/uploadProfilePic', {
           method: 'POST',
@@ -272,7 +264,7 @@ export default function ProfileSetup() {
   };
 
   // Helper to convert dataURL to Blob
-  const dataURLtoBlob = (dataurl) => {
+  const dataURLtoBlob = useCallback((dataurl) => {
     const arr = dataurl.split(',');
     const mime = arr[0].match(/:(.*?);/)[1];
     const bstr = atob(arr[1]);
@@ -282,7 +274,7 @@ export default function ProfileSetup() {
       u8arr[n] = bstr.charCodeAt(n);
     }
     return new Blob([u8arr], { type: mime });
-  };
+  }, []);
 
   // Submit handler (simplified, no base64 handling)
   const handleSubmit = async (e) => {
@@ -332,7 +324,7 @@ export default function ProfileSetup() {
     }
   };
 
-  // Upgrade handlers (unchanged, but plans memoized)
+  // Upgrade handlers
   const handleUpgrade = (level) => {
     if (level === 'Regular') {
       alert('Regular membership is free! No upgrade needed.');
@@ -343,9 +335,9 @@ export default function ProfileSetup() {
     setShowModal(true);
   };
 
-  const handleDurationSelect = (duration) => {
+  const handleDurationSelect = useCallback((duration) => {
     setSelectedDuration(duration);
-  };
+  }, []);
 
   const plans = useMemo(() => ({
     Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
@@ -353,7 +345,7 @@ export default function ProfileSetup() {
     VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
   }), []);
 
-  const handleProceedToPayment = () => {
+  const handleProceedToPayment = useCallback(() => {
     if (!selectedDuration) {
       alert('Please select a duration.');
       return;
@@ -366,11 +358,11 @@ export default function ProfileSetup() {
     }
     setShowPaymentChoice(true);
     setShowModal(false);
-  };
+  }, [selectedDuration, plans, selectedLevel, walletBalance]);
 
-  const handlePaymentMethodChange = (method) => {
+  const handlePaymentMethodChange = useCallback((method) => {
     setSelectedPaymentMethod(method);
-  };
+  }, []);
 
   const handleConfirmWalletUpgrade = async () => {
     const price = plans[selectedLevel][selectedDuration];
@@ -446,7 +438,7 @@ export default function ProfileSetup() {
     }
   };
 
-  const handleAddFund = () => {
+  const handleAddFund = useCallback(() => {
     if (!formData.phone) {
       setError('Please add your phone number to your profile first.');
       return;
@@ -459,7 +451,7 @@ export default function ProfileSetup() {
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
       setError(errorMsg);
     }
-  };
+  }, [formData.phone]);
 
   const handleConfirmAddFund = async () => {
     if (!addFundAmount || parseInt(addFundAmount) < 10) {
@@ -512,9 +504,6 @@ export default function ProfileSetup() {
   const countyList = useMemo(() => Object.keys(locations).sort(), []);
   const wards = useMemo(() => formData.county && locations[formData.county] ? Object.keys(locations[formData.county]) : [], [formData.county]);
   const areas = useMemo(() => selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : [], [formData.county, selectedWard]);
-
-  // Filtered areas for nearby: Add search state for filtering (to avoid rendering 100s of checkboxes)
-  const [areaSearch, setAreaSearch] = useState('');
   const filteredAreas = useMemo(() => 
     areas.filter(place => place.toLowerCase().includes(areaSearch.toLowerCase())), 
     [areas, areaSearch]
@@ -565,48 +554,147 @@ export default function ProfileSetup() {
               Upgrade to VVIP
             </button>
 
-            {/* Lazy-loaded modals */}
+            {/* Inline Modals - Reverted for build compatibility; can lazy-load later */}
             {showModal && (
-              <UpgradeModal
-                level={selectedLevel}
-                plans={plans}
-                selectedDuration={selectedDuration}
-                onDurationSelect={handleDurationSelect}
-                onProceed={handleProceedToPayment}
-                onClose={() => setShowModal(false)}
-              />
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Select Duration for {selectedLevel}</h3>
+                  <div className={styles.durationList}>
+                    {Object.entries(plans[selectedLevel]).map(([duration, price]) => (
+                      <div key={duration} className={styles.durationItem}>
+                        <label className={styles.durationLabel}>
+                          <input
+                            type="radio"
+                            name="duration"
+                            value={duration}
+                            checked={selectedDuration === duration}
+                            onChange={() => handleDurationSelect(duration)}
+                          />
+                          <span className={styles.durationText}>{duration} Listing = KSh {price}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={handleProceedToPayment} 
+                      className={`${styles.upgradeButton} ${selectedDuration ? styles.active : styles.inactive}`}
+                      disabled={!selectedDuration}
+                    >
+                      Proceed to Payment
+                    </button>
+                    <button onClick={() => setShowModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
+            {/* Payment Choice Modal */}
             {showPaymentChoice && (
-              <PaymentChoiceModal
-                level={selectedLevel}
-                duration={selectedDuration}
-                plans={plans}
-                walletBalance={walletBalance}
-                selectedMethod={selectedPaymentMethod}
-                mpesaPhone={mpesaPhone}
-                onMethodChange={handlePaymentMethodChange}
-                onMpesaChange={(e) => setMpesaPhone(e.target.value)}
-                onConfirm={selectedPaymentMethod === 'wallet' ? handleConfirmWalletUpgrade : handleConfirmMpesaUpgrade}
-                onBack={() => {
-                  setShowPaymentChoice(false);
-                  setShowModal(true);
-                }}
-              />
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Choose Payment Method for {selectedLevel} - {selectedDuration}</h3>
+                  <p className={styles.durationText}>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
+                  <div className={styles.durationList}>
+                    <div className={styles.durationItem}>
+                      <label className={styles.durationLabel}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="wallet"
+                          checked={selectedPaymentMethod === 'wallet'}
+                          onChange={() => handlePaymentMethodChange('wallet')}
+                        />
+                        <span className={styles.durationText}>Wallet Balance (KSh {walletBalance})</span>
+                      </label>
+                    </div>
+                    <div className={styles.durationItem}>
+                      <label className={styles.durationLabel}>
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value="mpesa"
+                          checked={selectedPaymentMethod === 'mpesa'}
+                          onChange={() => handlePaymentMethodChange('mpesa')}
+                        />
+                        <span className={styles.durationText}>M-Pesa (STK Push)</span>
+                      </label>
+                    </div>
+                  </div>
+                  {selectedPaymentMethod === 'mpesa' && (
+                    <label className={styles.label}>
+                      M-Pesa Phone Number <small>(for prompt)</small>
+                      <input
+                        type="text"
+                        value={mpesaPhone}
+                        onChange={(e) => setMpesaPhone(e.target.value)}
+                        placeholder="0712345678"
+                        className={styles.input}
+                      />
+                    </label>
+                  )}
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={selectedPaymentMethod === 'wallet' ? handleConfirmWalletUpgrade : handleConfirmMpesaUpgrade} 
+                      className={styles.upgradeButton}
+                      disabled={selectedPaymentMethod === 'wallet' && walletBalance < plans[selectedLevel][selectedDuration]}
+                    >
+                      Confirm Payment
+                    </button>
+                    <button onClick={() => { setShowPaymentChoice(false); setShowModal(true); }} className={styles.closeButton}>
+                      Back
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
+            {/* Processing Modal for M-Pesa Confirmation */}
             {showProcessingModal && (
-              <ProcessingModal
-                checkoutRequestID={checkoutRequestID}
-                onClose={() => setShowProcessingModal(false)}
-              />
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Processing Upgrade</h3>
+                  <p>Check your phone for M-Pesa prompt. CheckoutRequestID: {checkoutRequestID}</p>
+                  <p>Upgrade will auto-apply after payment confirmation.</p>
+                  <div className={styles.modalButtons}>
+                    <button onClick={() => setShowProcessingModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
+            {/* Add Fund Modal */}
             {showAddFundModal && (
-              <AddFundModal
-                phone={formData.phone}
-                amount={addFundAmount}
-                onAmountChange={(e) => setAddFundAmount(e.target.value)}
-                onConfirm={handleConfirmAddFund}
-                onClose={() => setShowAddFundModal(false)}
-              />
+              <div className={styles.modal}>
+                <div className={styles.modalContent}>
+                  <h3>Add Funds to Wallet</h3>
+                  <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
+                  <label className={styles.label}>
+                    Amount (KSh)
+                    <input
+                      type="number"
+                      value={addFundAmount}
+                      onChange={(e) => setAddFundAmount(e.target.value)}
+                      min="10"
+                      className={styles.input}
+                      required
+                    />
+                  </label>
+                  <div className={styles.modalButtons}>
+                    <button 
+                      onClick={handleConfirmAddFund} 
+                      className={styles.upgradeButton}
+                      disabled={!addFundAmount || parseInt(addFundAmount) < 10}
+                    >
+                      Pay with M-Pesa
+                    </button>
+                    <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
           </aside>
 
@@ -621,7 +709,6 @@ export default function ProfileSetup() {
                     width={150}
                     height={150}
                     className={styles.profilePic}
-                    priority={false} // Not priority to avoid blocking
                   />
                 ) : (
                   <div className={styles.profilePicPlaceholder}></div>
@@ -639,7 +726,6 @@ export default function ProfileSetup() {
             {error && <p className={styles.error}>{error}</p>}
 
             <form onSubmit={handleSubmit} className={styles.profileForm}>
-              {/* Basic Info Section */}
               <label className={styles.label}>
                 Name
                 <input
@@ -667,7 +753,12 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 Gender
-                <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select}>
+                <select
+                  name="gender"
+                  value={formData.gender}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
                   <option value="Female">Female</option>
                   <option value="Male">Male</option>
                 </select>
@@ -675,7 +766,12 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 Sexual Orientation
-                <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select}>
+                <select
+                  name="sexualOrientation"
+                  value={formData.sexualOrientation}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
                   <option value="Straight">Straight</option>
                   <option value="Gay">Gay</option>
                   <option value="Bisexual">Bisexual</option>
@@ -708,39 +804,60 @@ export default function ProfileSetup() {
                 />
               </label>
 
-              {/* Location Section */}
               <label className={styles.label}>
                 County
-                <select name="county" value={formData.county} onChange={handleChange} className={styles.select}>
+                <select
+                  name="county"
+                  value={formData.county}
+                  onChange={handleChange}
+                  className={styles.select}
+                >
                   <option value="">Select County</option>
                   {countyList.map((county) => (
-                    <option key={county} value={county}>{county}</option>
+                    <option key={county} value={county}>
+                      {county}
+                    </option>
                   ))}
                 </select>
               </label>
 
               <label className={styles.label}>
                 City/Town
-                <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county}>
+                <select
+                  name="ward"
+                  value={selectedWard}
+                  onChange={handleWardChange}
+                  className={styles.select}
+                  disabled={!formData.county}
+                >
                   <option value="">Select City/Town</option>
                   {wards.map((ward) => (
-                    <option key={ward} value={ward}>{ward}</option>
+                    <option key={ward} value={ward}>
+                      {ward}
+                    </option>
                   ))}
                 </select>
               </label>
 
               <label className={styles.label}>
                 Area
-                <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard}>
+                <select
+                  name="area"
+                  value={formData.area}
+                  onChange={handleAreaChange}
+                  className={styles.select}
+                  disabled={!selectedWard}
+                >
                   <option value="">Select Area</option>
                   {areas.slice(0, 50).map((area) => ( // Limit to 50 to prevent huge dropdown
-                    <option key={area} value={area}>{area}</option>
+                    <option key={area} value={area}>
+                      {area}
+                    </option>
                   ))}
                   {areas.length > 50 && <option disabled>More areas available - contact support</option>}
                 </select>
               </label>
 
-              {/* Nearby Places: Filtered search to avoid DOM bloat */}
               <label className={styles.label}>
                 Nearby Places (max 4)
                 <input
@@ -767,7 +884,6 @@ export default function ProfileSetup() {
                 </div>
               </label>
 
-              {/* Services Section */}
               <label className={styles.label}>
                 Services
                 <div className={styles.checkboxGroup}>
