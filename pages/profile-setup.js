@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db, auth } from '../lib/firebase';
-import { doc, setDoc, getDoc, addDoc, collection, onSnapshot } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { db, auth } from '../lib/firebase'; // Added auth
+import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
+import { signOut } from 'firebase/auth'; // Added signOut import
 
 const servicesList = [
   'Dinner Date',
@@ -32,9 +32,9 @@ export default function ProfileSetup() {
     ward: '',
     area: '',
     nearby: [],
-    services: [],
+    services: [], // ensure array so .includes won't crash
     otherServices: '',
-    profilePic: '', // Now stores URL only, not base64
+    profilePic: '',
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
@@ -43,17 +43,18 @@ export default function ProfileSetup() {
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('');
+  // New states for Add Fund modal
   const [showAddFundModal, setShowAddFundModal] = useState(false);
   const [addFundAmount, setAddFundAmount] = useState('');
+  // New states for Upgrade Payment Choice
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
+  // New states for M-Pesa upgrade waiting
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [checkoutRequestID, setCheckoutRequestID] = useState('');
-  const [mpesaPhone, setMpesaPhone] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [unsubscribeProfile, setUnsubscribeProfile] = useState(null); // For real-time listener
-  const [areaSearch, setAreaSearch] = useState(''); // For filtering nearby areas
+  const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
+  const [loading, setLoading] = useState(true); // ✅ New loading state for profile fetch
+  const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -62,26 +63,23 @@ export default function ProfileSetup() {
       return;
     }
     setLoggedInUser(user);
-
     const fetchProfile = async () => {
       try {
         const profileDoc = await getDoc(doc(db, 'profiles', user.id));
         if (profileDoc.exists()) {
           const data = profileDoc.data();
-          const updatedFormData = {
-            ...formData,
+          setFormData((prev) => ({
+            ...prev,
             ...data,
             username: user.username,
             services: data.services || [],
             nearby: data.nearby || [],
-            age: data.age || formData.age,
-            profilePic: data.profilePic || '', // URL only
-          };
-          setFormData(updatedFormData);
+            age: data.age || prev.age,
+          }));
           setSelectedWard(data.ward || '');
           setWalletBalance(data.walletBalance || 0);
           setMembership(data.membership || 'Regular');
-          setMpesaPhone(data.phone || '');
+          setMpesaPhone(data.phone || ''); // Default M-Pesa phone to profile phone
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
           setWalletBalance(0);
@@ -93,52 +91,36 @@ export default function ProfileSetup() {
         setLoading(false);
       }
     };
-
     fetchProfile();
+  }, [router]);
 
-    // Set up real-time listener for profile changes (e.g., membership updates)
-    const profileRef = doc(db, 'profiles', user.id);
-    const unsub = onSnapshot(profileRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setMembership(data.membership || 'Regular');
-        setWalletBalance(data.walletBalance || 0);
-        // Update other relevant fields if needed
-      }
-    });
-    setUnsubscribeProfile(() => unsub);
-
-    return () => unsub();
-  }, [router, formData.age]); // Note: formData.age in deps to satisfy lint, but useMemo below handles
-
-  useEffect(() => {
-    return () => {
-      if (unsubscribeProfile) unsubscribeProfile();
-    };
-  }, [unsubscribeProfile]);
-
-  // Helper functions
-  const formatPhoneForMpesa = useCallback((phone) => {
+  // ✅ Helper to format phone for M-Pesa (254xxxxxxxxx)
+  const formatPhoneForMpesa = (phone) => {
     if (!phone) return '';
-    let formatted = phone.replace(/[\s+]/g, '');
+    let formatted = phone.replace(/[\s+]/g, ''); // Remove spaces and +
     if (formatted.startsWith('0')) {
       formatted = '254' + formatted.slice(1);
     } else if (formatted.startsWith('254') || formatted.startsWith('7') || formatted.startsWith('1')) {
+      // Already good or needs prefix
       if (formatted.length === 9 && (formatted.startsWith('7') || formatted.startsWith('1'))) {
         formatted = '254' + formatted;
       }
     }
+    // Validate length
     if (formatted.length !== 12 || !formatted.match(/^254[0-9]\d{8}$/)) {
       throw new Error('Invalid phone number. Use format like 254 followed by 9 digits.');
     }
     return formatted;
-  }, []);
+  };
 
-  const shortenUserId = useCallback((userId) => userId ? userId.slice(-10) : '', []);
+  // ✅ Helper to shorten userId to last 10 chars for ref
+  const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
-  const handleChange = useCallback((e) => {
+  const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
+
     if (type === 'checkbox') {
+      // handle nearby with max 4, services with normal toggle
       if (name === 'nearby') {
         setFormData((prev) => {
           const current = prev.nearby || [];
@@ -146,6 +128,7 @@ export default function ProfileSetup() {
             if (current.includes(value)) return prev;
             if (current.length >= 4) {
               setError('You can select up to 4 nearby locations only.');
+              // don't add more than 4
               return prev;
             }
             setError('');
@@ -156,6 +139,7 @@ export default function ProfileSetup() {
           }
         });
       } else {
+        // generic checkbox groups like services
         setFormData((prev) => ({
           ...prev,
           [name]: checked
@@ -164,6 +148,7 @@ export default function ProfileSetup() {
         }));
       }
     } else {
+      // normal input/select change
       if (name === 'county') {
         setFormData((prev) => ({
           ...prev,
@@ -176,111 +161,28 @@ export default function ProfileSetup() {
       } else {
         setFormData((prev) => ({ ...prev, [name]: value }));
       }
+      // clear error on user interaction
       if (error) setError('');
     }
-  }, [error]);
+  };
 
-  const handleWardChange = useCallback((e) => {
+  const handleWardChange = (e) => {
     const ward = e.target.value;
     setSelectedWard(ward);
     setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
     if (error) setError('');
-  }, [error]);
-
-  const handleAreaChange = useCallback((e) => {
-    setFormData((prev) => ({ ...prev, area: e.target.value }));
-    if (error) setError('');
-  }, [error]);
-
-  // Optimized image upload: Resize, compress, upload immediately on select, store URL
-  const handleImageUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    try {
-      // Resize and compress image using canvas
-      const img = new Image();
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      img.onload = async () => {
-        // Resize to max 500x500, maintain aspect ratio
-        const maxSize = 500;
-        let { width, height } = img;
-        if (width > height) {
-          if (width > maxSize) {
-            height = (height * maxSize) / width;
-            width = maxSize;
-          }
-        } else {
-          if (height > maxSize) {
-            width = (width * maxSize) / height;
-            height = maxSize;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Compress to JPEG at 80% quality
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-
-        // Convert to Blob for FormData
-        const blob = dataURLtoBlob(compressedDataUrl);
-        const formDataUpload = new FormData();
-        formDataUpload.append('file', blob, file.name);
-        formDataUpload.append('upload_preset', 'your_upload_preset'); // Replace with your Cloudinary preset
-
-        const res = await fetch('/api/uploadProfilePic', {
-          method: 'POST',
-          body: formDataUpload,
-        });
-        const data = await res.json();
-        if (!res.ok || !data.url) {
-          setError(data.error || 'Failed to upload image to Cloudinary');
-          return;
-        }
-
-        const profilePicUrl = data.url;
-
-        // Moderate the image
-        const modRes = await fetch('/api/moderateImage', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: profilePicUrl }),
-        });
-        const modData = await modRes.json();
-        if (!modRes.ok || !modData.isSafe) {
-          setError(modData.error || 'Image contains inappropriate content. Please upload a different photo.');
-          return;
-        }
-
-        // Store URL in state
-        setFormData((prev) => ({ ...prev, profilePic: profilePicUrl }));
-      };
-      img.src = URL.createObjectURL(file);
-    } catch (err) {
-      setError('Failed to process image. Please try again.');
-    }
   };
 
-  // Helper to convert dataURL to Blob
-  const dataURLtoBlob = useCallback((dataurl) => {
-    const arr = dataurl.split(',');
-    const mime = arr[0].match(/:(.*?);/)[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
-  }, []);
+  const handleAreaChange = (e) => {
+    setFormData((prev) => ({ ...prev, area: e.target.value }));
+    if (error) setError('');
+  };
 
-  // Submit handler (simplified, no base64 handling)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
 
+    // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
       setError('You must be 18 or older to register.');
@@ -288,12 +190,14 @@ export default function ProfileSetup() {
       return;
     }
 
+    // Require at least 1 selected service (changed from 4 since new list is shorter)
     if (!formData.services || formData.services.length < 1) {
       setError('Please select at least 1 service.');
       setSaveLoading(false);
       return;
     }
 
+    // Limit nearby places to a maximum of 4
     if (formData.nearby && formData.nearby.length > 4) {
       setError('You can select up to 4 nearby locations only.');
       setSaveLoading(false);
@@ -307,10 +211,48 @@ export default function ProfileSetup() {
     }
     setError('');
 
+    let profilePicUrl = formData.profilePic;
+
+    if (profilePicUrl && profilePicUrl.startsWith('data:image')) {
+      try {
+        // Upload to Cloudinary
+        const res = await fetch('/api/uploadProfilePic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: profilePicUrl }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.url) {
+          setError(data.error || 'Failed to upload image to Cloudinary');
+          setSaveLoading(false);
+          return;
+        }
+        profilePicUrl = data.url;
+
+        // Moderate the image
+        const modRes = await fetch('/api/moderateImage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageUrl: profilePicUrl }),
+        });
+        const modData = await modRes.json();
+        if (!modRes.ok || !modData.isSafe) {
+          setError(modData.error || 'Image contains inappropriate content. Please upload a different photo.');
+          setSaveLoading(false);
+          return;
+        }
+      } catch (uploadError) {
+        setError('Failed to process image. Please try again.');
+        setSaveLoading(false);
+        return;
+      }
+    }
+
     try {
       const fullData = { 
         ...loggedInUser, 
         ...formData, 
+        profilePic: profilePicUrl, 
         walletBalance 
       };
       await setDoc(doc(db, 'profiles', loggedInUser.id), fullData, { merge: true });
@@ -324,7 +266,6 @@ export default function ProfileSetup() {
     }
   };
 
-  // Upgrade handlers
   const handleUpgrade = (level) => {
     if (level === 'Regular') {
       alert('Regular membership is free! No upgrade needed.');
@@ -335,36 +276,42 @@ export default function ProfileSetup() {
     setShowModal(true);
   };
 
-  const handleDurationSelect = useCallback((duration) => {
+  const handleDurationSelect = (duration) => {
     setSelectedDuration(duration);
-  }, []);
+  };
 
-  const plans = useMemo(() => ({
-    Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
-    VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
-    VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
-  }), []);
-
-  const handleProceedToPayment = useCallback(() => {
+  const handleProceedToPayment = () => {
     if (!selectedDuration) {
       alert('Please select a duration.');
       return;
     }
+    const plans = {
+      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+    };
     const price = plans[selectedLevel][selectedDuration];
     if (walletBalance >= price) {
       setSelectedPaymentMethod('wallet');
+      setShowPaymentChoice(true);
+      setShowModal(false);
     } else {
       setSelectedPaymentMethod('mpesa');
+      setShowPaymentChoice(true);
+      setShowModal(false);
     }
-    setShowPaymentChoice(true);
-    setShowModal(false);
-  }, [selectedDuration, plans, selectedLevel, walletBalance]);
+  };
 
-  const handlePaymentMethodChange = useCallback((method) => {
+  const handlePaymentMethodChange = (method) => {
     setSelectedPaymentMethod(method);
-  }, []);
+  };
 
   const handleConfirmWalletUpgrade = async () => {
+    const plans = {
+      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+    };
     const price = plans[selectedLevel][selectedDuration];
     if (walletBalance < price) {
       alert('Insufficient balance');
@@ -377,7 +324,7 @@ export default function ProfileSetup() {
         membership: selectedLevel,
         walletBalance: newBalance 
       }, { merge: true });
-      setMembership(selectedLevel); // Real-time will update too
+      setMembership(selectedLevel);
       setShowPaymentChoice(false);
       setSelectedDuration('');
       alert('Upgrade successful!');
@@ -386,12 +333,18 @@ export default function ProfileSetup() {
 
   const handleConfirmMpesaUpgrade = async () => {
     try {
-      const formattedPhone = formatPhoneForMpesa(mpesaPhone || formData.phone);
+      const formattedPhone = formatPhoneForMpesa(mpesaPhone || formData.phone); // Use mpesaPhone or profile phone
+      const plans = {
+        Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+        VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+        VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+      };
       const price = plans[selectedLevel][selectedDuration];
       const shortUserId = shortenUserId(loggedInUser.id);
-      const shortLevel = selectedLevel.slice(0, 3);
-      const accountRef = `upg_${shortUserId}_${shortLevel}`;
+      const shortLevel = selectedLevel.slice(0, 3); // Pri, VIP, VVI
+      const accountRef = `upg_${shortUserId}_${shortLevel}`; // e.g., upg_nxLdK1XA5_Pri (20 chars max)
 
+      // Store pending transaction in Firestore
       const checkoutRequestID = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       await addDoc(collection(db, 'pendingTransactions'), {
         userId: loggedInUser.id,
@@ -404,6 +357,7 @@ export default function ProfileSetup() {
         createdAt: new Date().toISOString(),
       });
 
+      // Initiate STK Push
       const response = await fetch('/api/upgrade', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -415,7 +369,7 @@ export default function ProfileSetup() {
           duration: selectedDuration,
           accountReference: accountRef,
           transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
-          checkoutRequestID,
+          checkoutRequestID, // Pass to API for storage if needed
         }),
       });
       if (response.ok) {
@@ -425,7 +379,22 @@ export default function ProfileSetup() {
         setShowPaymentChoice(false);
         setShowModal(false);
         setSelectedDuration('');
-        // No polling needed; real-time listener will detect membership change
+
+        // Poll for confirmation (auto-upgrade on success)
+        const pollInterval = setInterval(async () => {
+          const profileDoc = await getDoc(doc(db, 'profiles', loggedInUser.id));
+          if (profileDoc.exists()) {
+            const updatedData = profileDoc.data();
+            if (updatedData.membership === selectedLevel) {
+              setMembership(selectedLevel);
+              setShowProcessingModal(false);
+              clearInterval(pollInterval);
+              alert('Upgrade confirmed and applied automatically!');
+            }
+          }
+        }, 5000); // Poll every 5 seconds
+
+        setTimeout(() => clearInterval(pollInterval), 60000); // Stop after 1 min
       } else {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
@@ -438,20 +407,20 @@ export default function ProfileSetup() {
     }
   };
 
-  const handleAddFund = useCallback(() => {
+  const handleAddFund = () => {
     if (!formData.phone) {
       setError('Please add your phone number to your profile first.');
       return;
     }
     try {
-      formatPhoneForMpesa(formData.phone);
+      formatPhoneForMpesa(formData.phone); // Validate early
       setAddFundAmount('');
       setShowAddFundModal(true);
     } catch (error) {
       const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
       setError(errorMsg);
     }
-  }, [formData.phone]);
+  };
 
   const handleConfirmAddFund = async () => {
     if (!addFundAmount || parseInt(addFundAmount) < 10) {
@@ -461,7 +430,7 @@ export default function ProfileSetup() {
     try {
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       const shortUserId = shortenUserId(loggedInUser.id);
-      const accountRef = `wal_${shortUserId}`;
+      const accountRef = `wal_${shortUserId}`; // e.g., wal_nxLdK1XA5 (15 chars)
       const response = await fetch('/api/addFunds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -477,7 +446,6 @@ export default function ProfileSetup() {
         const data = await response.json();
         alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
         setShowAddFundModal(false);
-        // Real-time will update wallet balance
       } else {
         const errorData = await response.json();
         const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
@@ -497,17 +465,30 @@ export default function ProfileSetup() {
     router.push('/');
   };
 
-  if (loading) {
-    return <div className={styles.container}>Loading profile...</div>;
-  }
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, profilePic: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const countyList = useMemo(() => Object.keys(locations).sort(), []);
   const wards = useMemo(() => formData.county && locations[formData.county] ? Object.keys(locations[formData.county]) : [], [formData.county]);
   const areas = useMemo(() => selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : [], [formData.county, selectedWard]);
-  const filteredAreas = useMemo(() => 
-    areas.filter(place => place.toLowerCase().includes(areaSearch.toLowerCase())), 
-    [areas, areaSearch]
-  );
+
+  const plans = useMemo(() => ({
+    Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
+    VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
+    VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+  }), []);
+
+  if (loading) {
+    return <div className={styles.container}>Loading profile...</div>;
+  }
 
   return (
     <div className={styles.container}>
@@ -553,8 +534,6 @@ export default function ProfileSetup() {
             <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
               Upgrade to VVIP
             </button>
-
-            {/* Inline Modals - Reverted for build compatibility; can lazy-load later */}
             {showModal && (
               <div className={styles.modal}>
                 <div className={styles.modalContent}>
@@ -781,6 +760,7 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 Age
+                {/* allow typing; block below 18 on submit */}
                 <input
                   type="number"
                   name="age"
@@ -849,26 +829,18 @@ export default function ProfileSetup() {
                   disabled={!selectedWard}
                 >
                   <option value="">Select Area</option>
-                  {areas.slice(0, 50).map((area) => ( // Limit to 50 to prevent huge dropdown
+                  {areas.map((area) => (
                     <option key={area} value={area}>
                       {area}
                     </option>
                   ))}
-                  {areas.length > 50 && <option disabled>More areas available - contact support</option>}
                 </select>
               </label>
 
               <label className={styles.label}>
-                Nearby Places (max 4)
-                <input
-                  type="text"
-                  placeholder="Search areas..."
-                  value={areaSearch}
-                  onChange={(e) => setAreaSearch(e.target.value)}
-                  className={styles.input}
-                />
-                <div className={styles.checkboxGroup} style={{ maxHeight: '200px', overflowY: 'auto' }}> {/* Scrollable */}
-                  {filteredAreas.slice(0, 20).map((place) => ( // Limit to 20 visible
+                Nearby Places
+                <div className={styles.checkboxGroup}>
+                  {areas.map((place) => (
                     <div key={place}>
                       <input
                         type="checkbox"
@@ -880,7 +852,6 @@ export default function ProfileSetup() {
                       <span>{place}</span>
                     </div>
                   ))}
-                  {filteredAreas.length > 20 && <p>Showing top 20 matches. Refine search.</p>}
                 </div>
               </label>
 
@@ -912,5 +883,4 @@ export default function ProfileSetup() {
     </div>
   );
 }
-
 

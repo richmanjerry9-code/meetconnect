@@ -1,9 +1,19 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Add any other configuration you need here
+  env: {
+    FIREBASE_API_KEY: process.env.FIREBASE_API_KEY,
+    FIREBASE_AUTH_DOMAIN: process.env.FIREBASE_AUTH_DOMAIN,
+    // add others similarly
+  },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**', // allow all external hosts (optional)
+      },
+    ],
+  },
 };
 
 module.exports = nextConfig;
-
-
 
