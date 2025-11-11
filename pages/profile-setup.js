@@ -4,9 +4,10 @@ import Head from 'next/head';
 import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db, auth } from '../lib/firebase'; // Added auth
-import { doc, setDoc, getDoc, addDoc, collection } from 'firebase/firestore';
-import { signOut } from 'firebase/auth'; // Added signOut import
+import { db, auth } from '../lib/firebase';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
+import StkPushForm from '../components/StkPushForm';
 
 const servicesList = [
   'Dinner Date',
@@ -45,13 +46,9 @@ export default function ProfileSetup() {
   const [selectedDuration, setSelectedDuration] = useState('');
   // New states for Add Fund modal
   const [showAddFundModal, setShowAddFundModal] = useState(false);
-  const [addFundAmount, setAddFundAmount] = useState('');
   // New states for Upgrade Payment Choice
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
-  // New states for M-Pesa upgrade waiting
-  const [showProcessingModal, setShowProcessingModal] = useState(false);
-  const [checkoutRequestID, setCheckoutRequestID] = useState('');
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
   const [loading, setLoading] = useState(true); // ✅ New loading state for profile fetch
   const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
@@ -68,10 +65,14 @@ export default function ProfileSetup() {
         const profileDoc = await getDoc(doc(db, 'profiles', user.id));
         if (profileDoc.exists()) {
           const data = profileDoc.data();
+          let loadedPhone = data.phone || '';
+          // Clean phone to digits only on load
+          loadedPhone = loadedPhone.replace(/[^\d]/g, '');
           setFormData((prev) => ({
             ...prev,
             ...data,
             username: user.username,
+            phone: loadedPhone,
             services: data.services || [],
             nearby: data.nearby || [],
             age: data.age || prev.age,
@@ -79,7 +80,7 @@ export default function ProfileSetup() {
           setSelectedWard(data.ward || '');
           setWalletBalance(data.walletBalance || 0);
           setMembership(data.membership || 'Regular');
-          setMpesaPhone(data.phone || ''); // Default M-Pesa phone to profile phone
+          setMpesaPhone(loadedPhone); // Raw cleaned phone for M-Pesa
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
           setWalletBalance(0);
@@ -94,21 +95,22 @@ export default function ProfileSetup() {
     fetchProfile();
   }, [router]);
 
-  // ✅ Helper to format phone for M-Pesa (254xxxxxxxxx)
+  // ✅ Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
   const formatPhoneForMpesa = (phone) => {
-    if (!phone) return '';
-    let formatted = phone.replace(/[\s+]/g, ''); // Remove spaces and +
+    if (!phone) throw new Error('Phone number is required');
+    let formatted = phone.replace(/[^\d]/g, ''); // Clean to digits only
     if (formatted.startsWith('0')) {
       formatted = '254' + formatted.slice(1);
-    } else if (formatted.startsWith('254') || formatted.startsWith('7') || formatted.startsWith('1')) {
-      // Already good or needs prefix
-      if (formatted.length === 9 && (formatted.startsWith('7') || formatted.startsWith('1'))) {
-        formatted = '254' + formatted;
-      }
+    } else if (formatted.startsWith('254')) {
+      // Already good
+    } else if (formatted.length === 9 && formatted.startsWith('7')) {
+      formatted = '254' + formatted;
+    } else {
+      throw new Error('Invalid phone number format. Use 07XXXXXXXX');
     }
-    // Validate length
-    if (formatted.length !== 12 || !formatted.match(/^254[0-9]\d{8}$/)) {
-      throw new Error('Invalid phone number. Use format like 254 followed by 9 digits.');
+    // Strict validation for Kenyan mobile (Safaricom M-Pesa)
+    if (formatted.length !== 12 || !formatted.startsWith('2547')) {
+      throw new Error('Invalid M-Pesa phone number. Must be a valid Kenyan mobile number starting with 07.');
     }
     return formatted;
   };
@@ -149,17 +151,26 @@ export default function ProfileSetup() {
       }
     } else {
       // normal input/select change
+      let inputValue = value;
+      if (name === 'phone') {
+        // Clean phone input to digits only
+        inputValue = value.replace(/[^\d]/g, '');
+        // Update mpesaPhone if it's the phone field
+        setMpesaPhone(inputValue);
+        // Clear error if typing a valid partial number
+        if (error && inputValue.length > 6) setError('');
+      }
       if (name === 'county') {
         setFormData((prev) => ({
           ...prev,
-          county: value,
+          county: inputValue,
           ward: '',
           area: '',
           nearby: [],
         }));
         setSelectedWard('');
       } else {
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        setFormData((prev) => ({ ...prev, [name]: inputValue }));
       }
       // clear error on user interaction
       if (error) setError('');
@@ -209,6 +220,16 @@ export default function ProfileSetup() {
       setSaveLoading(false);
       return;
     }
+
+    // ✅ Validate phone format before saving
+    try {
+      formatPhoneForMpesa(formData.phone);
+    } catch (err) {
+      setError(err.message);
+      setSaveLoading(false);
+      return;
+    }
+
     setError('');
 
     let profilePicUrl = formData.profilePic;
@@ -285,6 +306,20 @@ export default function ProfileSetup() {
       alert('Please select a duration.');
       return;
     }
+
+    // ✅ Validate phone before proceeding to payment
+    if (!formData.phone) {
+      alert('Please add your phone number to your profile first.');
+      return;
+    }
+    try {
+      const formatted = formatPhoneForMpesa(formData.phone);
+      setMpesaPhone(formatted);
+    } catch (error) {
+      alert(error.message);
+      return;
+    }
+
     const plans = {
       Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
       VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
@@ -293,13 +328,11 @@ export default function ProfileSetup() {
     const price = plans[selectedLevel][selectedDuration];
     if (walletBalance >= price) {
       setSelectedPaymentMethod('wallet');
-      setShowPaymentChoice(true);
-      setShowModal(false);
     } else {
       setSelectedPaymentMethod('mpesa');
-      setShowPaymentChoice(true);
-      setShowModal(false);
     }
+    setShowPaymentChoice(true);
+    setShowModal(false);
   };
 
   const handlePaymentMethodChange = (method) => {
@@ -331,130 +364,17 @@ export default function ProfileSetup() {
     }
   };
 
-  const handleConfirmMpesaUpgrade = async () => {
-    try {
-      const formattedPhone = formatPhoneForMpesa(mpesaPhone || formData.phone); // Use mpesaPhone or profile phone
-      const plans = {
-        Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
-        VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
-        VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
-      };
-      const price = plans[selectedLevel][selectedDuration];
-      const shortUserId = shortenUserId(loggedInUser.id);
-      const shortLevel = selectedLevel.slice(0, 3); // Pri, VIP, VVI
-      const accountRef = `upg_${shortUserId}_${shortLevel}`; // e.g., upg_nxLdK1XA5_Pri (20 chars max)
-
-      // Store pending transaction in Firestore
-      const checkoutRequestID = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await addDoc(collection(db, 'pendingTransactions'), {
-        userId: loggedInUser.id,
-        amount: price,
-        phone: formattedPhone,
-        type: 'upgrade',
-        level: selectedLevel,
-        duration: selectedDuration,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      });
-
-      // Initiate STK Push
-      const response = await fetch('/api/upgrade', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: price,
-          phone: formattedPhone,
-          userId: loggedInUser.id,
-          level: selectedLevel,
-          duration: selectedDuration,
-          accountReference: accountRef,
-          transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
-          checkoutRequestID, // Pass to API for storage if needed
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setCheckoutRequestID(data.CheckoutRequestID);
-        setShowProcessingModal(true);
-        setShowPaymentChoice(false);
-        setShowModal(false);
-        setSelectedDuration('');
-
-        // Poll for confirmation (auto-upgrade on success)
-        const pollInterval = setInterval(async () => {
-          const profileDoc = await getDoc(doc(db, 'profiles', loggedInUser.id));
-          if (profileDoc.exists()) {
-            const updatedData = profileDoc.data();
-            if (updatedData.membership === selectedLevel) {
-              setMembership(selectedLevel);
-              setShowProcessingModal(false);
-              clearInterval(pollInterval);
-              alert('Upgrade confirmed and applied automatically!');
-            }
-          }
-        }, 5000); // Poll every 5 seconds
-
-        setTimeout(() => clearInterval(pollInterval), 60000); // Stop after 1 min
-      } else {
-        const errorData = await response.json();
-        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
-        alert(`Error: ${errorMsg}`);
-      }
-    } catch (error) {
-      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
-      alert(`Error: ${errorMsg}`);
-      setError(errorMsg);
-    }
-  };
-
   const handleAddFund = () => {
     if (!formData.phone) {
       setError('Please add your phone number to your profile first.');
       return;
     }
     try {
-      formatPhoneForMpesa(formData.phone); // Validate early
-      setAddFundAmount('');
+      const formatted = formatPhoneForMpesa(formData.phone);
+      setMpesaPhone(formatted);
       setShowAddFundModal(true);
     } catch (error) {
-      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message;
-      setError(errorMsg);
-    }
-  };
-
-  const handleConfirmAddFund = async () => {
-    if (!addFundAmount || parseInt(addFundAmount) < 10) {
-      setError('Minimum amount is KSh 10.');
-      return;
-    }
-    try {
-      const formattedPhone = formatPhoneForMpesa(formData.phone);
-      const shortUserId = shortenUserId(loggedInUser.id);
-      const accountRef = `wal_${shortUserId}`; // e.g., wal_nxLdK1XA5 (15 chars)
-      const response = await fetch('/api/addFunds', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: parseInt(addFundAmount),
-          phone: formattedPhone,
-          userId: loggedInUser.id,
-          accountReference: accountRef,
-          transactionDesc: 'Add funds to wallet'
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        alert(`STK Push initiated. CheckoutRequestID: ${data.CheckoutRequestID}. Please check your phone for M-Pesa prompt.`);
-        setShowAddFundModal(false);
-      } else {
-        const errorData = await response.json();
-        const errorMsg = typeof errorData.error === 'object' ? JSON.stringify(errorData.error, null, 2) : errorData.error;
-        alert(`Error: ${errorMsg}`);
-      }
-    } catch (error) {
-      const errorMsg = typeof error === 'object' ? JSON.stringify(error, null, 2) : error.message || 'Failed to initiate payment. Please check your phone number.';
-      alert(`Error: ${errorMsg}`);
-      setError(errorMsg);
+      setError(error.message);
     }
   };
 
@@ -602,42 +522,32 @@ export default function ProfileSetup() {
                     </div>
                   </div>
                   {selectedPaymentMethod === 'mpesa' && (
-                    <label className={styles.label}>
-                      M-Pesa Phone Number <small>(for prompt)</small>
-                      <input
-                        type="text"
-                        value={mpesaPhone}
-                        onChange={(e) => setMpesaPhone(e.target.value)}
-                        placeholder="0712345678"
-                        className={styles.input}
-                      />
-                    </label>
+                    <StkPushForm
+                      initialPhone={mpesaPhone}
+                      initialAmount={plans[selectedLevel][selectedDuration]}
+                      readOnlyAmount={true}
+                      apiEndpoint="/api/upgrade"
+                      additionalBody={{
+                        userId: loggedInUser.id,
+                        level: selectedLevel,
+                        duration: selectedDuration,
+                        accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
+                        transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
+                      }}
+                    />
                   )}
                   <div className={styles.modalButtons}>
-                    <button 
-                      onClick={selectedPaymentMethod === 'wallet' ? handleConfirmWalletUpgrade : handleConfirmMpesaUpgrade} 
-                      className={styles.upgradeButton}
-                      disabled={selectedPaymentMethod === 'wallet' && walletBalance < plans[selectedLevel][selectedDuration]}
-                    >
-                      Confirm Payment
-                    </button>
+                    {selectedPaymentMethod === 'wallet' && (
+                      <button 
+                        onClick={handleConfirmWalletUpgrade} 
+                        className={styles.upgradeButton}
+                        disabled={walletBalance < plans[selectedLevel][selectedDuration]}
+                      >
+                        Confirm Payment
+                      </button>
+                    )}
                     <button onClick={() => { setShowPaymentChoice(false); setShowModal(true); }} className={styles.closeButton}>
                       Back
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {/* Processing Modal for M-Pesa Confirmation */}
-            {showProcessingModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Processing Upgrade</h3>
-                  <p>Check your phone for M-Pesa prompt. CheckoutRequestID: {checkoutRequestID}</p>
-                  <p>Upgrade will auto-apply after payment confirmation.</p>
-                  <div className={styles.modalButtons}>
-                    <button onClick={() => setShowProcessingModal(false)} className={styles.closeButton}>
-                      Close
                     </button>
                   </div>
                 </div>
@@ -649,25 +559,16 @@ export default function ProfileSetup() {
                 <div className={styles.modalContent}>
                   <h3>Add Funds to Wallet</h3>
                   <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
-                  <label className={styles.label}>
-                    Amount (KSh)
-                    <input
-                      type="number"
-                      value={addFundAmount}
-                      onChange={(e) => setAddFundAmount(e.target.value)}
-                      min="10"
-                      className={styles.input}
-                      required
-                    />
-                  </label>
+                  <StkPushForm
+                    initialPhone={mpesaPhone}
+                    apiEndpoint="/api/addFunds"
+                    additionalBody={{
+                      userId: loggedInUser.id,
+                      accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
+                      transactionDesc: 'Add funds to wallet'
+                    }}
+                  />
                   <div className={styles.modalButtons}>
-                    <button 
-                      onClick={handleConfirmAddFund} 
-                      className={styles.upgradeButton}
-                      disabled={!addFundAmount || parseInt(addFundAmount) < 10}
-                    >
-                      Pay with M-Pesa
-                    </button>
                     <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>
                       Close
                     </button>
@@ -718,7 +619,7 @@ export default function ProfileSetup() {
               </label>
 
               <label className={styles.label}>
-                Phone Number <small>(254 followed by 9 digits, e.g., 0712345678)</small>
+                Phone Number <small>(e.g., 0712345678)</small>
                 <input
                   type="text"
                   name="phone"
@@ -760,7 +661,6 @@ export default function ProfileSetup() {
 
               <label className={styles.label}>
                 Age
-                {/* allow typing; block below 18 on submit */}
                 <input
                   type="number"
                   name="age"
@@ -883,4 +783,3 @@ export default function ProfileSetup() {
     </div>
   );
 }
-

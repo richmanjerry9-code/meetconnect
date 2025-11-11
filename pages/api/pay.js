@@ -1,32 +1,57 @@
-import stkPushHandler from './mpesa/stkpush';
+import { useState } from 'react';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+export default function PayPage() {
+  const [phone, setPhone] = useState('');
+  const [amount, setAmount] = useState('');
+  const [message, setMessage] = useState('');
 
-  const { phone, amount } = req.body;
+  const handlePay = async () => {
+    setMessage('Processing payment...');
 
-  // Basic validation
-  if (!phone || !amount || amount <= 0) {
-    return res.status(400).json({ error: 'Invalid phone or amount' });
-  }
+    try {
+      const res = await fetch('/api/mpesa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, amount }),
+      });
 
-  try {
-    // Call the stkPush handler directly (same as calling /api/mpesa/stkpush)
-    const mockReq = { method: 'POST', body: { phone, amount } };
-    const mockRes = {
-      status: (code) => ({
-        json: (data) => res.status(code).json(data),
-        end: () => res.status(code).end(),
-      }),
-    };
+      const data = await res.json();
 
-    await stkPushHandler(mockReq, mockRes);
-  } catch (error) {
-    console.error('Payment error:', error.message);
-    res.status(500).json({ error: 'Payment failed—try again or contact support' });
-  }
+      if (res.ok) {
+        setMessage(`✅ STK Push sent! ${data.CustomerMessage || ''}`);
+      } else {
+        setMessage(`❌ Failed: ${data.message}`);
+      }
+    } catch (err) {
+      console.error(err);
+      setMessage('⚠️ Error sending request');
+    }
+  };
+
+  return (
+    <div style={{ maxWidth: 400, margin: '100px auto', textAlign: 'center' }}>
+      <h2>Pay with M-PESA</h2>
+      <input
+        type="text"
+        placeholder="Enter phone (2547...)"
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        style={{ width: '100%', marginBottom: 10, padding: 8 }}
+      />
+      <input
+        type="number"
+        placeholder="Enter amount"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        style={{ width: '100%', marginBottom: 10, padding: 8 }}
+      />
+      <button onClick={handlePay} style={{ padding: '10px 20px' }}>
+        Pay Now
+      </button>
+      {message && <p style={{ marginTop: 15 }}>{message}</p>}
+    </div>
+  );
 }
+
 
 

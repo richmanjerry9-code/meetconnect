@@ -5,10 +5,10 @@ export default async function handler(req, res) {
 
   const { phone, amount } = req.body;
 
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const passkey = process.env.MPESA_PASSKEY;
+  const consumerKey = 'E5qGq0Jms9DpRyxH5iVGN8ypxqWGMp3GHOiSJjrFG5IROjbu';
+  const consumerSecret = 'mFApVxGGtVYXmECdXwxiFALK5jNgskLp2ROOjaaWFFeMJCqhbR5GWrtvaSqIUXdk';
+  const shortcode = '3574457';
+  const passkey = '7b4c4df08fbba7b676fb01ab58b4b6fa0840985fc767553c88fa8e9a4697fe69';
 
   try {
     // 1️⃣ Get Access Token
