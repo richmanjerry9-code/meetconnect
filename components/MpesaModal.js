@@ -1,5 +1,6 @@
 // components/MpesaModal.js
 import { useState } from 'react';
+import { formatPhone } from '../utils/mpesa'; // Import shared formatPhone
 
 export default function MpesaModal({ isOpen, onClose }) {
   const [phone, setPhone] = useState('');
@@ -12,16 +13,22 @@ export default function MpesaModal({ isOpen, onClose }) {
     e.preventDefault();
     setStatus('Processing...');
     try {
-      const res = await fetch('/api/mpesa', {
+      const formattedPhone = formatPhone(phone); // Normalize phone
+      const res = await fetch('/api/mpesa/stkpush', {  // Updated to /api/mpesa/stkpush for consistency
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, amount }),
+        body: JSON.stringify({ 
+          phone: formattedPhone, 
+          amount,
+          accountReference: 'ModalReference',  // Add required params
+          transactionDesc: 'Modal Payment' 
+        }),
       });
       const data = await res.json();
       if (res.ok) setStatus(`STK Push sent! MerchantRequestID: ${data.MerchantRequestID}`);
-      else setStatus(`Error: ${data.message}`);
+      else setStatus(`Error: ${data.error || 'Unknown error'}`);
     } catch (err) {
-      setStatus('Error sending request');
+      setStatus('Error: ' + err.message);
     }
   };
 
