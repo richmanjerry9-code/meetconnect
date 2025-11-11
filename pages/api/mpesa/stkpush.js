@@ -5,10 +5,12 @@ export default async function handler(req, res) {
 
   const { phone, amount } = req.body;
 
-  const consumerKey = 'E5qGq0Jms9DpRyxH5iVGN8ypxqWGMp3GHOiSJjrFG5IROjbu';
-  const consumerSecret = 'mFApVxGGtVYXmECdXwxiFALK5jNgskLp2ROOjaaWFFeMJCqhbR5GWrtvaSqIUXdk';
-  const shortcode = '3574457';
-  const passkey = '7b4c4df08fbba7b676fb01ab58b4b6fa0840985fc767553c88fa8e9a4697fe69';
+  // ✅ Read sensitive info from environment variables
+  const consumerKey = process.env.MPESA_CONSUMER_KEY;
+  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+  const shortcode = process.env.MPESA_SHORTCODE;
+  const passkey = process.env.MPESA_PASSKEY;
+  const callbackURL = process.env.MPESA_CALLBACK_URL;
 
   try {
     // 1️⃣ Get Access Token
@@ -39,7 +41,7 @@ export default async function handler(req, res) {
         PartyA: phone.startsWith('254') ? phone : `254${phone.slice(1)}`,
         PartyB: shortcode,
         PhoneNumber: phone.startsWith('254') ? phone : `254${phone.slice(1)}`,
-        CallBackURL: process.env.MPESA_CALLBACK_URL,
+        CallBackURL: callbackURL,
         AccountReference: 'MeetConnect Payment',
         TransactionDesc: 'Membership upgrade',
       },
