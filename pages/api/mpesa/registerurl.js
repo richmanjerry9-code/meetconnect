@@ -1,26 +1,18 @@
 // pages/api/mpesa/registerurl.js
 import axios from 'axios';
-
-const BASE_URL = 'https://sandbox.safaricom.co.ke';
+import { BASE_URL } from '../../../utils/mpesa'; // Use dynamic BASE_URL
+import { getAccessToken } from '../mpesaauth'; // Reuse getAccessToken
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
   const shortcode = process.env.MPESA_SHORTCODE || '174379';
 
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
-
   try {
-    // Step 1: Generate access token
-    const tokenResponse = await axios.get(
-      `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
-      { headers: { Authorization: `Basic ${auth}` } }
-    );
-    const token = tokenResponse.data.access_token;
+    // Reuse getAccessToken
+    const token = await getAccessToken();
 
-    // Step 2: Register URLs
+    // Register URLs
     const payload = {
       ShortCode: shortcode,
       ResponseType: 'Completed', // or "Cancelled"
