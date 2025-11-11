@@ -1,78 +1,93 @@
-'use client'; // ensure this is a client component
-import { useState } from 'react';
-import { formatPhone } from '../utils/mpesa'; // Import shared formatPhone
+// components/StkPushForm.js
+import { useState } from "react";
+import axios from "axios";
 
-export default function StkPushForm({ initialPhone, initialAmount, readOnlyAmount = false, apiEndpoint, additionalBody = {} }) {
-  const [phone, setPhone] = useState(initialPhone || '');
-  const [amount, setAmount] = useState(initialAmount || 0);
+export default function StkPushForm({
+  title = "Complete Payment",
+  description = "",
+  amount,
+  apiEndpoint,
+  additionalBody = {},
+  onSuccess,
+}) {
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage('');
+    if (!phone) return setMessage("Please enter your phone number");
+
     setLoading(true);
+    setMessage(null);
 
     try {
-      const formattedPhone = formatPhone(phone); // Use shared normalization
-      if (!amount || isNaN(amount)) throw new Error('Amount is required and must be a number');
-
-      const payload = {
-        phone: formattedPhone,
-        amount: Number(amount),
+      const res = await axios.post(apiEndpoint, {
+        phone: formatPhone(phone),
+        amount,
+        accountReference: "MeetConnect",
+        transactionDesc: `Payment for ${title}`,
         ...additionalBody,
-      };
-
-      console.log('STK Push payload:', payload);
-
-      const res = await fetch(apiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'STK Push failed');
-
-      setMessage('STK Push initiated successfully! Check your phone.');
+      if (res.data.CheckoutRequestID) {
+        setMessage("STK Push sent! Please check your phone and enter your M-Pesa PIN.");
+        if (onSuccess) onSuccess(res.data);
+      } else {
+        setMessage("Unexpected response. Try again.");
+      }
     } catch (err) {
-      console.error('STK Push Error:', err.message);
-      setMessage('Error: ' + err.message);
+      console.error(err.response?.data || err.message);
+      setMessage("Payment request failed. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
-      <label>
-        Phone:
-        <input
-          type="text"
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="07xxxxxxx or +2547xxxxxxx"
-          required
-        />
-      </label>
+    <div className="p-4 bg-white rounded-2xl shadow-md">
+      <h2 className="text-lg font-semibold mb-2">{title}</h2>
+      {description && <p className="text-gray-500 mb-4">{description}</p>}
 
-      {!readOnlyAmount && (
-        <label>
-          Amount:
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm mb-1 font-medium">Phone Number</label>
           <input
-            type="number"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            type="tel"
+            placeholder="2547XXXXXXXX"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring focus:ring-blue-200 outline-none"
             required
           />
-        </label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-green-600 text-white font-semibold py-2 rounded-lg hover:bg-green-700 transition"
+        >
+          {loading ? "Sending STK Push..." : `Pay Ksh ${amount}`}
+        </button>
+      </form>
+
+      {message && (
+        <p
+          className={`mt-3 text-sm ${
+            message.toLowerCase().includes("failed") ? "text-red-600" : "text-green-600"
+          }`}
+        >
+          {message}
+        </p>
       )}
-
-      <button type="submit" disabled={loading}>
-        {loading ? 'Processing...' : 'Pay via M-Pesa'}
-      </button>
-
-      {message && <p>{message}</p>}
-    </form>
+    </div>
   );
+}
+
+// Helper: Ensure phone starts with 254
+function formatPhone(phone) {
+  let clean = phone.replace(/\D/g, "");
+  if (clean.startsWith("0")) clean = "254" + clean.slice(1);
+  if (!clean.startsWith("254")) clean = "254" + clean;
+  return clean;
 }
