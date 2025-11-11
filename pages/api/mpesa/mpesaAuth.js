@@ -1,13 +1,14 @@
 import axios from 'axios';
-import { BASE_URL } from '../utils/mpesa'; // Import dynamic BASE_URL
 
 export const getAccessToken = async () => {
-  const OAUTH_URL = `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`;
-  const response = await axios.get(OAUTH_URL, {
-    auth: {
-      username: process.env.MPESA_CONSUMER_KEY,
-      password: process.env.MPESA_CONSUMER_SECRET,
-    },
-  });
+  const response = await axios.get(
+    'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
+    {
+      auth: {
+        username: 'E5qGq0Jms9DpRyxH5iVGN8ypxqWGMp3GHOiSJjrFG5IROjbu',
+        password: 'mFApVxGGtVYXmECdXwxiFALK5jNgskLp2ROOjaaWFFeMJCqhbR5GWrtvaSqIUXdk',
+      },
+    }
+  );
   return response.data.access_token;
 };
