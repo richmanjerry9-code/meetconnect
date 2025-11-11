@@ -5,8 +5,8 @@ export const getAccessToken = async () => {
     'https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
     {
       auth: {
-        username: process.env.MPESA_CONSUMER_KEY,
-        password: process.env.MPESA_CONSUMER_SECRET,
+        username: 'E5qGq0Jms9DpRyxH5iVGN8ypxqWGMp3GHOiSJjrFG5IROjbu',
+        password: 'mFApVxGGtVYXmECdXwxiFALK5jNgskLp2ROOjaaWFFeMJCqhbR5GWrtvaSqIUXdk',
       },
     }
   );

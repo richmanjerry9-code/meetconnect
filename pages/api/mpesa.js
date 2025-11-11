@@ -1,30 +1,62 @@
-// pages/api/mpesa.js
-import { initiateSTKPush } from '../../utils/mpesa';
+import axios from 'axios';
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
+const OAUTH_URL = 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+const STK_PUSH_URL = 'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest';
 
-  const { phone, amount } = req.body;
+const consumerKey = process.env.MPESA_CONSUMER_KEY;
+const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+const CALLBACK_URL = process.env.MPESA_CALLBACK_URL;
 
-  if (!phone || !amount) {
-    return res.status(400).json({ message: 'Phone and amount are required' });
-  }
+/**
+ * Format any phone number to 2547XXXXXXXX
+ */
+function formatPhone(phone) {
+  let p = phone.replace(/\s+/g, ''); // remove spaces
+  if (p.startsWith('0')) return '254' + p.slice(1);
+  if (p.startsWith('+254')) return '254' + p.slice(4);
+  if (p.startsWith('254')) return p;
+  throw new Error('Invalid phone number. Use 07xxxxxxx, 01xxxxxxx, or +2547xxxxxxx');
+}
+
+export async function initiateSTKPush({ phone, amount, accountReference, transactionDesc }) {
+  if (!phone || !amount) throw new Error('Phone and amount are required');
+
+  const formattedPhone = formatPhone(phone);
 
   try {
-    // Use phone typed by user
-    const response = await initiateSTKPush(
-      Number(amount),
-      phone,
-      'Test123', // AccountReference
-      'Payment Test' // TransactionDesc
-    );
+    // Get OAuth token
+    const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+    const tokenRes = await axios.get(OAUTH_URL, { headers: { Authorization: `Basic ${auth}` } });
+    const accessToken = tokenRes.data.access_token;
 
-    res.status(200).json(response);
-  } catch (error) {
-    console.error('STK Push API Error:', error);
-    const errorDetails = error.response?.data || { message: error.message };
-    res.status(500).json({ message: 'STK Push failed', error: errorDetails });
+    // Prepare STK Push payload
+    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const shortCode = process.env.MPESA_SHORTCODE || '174379'; // sandbox
+    const passkey = process.env.MPESA_PASSKEY || '';
+    const password = Buffer.from(shortCode + passkey + timestamp).toString('base64');
+
+    const payload = {
+      BusinessShortCode: shortCode,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: 'CustomerPayBillOnline',
+      Amount: Number(amount),
+      PartyA: formattedPhone,
+      PartyB: shortCode,
+      PhoneNumber: formattedPhone,
+      CallBackURL: CALLBACK_URL,
+      AccountReference: accountReference || 'Ref001',
+      TransactionDesc: transactionDesc || 'Payment',
+    };
+
+    const res = await axios.post(STK_PUSH_URL, payload, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    return res.data;
+  } catch (err) {
+    console.error('STK Push Error:', err.response?.data || err.message);
+    throw new Error('STK Push failed');
   }
 }
+

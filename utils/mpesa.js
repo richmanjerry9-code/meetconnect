@@ -1,76 +1,88 @@
 // utils/mpesa.js
 import axios from 'axios';
 
-const BASE_URL = 'https://sandbox.safaricom.co.ke';
+// Env variables
+const OAUTH_URL = process.env.MPESA_OAUTH_URL || 'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials';
+const CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
+const CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
+const SHORTCODE = process.env.MPESA_SHORTCODE;
+const PASSKEY = process.env.MPESA_PASSKEY;
+const CALLBACK_URL = process.env.MPESA_CALLBACK_URL; // Must be HTTPS
 
-export const getToken = async () => {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+// ✅ Helper to format phone number for STK Push
+function formatPhone(phone) {
+  if (!phone) throw new Error('Phone number is required');
 
-  if (!consumerKey || !consumerSecret) {
-    throw new Error('MPESA keys missing in .env.local');
+  let formatted = phone.replace(/\s+/g, ''); // remove spaces
+
+  if (formatted.startsWith('+254')) {
+    // keep as is
+  } else if (formatted.startsWith('07') || formatted.startsWith('01')) {
+    // keep as is
+  } else {
+    throw new Error('Invalid phone number. Must start with 07, 01, or +254');
   }
 
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+  return formatted;
+}
 
+// Get Access Token
+async function getAccessToken() {
   try {
-    const { data } = await axios.get(
-      `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`,
-      {
-        headers: { Authorization: `Basic ${auth}` },
-      }
-    );
-    return data.access_token;
-  } catch (error) {
-    console.error('Token fetch error:', error.response?.data || error.message);
-    throw error;
+    const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
+
+    const response = await axios.get(OAUTH_URL, {
+      headers: { Authorization: `Basic ${auth}` },
+    });
+
+    return response.data.access_token;
+  } catch (err) {
+    console.error('M-Pesa OAuth Error:', err.response?.data || err.message);
+    throw new Error('Failed to get M-Pesa access token');
   }
-};
+}
 
-export const initiateSTKPush = async (amount, phoneNumber, accountReference, transactionDesc) => {
-  if (!phoneNumber.match(/^254[17]\d{8}$/)) {
-    throw new Error(`Invalid phone number: ${phoneNumber}`);
-  }
-
-  amount = Number(amount);
-  if (!Number.isInteger(amount) || amount < 1) {
-    throw new Error(`Invalid amount: ${amount}`);
-  }
-
-  const token = await getToken();
-  const shortcode = process.env.MPESA_SHORTCODE;
-  const passkey = process.env.MPESA_PASSKEY;
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-:.TZ]/g, '')
-    .slice(0, 14);
-  const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
-
+// Initiate STK Push
+export async function initiateSTKPush({ phone, amount, accountReference, transactionDesc }) {
   try {
-    const { data } = await axios.post(
-      `${BASE_URL}/mpesa/stkpush/v1/processrequest`,
-      {
-        BusinessShortCode: shortcode,
-        Password: password,
-        Timestamp: timestamp,
-        TransactionType: 'CustomerPayBillOnline',
-        Amount: amount,
-        PartyA: phoneNumber, // <-- User phone used here
-        PartyB: shortcode,
-        PhoneNumber: phoneNumber, // <-- User phone used here
-        CallBackURL: `${process.env.NEXT_PUBLIC_BASE_URL}/api/mpesa-callback`,
-        AccountReference: accountReference,
-        TransactionDesc: transactionDesc,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
+    if (!phone || !amount) throw new Error('Phone and amount are required');
+
+    const token = await getAccessToken();
+
+    // timestamp and password
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const password = Buffer.from(`${SHORTCODE}${PASSKEY}${timestamp}`).toString('base64');
+
+    const phoneNumber = formatPhone(phone);
+
+    const stkPayload = {
+      BusinessShortCode: SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: 'CustomerPayBillOnline',
+      Amount: amount,
+      PartyA: phoneNumber,
+      PartyB: SHORTCODE,
+      PhoneNumber: phoneNumber,
+      CallBackURL: CALLBACK_URL,
+      AccountReference: accountReference || 'MeetConnect',
+      TransactionDesc: transactionDesc || 'Payment',
+    };
+
+    const stkResponse = await axios.post(
+      'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
+      stkPayload,
+      { headers: { Authorization: `Bearer ${token}` } }
     );
-    return data;
-  } catch (error) {
-    console.error('STK Push error:', error.response?.data || error.message);
-    throw error;
+
+    return stkResponse.data;
+  } catch (err) {
+    console.error('STK Push Error:', err.response?.data || err.message);
+    throw new Error('STK Push failed');
   }
-};
+}
+
+
+
+
+
