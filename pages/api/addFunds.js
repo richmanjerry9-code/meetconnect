@@ -1,5 +1,5 @@
 // pages/api/addFunds.js
-import { stkPush } from "./utils/mpesa";
+import { stkPush } from "../../utils/mpesa"; // fixed path
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).send("Method not allowed");
@@ -22,5 +22,6 @@ export default async function handler(req, res) {
     res.status(500).json({ error: "STK push failed" });
   }
 }
+
 
 
