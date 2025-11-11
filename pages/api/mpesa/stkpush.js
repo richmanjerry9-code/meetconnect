@@ -7,6 +7,10 @@ export default async function handler(req, res) {
 
   const { phone, amount, accountReference, transactionDesc } = req.body;
 
+  if (!phone || !amount || !accountReference || !transactionDesc) {
+    return res.status(400).json({ error: 'Phone, amount, accountReference, and transactionDesc are required' });
+  }
+
   try {
     const stkResult = await initiateSTKPush({
       phone,

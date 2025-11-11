@@ -8,10 +8,15 @@ export default function TestPayment() {
   const handlePay = async () => {
     setStatus('Processing...');
     try {
-      const res = await fetch('/api/stkpush', {
+      const res = await fetch('/api/mpesa/stkpush', {  // Updated to /api/mpesa/stkpush for consistency
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, amount }),
+        body: JSON.stringify({ 
+          phone, 
+          amount,
+          accountReference: 'TestReference',  // Add required params
+          transactionDesc: 'Test Payment' 
+        }),
       });
       const data = await res.json();
       if (res.ok) {

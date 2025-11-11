@@ -8,8 +8,8 @@ export default async function handler(req, res) {
 
   const { phone, amount, accountReference, transactionDesc, userId, level, duration } = req.body;
 
-  if (!phone || !amount) {
-    return res.status(400).json({ error: 'Phone and amount are required' });
+  if (!phone || !amount || !accountReference || !transactionDesc) {
+    return res.status(400).json({ error: 'Phone, amount, accountReference, and transactionDesc are required' });
   }
 
   console.log('Received phone:', phone); // Debug incoming phone

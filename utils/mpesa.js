@@ -7,8 +7,7 @@ const SHORTCODE = process.env.MPESA_SHORTCODE || process.env.SHORTCODE;
 const PASSKEY = process.env.MPESA_PASSKEY || process.env.PASSKEY;
 const CALLBACK_URL = process.env.MPESA_CALLBACK_URL || process.env.CALLBACK_URL;
 
-// Dynamic URLs based on ENV
-const BASE_URL = env === 'production' 
+export const BASE_URL = env === 'production' 
   ? 'https://api.safaricom.co.ke' 
   : 'https://sandbox.safaricom.co.ke';
 const OAUTH_URL = process.env.MPESA_OAUTH_URL || `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`;
@@ -79,7 +78,7 @@ async function getAccessToken() {
  * @param {string} options.transactionDesc
  */
 export async function initiateSTKPush({ phone, amount, accountReference, transactionDesc }) {
-  if (!phone || !amount) throw new Error('Phone and amount are required');
+  if (!phone || !amount || !accountReference || !transactionDesc) throw new Error('Phone, amount, accountReference, and transactionDesc are required');
 
   const formattedPhone = formatPhone(phone);
   console.log('Using formatted phone for STK Push:', formattedPhone);
@@ -142,5 +141,3 @@ function getTimestamp() {
   const ss = pad(now.getSeconds());
   return `${yyyy}${mm}${dd}${hh}${min}${ss}`;
 }
-
-

@@ -1,5 +1,6 @@
 'use client'; // ensure this is a client component
 import { useState } from 'react';
+import { formatPhone } from '../utils/mpesa'; // Import shared formatPhone
 
 export default function StkPushForm({ initialPhone, initialAmount, readOnlyAmount = false, apiEndpoint, additionalBody = {} }) {
   const [phone, setPhone] = useState(initialPhone || '');
@@ -7,23 +8,13 @@ export default function StkPushForm({ initialPhone, initialAmount, readOnlyAmoun
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  // Format phone to acceptable 07, 01, +254
-  const formatPhone = (p) => {
-    let formatted = p.trim();
-    if (formatted.startsWith('0') || formatted.startsWith('1') || formatted.startsWith('7')) {
-      return formatted;
-    }
-    if (formatted.startsWith('+254')) return formatted;
-    throw new Error('Phone number must start with 07, 01, or +254');
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage('');
     setLoading(true);
 
     try {
-      const formattedPhone = formatPhone(phone);
+      const formattedPhone = formatPhone(phone); // Use shared normalization
       if (!amount || isNaN(amount)) throw new Error('Amount is required and must be a number');
 
       const payload = {
@@ -85,6 +76,3 @@ export default function StkPushForm({ initialPhone, initialAmount, readOnlyAmoun
     </form>
   );
 }
-
-
-
