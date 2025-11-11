@@ -1,5 +1,5 @@
 // pages/api/upgrade.js
-import { stkPush } from "./utils/mpesa";
+import { stkPush } from "../../utils/mpesa"; // fixed path
 import { db } from "../../lib/firebase";
 import { doc, setDoc } from "firebase/firestore";
 
@@ -22,7 +22,14 @@ export default async function handler(req, res) {
     // Pre-store a pending upgrade record
     await setDoc(
       doc(db, "pendingUpgrades", userId),
-      { userId, level, duration, amount, status: "pending", checkoutRequestId: data.CheckoutRequestID },
+      {
+        userId,
+        level,
+        duration,
+        amount,
+        status: "pending",
+        checkoutRequestId: data.CheckoutRequestID,
+      },
       { merge: true }
     );
 
