@@ -1,80 +1,44 @@
-import axios from 'axios';
+// pages/api/utils/mpesa.js
+import axios from "axios";
 
-// Force production
-const BASE_URL = 'https://api.safaricom.co.ke';
-const CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
-const CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
-const SHORTCODE = process.env.MPESA_SHORTCODE;
-const PASSKEY = process.env.MPESA_PASSKEY;
-const CALLBACK_URL = process.env.MPESA_CALLBACK_URL;
-
-if (!CONSUMER_KEY || !CONSUMER_SECRET || !SHORTCODE || !PASSKEY || !CALLBACK_URL) {
-  throw new Error('Missing M-Pesa credentials or callback URL in environment variables.');
-}
-
-const OAUTH_URL = `${BASE_URL}/oauth/v1/generate?grant_type=client_credentials`;
-const STK_PUSH_URL = `${BASE_URL}/mpesa/stkpush/v1/processrequest`;
-
-export function formatPhone(phone) {
-  if (!phone) throw new Error('Phone number is required');
-
-  let p = phone.toString().trim().replace(/[\s-]/g, '');
-  if (p.startsWith('0')) p = '254' + p.slice(1);
-  else if (p.startsWith('+254')) p = p.slice(1);
-  else if (!p.startsWith('254')) throw new Error('Invalid phone number format.');
-
-  if (!/^2547\d{8}$/.test(p)) throw new Error('Invalid phone number after normalization.');
-  return p;
-}
-
-async function getAccessToken() {
-  const auth = Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString('base64');
-
-  const res = await axios.get(OAUTH_URL, { headers: { Authorization: `Basic ${auth}` } });
-  if (!res.data?.access_token) throw new Error('Failed to get access token');
+export async function getAccessToken() {
+  const { MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET } = process.env;
+  const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString("base64");
+  const res = await axios.get(
+    "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials",
+    { headers: { Authorization: `Basic ${auth}` } }
+  );
   return res.data.access_token;
 }
 
-export async function initiateSTKPush({ phone, amount, accountReference, transactionDesc }) {
-  if (!phone || !amount || !accountReference || !transactionDesc)
-    throw new Error('Phone, amount, accountReference, and transactionDesc are required');
-
-  const formattedPhone = formatPhone(phone);
+export async function stkPush({ phone, amount, accountReference, transactionDesc, callbackUrl }) {
+  const {
+    MPESA_SHORTCODE,
+    MPESA_PASSKEY,
+  } = process.env;
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[-T:.Z]/g, "")
+    .slice(0, 14);
+  const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString("base64");
   const token = await getAccessToken();
-  const timestamp = getTimestamp();
-  const password = Buffer.from(`${SHORTCODE}${PASSKEY}${timestamp}`).toString('base64');
 
-  const payload = {
-    BusinessShortCode: SHORTCODE,
-    Password: password,
-    Timestamp: timestamp,
-    TransactionType: 'CustomerPayBillOnline',
-    Amount: amount,
-    PartyA: formattedPhone,
-    PartyB: SHORTCODE,
-    PhoneNumber: formattedPhone,
-    CallBackURL: CALLBACK_URL,
-    AccountReference: accountReference,
-    TransactionDesc: transactionDesc,
-  };
-
-  // Don't log sensitive info
-  console.log('STK Push Payload ready (password hidden)');
-
-  try {
-    const res = await axios.post(STK_PUSH_URL, payload, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
-    return res.data;
-  } catch (err) {
-    throw new Error('STK Push failed: ' + (err.response?.data?.errorMessage || err.message));
-  }
-}
-
-function getTimestamp() {
-  const now = new Date();
-  const pad = (n) => n.toString().padStart(2, '0');
-  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(
-    now.getHours()
-  )}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const res = await axios.post(
+    "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+    {
+      BusinessShortCode: MPESA_SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: "CustomerPayBillOnline",
+      Amount: amount,
+      PartyA: phone,
+      PartyB: MPESA_SHORTCODE,
+      PhoneNumber: phone,
+      CallBackURL: callbackUrl,
+      AccountReference: accountReference,
+      TransactionDesc: transactionDesc,
+    },
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return res.data;
 }

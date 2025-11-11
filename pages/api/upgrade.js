@@ -1,39 +1,34 @@
 // pages/api/upgrade.js
-import { initiateSTKPush, formatPhone } from '../../utils/mpesa';
+import { stkPush } from "./utils/mpesa";
+import { db } from "../../lib/firebase";
+import { doc, setDoc } from "firebase/firestore";
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== "POST") return res.status(405).send("Method not allowed");
 
-  const { phone, amount, accountReference, transactionDesc, userId, level, duration } = req.body;
-
-  if (!phone || !amount || !accountReference || !transactionDesc) {
-    return res.status(400).json({ error: 'Phone, amount, accountReference, and transactionDesc are required' });
-  }
-
-  console.log('Received phone:', phone); // Debug incoming phone
+  const { phone, amount, userId, level, duration, accountReference, transactionDesc } = req.body;
+  if (!phone || !amount || !userId || !level || !duration)
+    return res.status(400).json({ error: "Missing required fields" });
 
   try {
-    // Validate and normalize phone
-    const formattedPhone = formatPhone(phone);
-
-    const stkResult = await initiateSTKPush({
-      phone: formattedPhone, // pass normalized phone
-      amount: Number(amount),
+    const data = await stkPush({
+      phone,
+      amount,
       accountReference,
       transactionDesc,
+      callbackUrl: process.env.MPESA_CALLBACK_URL,
     });
 
-    res.status(200).json(stkResult);
+    // Pre-store a pending upgrade record
+    await setDoc(
+      doc(db, "pendingUpgrades", userId),
+      { userId, level, duration, amount, status: "pending", checkoutRequestId: data.CheckoutRequestID },
+      { merge: true }
+    );
+
+    res.status(200).json(data);
   } catch (err) {
-    console.error('Upgrade error:', err.response?.data || err.message);
-
-    // Propagate proper error codes:
-    if (err.message.includes('Invalid phone')) {
-      return res.status(400).json({ error: err.message });
-    }
-
-    res.status(500).json({ error: err.message || 'STK Push failed' });
+    console.error(err.response?.data || err.message);
+    res.status(500).json({ error: "STK push failed" });
   }
 }
