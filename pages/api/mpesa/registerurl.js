@@ -1,7 +1,7 @@
 // pages/api/mpesa/registerurl.js
 import axios from 'axios';
 
-const BASE_URL = 'https://sandbox.safaricom.co.ke';
+const BASE_URL = 'https://api.safaricom.co.ke';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
