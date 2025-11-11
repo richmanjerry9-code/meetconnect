@@ -9,10 +9,15 @@ export default function PayPage() {
     setMessage('Processing payment...');
 
     try {
-      const res = await fetch('/api/mpesa', {
+      const res = await fetch('/api/mpesa/stkpush', {  // Updated to /api/mpesa/stkpush for consistency
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, amount }),
+        body: JSON.stringify({ 
+          phone, 
+          amount, 
+          accountReference: 'TestReference',  // Add required params
+          transactionDesc: 'Test Payment' 
+        }),
       });
 
       const data = await res.json();
@@ -20,7 +25,7 @@ export default function PayPage() {
       if (res.ok) {
         setMessage(`✅ STK Push sent! ${data.CustomerMessage || ''}`);
       } else {
-        setMessage(`❌ Failed: ${data.message}`);
+        setMessage(`❌ Failed: ${data.error || 'Unknown error'}`);
       }
     } catch (err) {
       console.error(err);
@@ -52,6 +57,3 @@ export default function PayPage() {
     </div>
   );
 }
-
-
-
