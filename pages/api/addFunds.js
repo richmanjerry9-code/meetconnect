@@ -1,12 +1,14 @@
 // pages/api/addFunds.js
-import { stkPush } from "../../utils/mpesa"; // fixed path
+import { stkPush } from './utils/mpesa';
+import { db } from '../../lib/firebase';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).send("Method not allowed");
+  if (req.method !== 'POST') return res.status(405).send('Method not allowed');
 
   const { phone, amount, userId, accountReference, transactionDesc } = req.body;
   if (!phone || !amount || !userId)
-    return res.status(400).json({ error: "Missing required fields" });
+    return res.status(400).json({ error: 'Missing required fields' });
 
   try {
     const data = await stkPush({
@@ -16,10 +18,19 @@ export default async function handler(req, res) {
       transactionDesc,
       callbackUrl: process.env.MPESA_CALLBACK_URL,
     });
+
+    // Store pending payment record
+    await setDoc(doc(db, 'pendingPayments', data.CheckoutRequestID), {
+      type: 'addfund',
+      userId,
+      amount,
+      status: 'pending',
+    });
+
     res.status(200).json(data);
   } catch (err) {
     console.error(err.response?.data || err.message);
-    res.status(500).json({ error: "STK push failed" });
+    res.status(500).json({ error: 'STK push failed' });
   }
 }
 
