@@ -1,34 +1,36 @@
 // pages/api/mpesa/callback.js
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).end();
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   try {
-    const data = req.body;
-    console.log('M-Pesa Callback Received:', JSON.stringify(data, null, 2));
+    const callbackData = req.body;
 
-    const callbackData = data?.Body?.stkCallback;
-    if (!callbackData) return res.status(400).json({ error: 'Invalid callback data' });
+    // Log callback for debugging (you can also save to DB)
+    console.log('M-Pesa Callback:', callbackData);
 
-    const { MerchantRequestID, CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = callbackData;
+    // Extract STK callback info if available
+    const stkCallback = callbackData?.Body?.stkCallback;
+    if (stkCallback) {
+      const { MerchantRequestID, CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
 
-    if (ResultCode === 0 && CallbackMetadata) {
-      const items = CallbackMetadata.Item;
-      const amount = items.find(i => i.Name === 'Amount')?.Value;
-      const phone = items.find(i => i.Name === 'PhoneNumber')?.Value;
-      const receipt = items.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
-      const transactionDate = items.find(i => i.Name === 'TransactionDate')?.Value;
-
-      console.log('Payment successful:', { amount, phone, receipt, transactionDate });
-
-      // TODO: update DB with successful payment
-    } else {
-      console.log('Payment failed:', { ResultCode, ResultDesc });
+      if (ResultCode === 0 && CallbackMetadata) {
+        const metadata = {};
+        CallbackMetadata.Item.forEach(item => {
+          metadata[item.Name] = item.Value;
+        });
+        console.log('Payment Successful:', metadata);
+        // Update your DB with payment info here
+      } else {
+        console.log('Payment Failed:', ResultDesc);
+      }
     }
 
-    // Respond to Safaricom to acknowledge
-    res.status(200).json({ ResultCode: 0, ResultDesc: 'Callback processed successfully' });
+    // Send success response back to Safaricom
+    return res.status(200).json({ ResultCode: 0, ResultDesc: 'Callback processed successfully' });
   } catch (err) {
-    console.error('Callback error:', err);
-    res.status(500).json({ ResultCode: 1, ResultDesc: 'Error processing callback' });
+    console.error(err);
+    return res.status(500).json({ ResultCode: 1, ResultDesc: 'Error processing callback' });
   }
 }
