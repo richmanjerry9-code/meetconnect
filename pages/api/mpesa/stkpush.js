@@ -1,15 +1,17 @@
-import { initiateSTKPush } from '../../utils/mpesa';
+// pages/api/mpesa/stkpush.js
+import { stkPush } from "../../../utils/mpesa"; // ✅ correct path
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
 
-  const { phone, amount, accountReference, transactionDesc } = req.body;
+  const { phone, amount } = req.body;
 
   try {
-    const stkResult = await initiateSTKPush({ phone, amount, accountReference, transactionDesc });
-    res.status(200).json(stkResult);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const response = await stkPush(phone, amount, "AccountUpgrade", "Upgrade account via M-PESA");
+    return res.status(200).json({ message: "STK Push sent", data: response });
+  } catch (error) {
+    console.error("STK Push Error:", error);
+    return res.status(500).json({ message: "STK Push failed", error: error.message });
   }
 }
 
