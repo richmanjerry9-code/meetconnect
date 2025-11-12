@@ -1,21 +1,20 @@
-'use client';
-import { useState, useEffect } from 'react';
+'use client'; // ensure this is a client component
+import { useState } from 'react';
 
-export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyAmount = false, apiEndpoint, additionalBody = {} }) {
+export default function StkPushForm({ initialPhone, initialAmount, readOnlyAmount = false, apiEndpoint, additionalBody = {} }) {
   const [phone, setPhone] = useState(initialPhone || '');
   const [amount, setAmount] = useState(initialAmount || 0);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    if (initialAmount) setAmount(initialAmount);
-  }, [initialAmount]);
-
-  // Basic phone validation (without changing format)
-  const validatePhone = (p) => {
-    const cleaned = p.replace(/[^\d+]/g, '');
-    if (cleaned.length < 9) throw new Error('Invalid phone number.');
-    return cleaned;
+  // Format phone to acceptable 07, 01, +254
+  const formatPhone = (p) => {
+    let formatted = p.trim();
+    if (formatted.startsWith('0') || formatted.startsWith('1') || formatted.startsWith('7')) {
+      return formatted;
+    }
+    if (formatted.startsWith('+254')) return formatted;
+    throw new Error('Phone number must start with 07, 01, or +254');
   };
 
   const handleSubmit = async (e) => {
@@ -24,14 +23,16 @@ export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyA
     setLoading(true);
 
     try {
-      const validatedPhone = validatePhone(phone);
-      if (!amount || isNaN(amount)) throw new Error('Amount is required');
+      const formattedPhone = formatPhone(phone);
+      if (!amount || isNaN(amount)) throw new Error('Amount is required and must be a number');
 
       const payload = {
-        phone: validatedPhone,
+        phone: formattedPhone,
         amount: Number(amount),
         ...additionalBody,
       };
+
+      console.log('STK Push payload:', payload);
 
       const res = await fetch(apiEndpoint, {
         method: 'POST',
@@ -42,8 +43,9 @@ export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyA
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'STK Push failed');
 
-      setMessage('STK Push initiated! Check your phone.');
+      setMessage('STK Push initiated successfully! Check your phone.');
     } catch (err) {
+      console.error('STK Push Error:', err.message);
       setMessage('Error: ' + err.message);
     } finally {
       setLoading(false);
@@ -58,26 +60,31 @@ export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyA
           type="text"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="Enter your phone number"
+          placeholder="07xxxxxxx or +2547xxxxxxx"
           required
         />
       </label>
 
-      <label>
-        Amount:
-        <input
-          type="number"
-          value={amount}
-          readOnly={readOnlyAmount}
-          required
-        />
-      </label>
+      {!readOnlyAmount && (
+        <label>
+          Amount:
+          <input
+            type="number"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            required
+          />
+        </label>
+      )}
 
       <button type="submit" disabled={loading}>
-        {loading ? 'Processing...' : `Pay KSh ${amount} via M-Pesa`}
+        {loading ? 'Processing...' : 'Pay via M-Pesa'}
       </button>
 
       {message && <p>{message}</p>}
     </form>
   );
 }
+
+
+
