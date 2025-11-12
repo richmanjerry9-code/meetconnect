@@ -7,30 +7,37 @@ export default async function handler(req, res) {
   try {
     const callbackData = req.body;
 
-    // Log callback for debugging (you can also save to DB)
-    console.log('M-Pesa Callback:', callbackData);
+    // You can log for debugging
+    console.log('M-Pesa Callback Data:', callbackData);
 
-    // Extract STK callback info if available
-    const stkCallback = callbackData?.Body?.stkCallback;
+    // Example: handle success/failure
+    const stkCallback = callbackData.Body?.stkCallback;
     if (stkCallback) {
-      const { MerchantRequestID, CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
+      const { ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
 
       if (ResultCode === 0 && CallbackMetadata) {
-        const metadata = {};
-        CallbackMetadata.Item.forEach(item => {
-          metadata[item.Name] = item.Value;
+        const items = CallbackMetadata.Item;
+        let amount, mpesaReceiptNumber, phoneNumber, transactionDate;
+
+        items.forEach((item) => {
+          if (item.Name === 'Amount') amount = item.Value;
+          else if (item.Name === 'MpesaReceiptNumber') mpesaReceiptNumber = item.Value;
+          else if (item.Name === 'PhoneNumber') phoneNumber = item.Value;
+          else if (item.Name === 'TransactionDate') transactionDate = item.Value;
         });
-        console.log('Payment Successful:', metadata);
-        // Update your DB with payment info here
+
+        // TODO: Update your database with this info
+        console.log(`Payment successful: ${amount} from ${phoneNumber}`);
       } else {
-        console.log('Payment Failed:', ResultDesc);
+        console.log(`Payment failed: ${ResultDesc}`);
       }
     }
 
-    // Send success response back to Safaricom
-    return res.status(200).json({ ResultCode: 0, ResultDesc: 'Callback processed successfully' });
+    // Respond to M-Pesa
+    res.status(200).json({ ResultCode: 0, ResultDesc: 'Callback processed successfully' });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ ResultCode: 1, ResultDesc: 'Error processing callback' });
+    console.error('Callback error:', err);
+    res.status(500).json({ ResultCode: 1, ResultDesc: 'Error processing callback' });
   }
 }
+
