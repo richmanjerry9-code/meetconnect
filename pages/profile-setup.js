@@ -1,3 +1,4 @@
+// components/ProfileSetup.js (updated with duration handling and expiration)
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -5,7 +6,7 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
@@ -33,7 +34,7 @@ export default function ProfileSetup() {
     ward: '',
     area: '',
     nearby: [],
-    services: [], // ensure array so .includes won't crash
+    services: [],
     otherServices: '',
     profilePic: '',
   });
@@ -44,14 +45,12 @@ export default function ProfileSetup() {
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('');
-  // New states for Add Fund modal
   const [showAddFundModal, setShowAddFundModal] = useState(false);
-  // New states for Upgrade Payment Choice
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
-  const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  const [loading, setLoading] = useState(true); // ✅ New loading state for profile fetch
-  const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet');
+  const [mpesaPhone, setMpesaPhone] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saveLoading, setSaveLoading] = useState(false);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -66,8 +65,21 @@ export default function ProfileSetup() {
         if (profileDoc.exists()) {
           const data = profileDoc.data();
           let loadedPhone = data.phone || '';
-          // Clean phone to digits only on load
           loadedPhone = loadedPhone.replace(/[^\d]/g, '');
+
+          // Check membership expiration
+          let currentMembership = data.membership || 'Regular';
+          const expiration = data.membershipExpiration;
+          const now = new Date();
+          if (expiration && expiration.toDate() < now) {
+            currentMembership = 'Regular';
+            // Update DB to reflect expiration
+            await updateDoc(doc(db, 'profiles', user.id), {
+              membership: 'Regular',
+              membershipExpiration: null,
+            });
+          }
+
           setFormData((prev) => ({
             ...prev,
             ...data,
@@ -79,8 +91,8 @@ export default function ProfileSetup() {
           }));
           setSelectedWard(data.ward || '');
           setWalletBalance(data.walletBalance || 0);
-          setMembership(data.membership || 'Regular');
-          setMpesaPhone(loadedPhone); // Raw cleaned phone for M-Pesa
+          setMembership(currentMembership);
+          setMpesaPhone(loadedPhone);
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
           setWalletBalance(0);
@@ -95,10 +107,9 @@ export default function ProfileSetup() {
     fetchProfile();
   }, [router]);
 
-  // ✅ Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
   const formatPhoneForMpesa = (phone) => {
     if (!phone) throw new Error('Phone number is required');
-    let formatted = phone.replace(/[^\d]/g, ''); // Clean to digits only
+    let formatted = phone.replace(/[^\d]/g, '');
     if (formatted.startsWith('0')) {
       formatted = '254' + formatted.slice(1);
     } else if (formatted.startsWith('254')) {
@@ -108,21 +119,18 @@ export default function ProfileSetup() {
     } else {
       throw new Error('Invalid phone number format. Use 07XXXXXXXX');
     }
-    // Strict validation for Kenyan mobile (Safaricom M-Pesa)
     if (formatted.length !== 12 || !formatted.startsWith('2547')) {
       throw new Error('Invalid M-Pesa phone number. Must be a valid Kenyan mobile number starting with 07.');
     }
     return formatted;
   };
 
-  // ✅ Helper to shorten userId to last 10 chars for ref
   const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
     if (type === 'checkbox') {
-      // handle nearby with max 4, services with normal toggle
       if (name === 'nearby') {
         setFormData((prev) => {
           const current = prev.nearby || [];
@@ -130,7 +138,6 @@ export default function ProfileSetup() {
             if (current.includes(value)) return prev;
             if (current.length >= 4) {
               setError('You can select up to 4 nearby locations only.');
-              // don't add more than 4
               return prev;
             }
             setError('');
@@ -141,7 +148,6 @@ export default function ProfileSetup() {
           }
         });
       } else {
-        // generic checkbox groups like services
         setFormData((prev) => ({
           ...prev,
           [name]: checked
@@ -150,14 +156,10 @@ export default function ProfileSetup() {
         }));
       }
     } else {
-      // normal input/select change
       let inputValue = value;
       if (name === 'phone') {
-        // Clean phone input to digits only
         inputValue = value.replace(/[^\d]/g, '');
-        // Update mpesaPhone if it's the phone field
         setMpesaPhone(inputValue);
-        // Clear error if typing a valid partial number
         if (error && inputValue.length > 6) setError('');
       }
       if (name === 'county') {
@@ -172,7 +174,6 @@ export default function ProfileSetup() {
       } else {
         setFormData((prev) => ({ ...prev, [name]: inputValue }));
       }
-      // clear error on user interaction
       if (error) setError('');
     }
   };
@@ -193,7 +194,6 @@ export default function ProfileSetup() {
     e.preventDefault();
     setSaveLoading(true);
 
-    // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
       setError('You must be 18 or older to register.');
@@ -201,14 +201,12 @@ export default function ProfileSetup() {
       return;
     }
 
-    // Require at least 1 selected service (changed from 4 since new list is shorter)
     if (!formData.services || formData.services.length < 1) {
       setError('Please select at least 1 service.');
       setSaveLoading(false);
       return;
     }
 
-    // Limit nearby places to a maximum of 4
     if (formData.nearby && formData.nearby.length > 4) {
       setError('You can select up to 4 nearby locations only.');
       setSaveLoading(false);
@@ -221,7 +219,6 @@ export default function ProfileSetup() {
       return;
     }
 
-    // ✅ Validate phone format before saving
     try {
       formatPhoneForMpesa(formData.phone);
     } catch (err) {
@@ -236,7 +233,6 @@ export default function ProfileSetup() {
 
     if (profilePicUrl && profilePicUrl.startsWith('data:image')) {
       try {
-        // Upload to Cloudinary
         const res = await fetch('/api/uploadProfilePic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -250,7 +246,6 @@ export default function ProfileSetup() {
         }
         profilePicUrl = data.url;
 
-        // Moderate the image
         const modRes = await fetch('/api/moderateImage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -307,7 +302,6 @@ export default function ProfileSetup() {
       return;
     }
 
-    // ✅ Validate phone before proceeding to payment
     if (!formData.phone) {
       alert('Please add your phone number to your profile first.');
       return;
@@ -351,10 +345,21 @@ export default function ProfileSetup() {
       return;
     }
     if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
+      const durationMap = {
+        '3 Days': 3,
+        '7 Days': 7,
+        '15 Days': 15,
+        '30 Days': 30,
+      };
+      const days = durationMap[selectedDuration] || 0;
+      const expiration = new Date();
+      expiration.setDate(expiration.getDate() + days);
+
       const newBalance = walletBalance - price;
       setWalletBalance(newBalance);
       await setDoc(doc(db, 'profiles', loggedInUser.id), { 
         membership: selectedLevel,
+        membershipExpiration: Timestamp.fromDate(expiration),
         walletBalance: newBalance 
       }, { merge: true });
       setMembership(selectedLevel);
@@ -489,7 +494,6 @@ export default function ProfileSetup() {
                 </div>
               </div>
             )}
-            {/* Payment Choice Modal */}
             {showPaymentChoice && (
               <div className={styles.modal}>
                 <div className={styles.modalContent}>
@@ -553,7 +557,6 @@ export default function ProfileSetup() {
                 </div>
               </div>
             )}
-            {/* Add Fund Modal */}
             {showAddFundModal && (
               <div className={styles.modal}>
                 <div className={styles.modalContent}>
