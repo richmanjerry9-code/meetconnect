@@ -1,4 +1,4 @@
-// pages/api/utils/mpesa.js
+// utils/mpesa.js
 import axios from 'axios';
 
 export async function getAccessToken() {
@@ -13,10 +13,7 @@ export async function getAccessToken() {
 
 export async function stkPush({ phone, amount, accountReference, transactionDesc, callbackUrl }) {
   const { MPESA_SHORTCODE, MPESA_PASSKEY } = process.env;
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[-T:.Z]/g, '')
-    .slice(0, 14);
+  const timestamp = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14);
   const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString('base64');
   const token = await getAccessToken();
 
@@ -26,7 +23,7 @@ export async function stkPush({ phone, amount, accountReference, transactionDesc
       BusinessShortCode: MPESA_SHORTCODE,
       Password: password,
       Timestamp: timestamp,
-      TransactionType: 'CustomerPayBillOnline',
+      TransactionType: 'CustomerPayBillOnline',  // For till-linked bank/paybill
       Amount: amount,
       PartyA: phone,
       PartyB: MPESA_SHORTCODE,
@@ -39,3 +36,4 @@ export async function stkPush({ phone, amount, accountReference, transactionDesc
   );
   return res.data;
 }
+
