@@ -11,13 +11,11 @@ export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyA
     if (initialAmount) setAmount(initialAmount);
   }, [initialAmount]);
 
-  // Format phone to 2547XXXXXXXX
-  const formatPhone = (p) => {
-    let formatted = p.replace(/[^\d]/g, '');
-    if (formatted.startsWith('0')) formatted = '254' + formatted.slice(1);
-    else if (formatted.startsWith('7') && formatted.length === 9) formatted = '254' + formatted;
-    if (!formatted.startsWith('2547') || formatted.length !== 12) throw new Error('Invalid phone number. Must start with 07.');
-    return formatted;
+  // Basic phone validation (without changing format)
+  const validatePhone = (p) => {
+    const cleaned = p.replace(/[^\d+]/g, '');
+    if (cleaned.length < 9) throw new Error('Invalid phone number.');
+    return cleaned;
   };
 
   const handleSubmit = async (e) => {
@@ -26,11 +24,11 @@ export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyA
     setLoading(true);
 
     try {
-      const formattedPhone = formatPhone(phone);
+      const validatedPhone = validatePhone(phone);
       if (!amount || isNaN(amount)) throw new Error('Amount is required');
 
       const payload = {
-        phone: formattedPhone,
+        phone: validatedPhone,
         amount: Number(amount),
         ...additionalBody,
       };
@@ -60,7 +58,7 @@ export default function StkPushForm({ initialPhone, initialAmount = 0, readOnlyA
           type="text"
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
-          placeholder="07xxxxxxx or +2547xxxxxxx"
+          placeholder="Enter your phone number"
           required
         />
       </label>
