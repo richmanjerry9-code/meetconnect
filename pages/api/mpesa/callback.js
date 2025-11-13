@@ -1,53 +1,45 @@
-// pages/api/mpesa-callback.js
-import { NextResponse } from "next/server";
+// pages/api/mpesa/callback.js
+export const config = {
+  api: {
+    bodyParser: true, // ensure JSON is parsed
+  },
+};
 
-/**
- * This endpoint receives M-PESA payment confirmation
- * from the STK push (live environment)
- */
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method Not Allowed" });
+  }
+
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ message: "Method Not Allowed" });
-    }
-
     const callbackData = req.body;
+    console.log("📩 M-PESA Callback Received:", JSON.stringify(callbackData, null, 2));
 
-    // Log the callback for debugging
-    console.log("M-PESA Callback Received:", JSON.stringify(callbackData, null, 2));
-
-    // The payment result is inside callbackData.Body.stkCallback
     const stkCallback = callbackData?.Body?.stkCallback;
-
     if (!stkCallback) {
       return res.status(400).json({ message: "Invalid callback format" });
     }
 
-    const { MerchantRequestID, CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
+    const { ResultCode, ResultDesc, CallbackMetadata } = stkCallback;
 
-    // ✅ ResultCode === 0 means success
     if (ResultCode === 0) {
-      // Extract payment info if needed
-      const amount = CallbackMetadata?.Item?.find(item => item.Name === "Amount")?.Value;
-      const phone = CallbackMetadata?.Item?.find(item => item.Name === "PhoneNumber")?.Value;
-      const mpesaReceipt = CallbackMetadata?.Item?.find(item => item.Name === "MpesaReceiptNumber")?.Value;
+      const amount = CallbackMetadata?.Item?.find(i => i.Name === "Amount")?.Value;
+      const phone = CallbackMetadata?.Item?.find(i => i.Name === "PhoneNumber")?.Value;
+      const receipt = CallbackMetadata?.Item?.find(i => i.Name === "MpesaReceiptNumber")?.Value;
 
-      console.log(`Payment Success! Amount: ${amount}, Phone: ${phone}, Receipt: ${mpesaReceipt}`);
-
-      // TODO: Update database or mark user upgraded
-      // e.g., await db.user.update({ isUpgraded: true, paymentDetails: {...} })
-
+      console.log(`✅ Payment Success — Amount: ${amount}, Phone: ${phone}, Receipt: ${receipt}`);
+      // TODO: update your DB or mark upgrade complete
     } else {
-      console.log(`Payment Failed: ${ResultCode} - ${ResultDesc}`);
-      // TODO: Handle failed transaction logic
+      console.log(`❌ Payment Failed: ${ResultCode} — ${ResultDesc}`);
     }
 
-    // Respond to Safaricom immediately
-    return res.status(200).json({ ResultCode: 0, ResultDesc: "Received successfully" });
-
+    return res.status(200).json({
+      ResultCode: 0,
+      ResultDesc: "Received successfully",
+    });
   } catch (error) {
-    console.error("Callback Error:", error.message);
-    return res.status(500).json({ message: "Server error" });
+    console.error("Callback error:", error.message);
+    return res.status(500).json({ message: "Server Error" });
   }
 }
+
 
