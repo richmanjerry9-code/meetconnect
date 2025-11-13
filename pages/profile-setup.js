@@ -6,7 +6,7 @@ import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
 const servicesList = [
@@ -54,24 +54,27 @@ export default function ProfileSetup() {
   const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('loggedInUser'));
-    if (!user) {
-      router.push('/');
-      return;
-    }
-    setLoggedInUser(user);
-    const fetchProfile = async () => {
+    setLoading(true);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser) {
+        router.push('/');
+        setLoading(false);
+        return;
+      }
       try {
-        const profileDoc = await getDoc(doc(db, 'profiles', user.id));
-        if (profileDoc.exists()) {
-          const data = profileDoc.data();
-          let loadedPhone = data.phone || '';
-          // Clean phone to digits only on load
-          loadedPhone = loadedPhone.replace(/[^\d]/g, '');
+        const profileRef = doc(db, 'profiles', currentUser.uid);
+        const profileSnap = await getDoc(profileRef);
+        let userData = { id: currentUser.uid, email: currentUser.email };
+        let loadedPhone = '';
+        if (profileSnap.exists()) {
+          const data = profileSnap.data();
+          userData = { ...userData, ...data };
+          loadedPhone = data.phone || '';
+          // No stripping - keep original format
           setFormData((prev) => ({
             ...prev,
             ...data,
-            username: user.username,
+            username: userData.username,
             phone: loadedPhone,
             services: data.services || [],
             nearby: data.nearby || [],
@@ -80,19 +83,22 @@ export default function ProfileSetup() {
           setSelectedWard(data.ward || '');
           setWalletBalance(data.walletBalance || 0);
           setMembership(data.membership || 'Regular');
-          setMpesaPhone(loadedPhone); // Raw cleaned phone for M-Pesa
+          setMpesaPhone(loadedPhone); // Original format
         } else {
-          setFormData((prev) => ({ ...prev, username: user.username }));
+          userData.username = currentUser.email.split('@')[0];
+          setFormData((prev) => ({ ...prev, username: userData.username }));
           setWalletBalance(0);
           setMembership('Regular');
         }
+        localStorage.setItem('loggedInUser', JSON.stringify(userData));
+        setLoggedInUser(userData);
       } catch (err) {
         setError('Failed to load profile. Please refresh.');
       } finally {
         setLoading(false);
       }
-    };
-    fetchProfile();
+    });
+    return () => unsubscribe();
   }, [router]);
 
   // ✅ Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
@@ -153,9 +159,8 @@ export default function ProfileSetup() {
       // normal input/select change
       let inputValue = value;
       if (name === 'phone') {
-        // Clean phone input to digits only
-        inputValue = value.replace(/[^\d]/g, '');
-        // Update mpesaPhone if it's the phone field
+        // No stripping - allow original format (e.g., +254, 07)
+        // Update mpesaPhone to match
         setMpesaPhone(inputValue);
         // Clear error if typing a valid partial number
         if (error && inputValue.length > 6) setError('');
@@ -313,8 +318,9 @@ export default function ProfileSetup() {
       return;
     }
     try {
-      const formatted = formatPhoneForMpesa(formData.phone);
-      setMpesaPhone(formatted);
+      formatPhoneForMpesa(formData.phone);
+      // Set to original format
+      setMpesaPhone(formData.phone);
     } catch (error) {
       alert(error.message);
       return;
@@ -370,8 +376,8 @@ export default function ProfileSetup() {
       return;
     }
     try {
-      const formatted = formatPhoneForMpesa(formData.phone);
-      setMpesaPhone(formatted);
+      formatPhoneForMpesa(formData.phone);
+      setMpesaPhone(formData.phone);
       setShowAddFundModal(true);
     } catch (error) {
       setError(error.message);
