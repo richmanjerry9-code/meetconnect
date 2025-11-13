@@ -1,7 +1,21 @@
 import fetch from "node-fetch";
 
-export async function stkPush(customerPhone, amount, accountRef, description) {
+// Utility to format Kenyan phone numbers
+function formatPhoneNumber(phone) {
+  phone = phone.replace(/\D/g, ''); // remove non-digits
+  if (phone.startsWith('0')) {
+    phone = '254' + phone.slice(1);
+  } else if (!phone.startsWith('254')) {
+    throw new Error("Phone number must start with 0 or 254");
+  }
+  return phone;
+}
+
+export async function stkPush(phone, amount, accountRef, description) {
   try {
+    // Format phone number
+    const customerPhone = formatPhoneNumber(phone);
+
     // Required environment variables
     const requiredEnvVars = {
       MPESA_BASE_URL: process.env.MPESA_BASE_URL,
@@ -45,14 +59,14 @@ export async function stkPush(customerPhone, amount, accountRef, description) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        BusinessShortCode: requiredEnvVars.MPESA_SHORTCODE, // <-- Your till/PayBill number
+        BusinessShortCode: requiredEnvVars.MPESA_SHORTCODE,
         Password: password,
         Timestamp: timestamp,
         TransactionType: 'CustomerPayBillOnline',
         Amount: amount,
-        PartyA: customerPhone,           // <-- MUST be the customer's phone number
-        PartyB: requiredEnvVars.MPESA_SHORTCODE, // <-- Your till/PayBill
-        PhoneNumber: customerPhone,      // <-- Same as PartyA
+        PartyA: customerPhone,                // <-- formatted phone
+        PartyB: requiredEnvVars.MPESA_SHORTCODE,
+        PhoneNumber: customerPhone,           // <-- formatted phone
         CallBackURL: requiredEnvVars.MPESA_CALLBACK_URL.trim(),
         AccountReference: accountRef,
         TransactionDesc: description,
@@ -67,6 +81,7 @@ export async function stkPush(customerPhone, amount, accountRef, description) {
     return await stkResponse.json();
   } catch (err) {
     console.error("STK Push Error:", err);
-    throw err; // Let caller handle it
+    throw err;
   }
 }
+
