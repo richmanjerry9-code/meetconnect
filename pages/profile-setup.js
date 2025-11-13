@@ -6,7 +6,7 @@ import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
 const servicesList = [
@@ -54,51 +54,68 @@ export default function ProfileSetup() {
   const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
 
   useEffect(() => {
-    setLoading(true);
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (!currentUser) {
-        router.push('/');
-        setLoading(false);
-        return;
-      }
+    let unsubscribe;
+    const initialize = async () => {
       try {
-        const profileRef = doc(db, 'profiles', currentUser.uid);
-        const profileSnap = await getDoc(profileRef);
-        let userData = { id: currentUser.uid, email: currentUser.email };
-        let loadedPhone = '';
-        if (profileSnap.exists()) {
-          const data = profileSnap.data();
-          userData = { ...userData, ...data };
-          loadedPhone = data.phone || '';
-          // No stripping - keep original format
-          setFormData((prev) => ({
-            ...prev,
-            ...data,
-            username: userData.username,
-            phone: loadedPhone,
-            services: data.services || [],
-            nearby: data.nearby || [],
-            age: data.age || prev.age,
-          }));
-          setSelectedWard(data.ward || '');
-          setWalletBalance(data.walletBalance || 0);
-          setMembership(data.membership || 'Regular');
-          setMpesaPhone(loadedPhone); // Original format
-        } else {
-          userData.username = currentUser.email.split('@')[0];
-          setFormData((prev) => ({ ...prev, username: userData.username }));
-          setWalletBalance(0);
-          setMembership('Regular');
-        }
-        localStorage.setItem('loggedInUser', JSON.stringify(userData));
-        setLoggedInUser(userData);
+        // Set auth persistence to session-only (logs out on browser close/reopen)
+        await setPersistence(auth, browserSessionPersistence);
       } catch (err) {
-        setError('Failed to load profile. Please refresh.');
-      } finally {
-        setLoading(false);
+        console.error('Failed to set auth persistence:', err);
       }
-    });
-    return () => unsubscribe();
+
+      setLoading(true);
+      unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        if (!currentUser) {
+          router.push('/');
+          setLoading(false);
+          return;
+        }
+        try {
+          const profileRef = doc(db, 'profiles', currentUser.uid);
+          const profileSnap = await getDoc(profileRef);
+          let userData = { id: currentUser.uid, email: currentUser.email };
+          let loadedPhone = '';
+          if (profileSnap.exists()) {
+            const data = profileSnap.data();
+            userData = { ...userData, ...data };
+            loadedPhone = data.phone || '';
+            // No stripping - keep original format
+            setFormData((prev) => ({
+              ...prev,
+              ...data,
+              username: userData.username,
+              phone: loadedPhone,
+              services: data.services || [],
+              nearby: data.nearby || [],
+              age: data.age || prev.age,
+            }));
+            setSelectedWard(data.ward || '');
+            setWalletBalance(data.walletBalance || 0);
+            setMembership(data.membership || 'Regular');
+            setMpesaPhone(loadedPhone); // Original format
+          } else {
+            userData.username = currentUser.email.split('@')[0];
+            setFormData((prev) => ({ ...prev, username: userData.username }));
+            setWalletBalance(0);
+            setMembership('Regular');
+          }
+          localStorage.setItem('loggedInUser', JSON.stringify(userData));
+          setLoggedInUser(userData);
+        } catch (err) {
+          setError('Failed to load profile. Please refresh.');
+        } finally {
+          setLoading(false);
+        }
+      });
+    };
+
+    initialize();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, [router]);
 
   // ✅ Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
