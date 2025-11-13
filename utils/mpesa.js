@@ -1,70 +1,42 @@
-// utils/mpesa.js
-import axios from "axios";
+import fetch from "node-fetch";
 
-/**
- * Generate M-PESA access token (LIVE)
- */
-export const getAccessToken = async () => {
+export async function stkPush(phone, amount, accountRef, description) {
   try {
-    const auth = Buffer.from(
-      `${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`
-    ).toString("base64");
-
-    const url = "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
-
-    const response = await axios.get(url, {
-      headers: { Authorization: `Basic ${auth}` },
+    const tokenRes = await fetch(`${process.env.MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`).toString('base64')}`,
+      },
     });
 
-    return response.data.access_token;
-  } catch (error) {
-    console.error("M-PESA Token Error:", error.response?.data || error.message);
-    throw new Error("Failed to generate access token");
-  }
-};
+    const { access_token } = await tokenRes.json();
 
-/**
- * Send STK Push Request (LIVE)
- */
-export const stkPush = async (phone, amount, accountReference, transactionDesc) => {
-  try {
-    const token = await getAccessToken();
+    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    const password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
 
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[^0-9]/g, "")
-      .slice(0, 14);
-
-    const password = Buffer.from(
-      `${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`
-    ).toString("base64");
-
-    const response = await axios.post(
-      "https://api.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
-      {
+    const stkResponse = await fetch(`${process.env.MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         BusinessShortCode: process.env.MPESA_SHORTCODE,
         Password: password,
         Timestamp: timestamp,
-        TransactionType: "CustomerPayBillOnline",
+        TransactionType: 'CustomerPayBillOnline',
         Amount: amount,
         PartyA: phone,
         PartyB: process.env.MPESA_SHORTCODE,
         PhoneNumber: phone,
-        CallBackURL: process.env.MPESA_CALLBACK_URL,
-        AccountReference: accountReference,
-        TransactionDesc: transactionDesc,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
+        CallBackURL: `${process.env.NEXT_PUBLIC_APP_URL}/api/mpesa/callback`,
+        AccountReference: accountRef,
+        TransactionDesc: description,
+      }),
+    });
 
-    return response.data;
-  } catch (error) {
-    console.error("STK Push Error:", error.response?.data || error.message);
-    throw new Error("STK Push failed");
+    return await stkResponse.json();
+  } catch (err) {
+    console.error("STK Push Error:", err);
+    throw err;
   }
-};
-
+}
