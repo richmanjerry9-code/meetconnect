@@ -1,5 +1,5 @@
 // pages/api/callback.js
-import { db } from '../../lib/firebase';
+import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { increment } from 'firebase/firestore';
 
