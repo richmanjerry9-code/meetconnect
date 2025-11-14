@@ -1,3 +1,4 @@
+// pages/profilesetup.js
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -6,7 +7,7 @@ import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { signOut, onAuthStateChanged, setPersistence, browserSessionPersistence } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
 const servicesList = [
@@ -50,75 +51,52 @@ export default function ProfileSetup() {
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  const [loading, setLoading] = useState(true); // ✅ New loading state for profile fetch
-  const [saveLoading, setSaveLoading] = useState(false); // ✅ New for submit
+  const [loading, setLoading] = useState(true); // New loading state for profile fetch
+  const [saveLoading, setSaveLoading] = useState(false); // New for submit
 
   useEffect(() => {
-    let unsubscribe;
-    const initialize = async () => {
+    const user = JSON.parse(localStorage.getItem('loggedInUser'));
+    if (!user) {
+      router.push('/');
+      return;
+    }
+    setLoggedInUser(user);
+    const fetchProfile = async () => {
       try {
-        // Set auth persistence to session-only (logs out on browser close/reopen)
-        await setPersistence(auth, browserSessionPersistence);
+        const profileDoc = await getDoc(doc(db, 'profiles', user.id));
+        if (profileDoc.exists()) {
+          const data = profileDoc.data();
+          let loadedPhone = data.phone || '';
+          // Clean phone to digits only on load
+          loadedPhone = loadedPhone.replace(/[^\d]/g, '');
+          setFormData((prev) => ({
+            ...prev,
+            ...data,
+            username: user.username,
+            phone: loadedPhone,
+            services: data.services || [],
+            nearby: data.nearby || [],
+            age: data.age || prev.age,
+          }));
+          setSelectedWard(data.ward || '');
+          setWalletBalance(data.walletBalance || 0);
+          setMembership(data.membership || 'Regular');
+          setMpesaPhone(loadedPhone); // Raw cleaned phone for M-Pesa
+        } else {
+          setFormData((prev) => ({ ...prev, username: user.username }));
+          setWalletBalance(0);
+          setMembership('Regular');
+        }
       } catch (err) {
-        console.error('Failed to set auth persistence:', err);
-      }
-
-      setLoading(true);
-      unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        if (!currentUser) {
-          router.push('/');
-          setLoading(false);
-          return;
-        }
-        try {
-          const profileRef = doc(db, 'profiles', currentUser.uid);
-          const profileSnap = await getDoc(profileRef);
-          let userData = { id: currentUser.uid, email: currentUser.email };
-          let loadedPhone = '';
-          if (profileSnap.exists()) {
-            const data = profileSnap.data();
-            userData = { ...userData, ...data };
-            loadedPhone = data.phone || '';
-            // No stripping - keep original format
-            setFormData((prev) => ({
-              ...prev,
-              ...data,
-              username: userData.username,
-              phone: loadedPhone,
-              services: data.services || [],
-              nearby: data.nearby || [],
-              age: data.age || prev.age,
-            }));
-            setSelectedWard(data.ward || '');
-            setWalletBalance(data.walletBalance || 0);
-            setMembership(data.membership || 'Regular');
-            setMpesaPhone(loadedPhone); // Original format
-          } else {
-            userData.username = currentUser.email.split('@')[0];
-            setFormData((prev) => ({ ...prev, username: userData.username }));
-            setWalletBalance(0);
-            setMembership('Regular');
-          }
-          localStorage.setItem('loggedInUser', JSON.stringify(userData));
-          setLoggedInUser(userData);
-        } catch (err) {
-          setError('Failed to load profile. Please refresh.');
-        } finally {
-          setLoading(false);
-        }
-      });
-    };
-
-    initialize();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
+        setError('Failed to load profile. Please refresh.');
+      } finally {
+        setLoading(false);
       }
     };
+    fetchProfile();
   }, [router]);
 
-  // ✅ Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
+  // Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
   const formatPhoneForMpesa = (phone) => {
     if (!phone) throw new Error('Phone number is required');
     let formatted = phone.replace(/[^\d]/g, ''); // Clean to digits only
@@ -138,7 +116,7 @@ export default function ProfileSetup() {
     return formatted;
   };
 
-  // ✅ Helper to shorten userId to last 10 chars for ref
+  // Helper to shorten userId to last 10 chars for ref
   const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
   const handleChange = (e) => {
@@ -176,8 +154,9 @@ export default function ProfileSetup() {
       // normal input/select change
       let inputValue = value;
       if (name === 'phone') {
-        // No stripping - allow original format (e.g., +254, 07)
-        // Update mpesaPhone to match
+        // Clean phone input to digits only
+        inputValue = value.replace(/[^\d]/g, '');
+        // Update mpesaPhone if it's the phone field
         setMpesaPhone(inputValue);
         // Clear error if typing a valid partial number
         if (error && inputValue.length > 6) setError('');
@@ -243,7 +222,7 @@ export default function ProfileSetup() {
       return;
     }
 
-    // ✅ Validate phone format before saving
+    // Validate phone format before saving
     try {
       formatPhoneForMpesa(formData.phone);
     } catch (err) {
@@ -329,15 +308,14 @@ export default function ProfileSetup() {
       return;
     }
 
-    // ✅ Validate phone before proceeding to payment
+    // Validate phone before proceeding to payment
     if (!formData.phone) {
       alert('Please add your phone number to your profile first.');
       return;
     }
     try {
-      formatPhoneForMpesa(formData.phone);
-      // Set to original format
-      setMpesaPhone(formData.phone);
+      const formatted = formatPhoneForMpesa(formData.phone);
+      setMpesaPhone(formatted);
     } catch (error) {
       alert(error.message);
       return;
@@ -393,8 +371,8 @@ export default function ProfileSetup() {
       return;
     }
     try {
-      formatPhoneForMpesa(formData.phone);
-      setMpesaPhone(formData.phone);
+      const formatted = formatPhoneForMpesa(formData.phone);
+      setMpesaPhone(formatted);
       setShowAddFundModal(true);
     } catch (error) {
       setError(error.message);
@@ -546,11 +524,12 @@ export default function ProfileSetup() {
                   </div>
                   {selectedPaymentMethod === 'mpesa' && (
                     <StkPushForm
-                      initialPhone={mpesaPhone}
+                      initialPhone={formData.phone}
                       initialAmount={plans[selectedLevel][selectedDuration]}
                       readOnlyAmount={true}
-                      apiEndpoint="/api/upgrade"
+                      apiEndpoint="/api/stkpush"
                       additionalBody={{
+                        type: 'upgrade',
                         userId: loggedInUser.id,
                         level: selectedLevel,
                         duration: selectedDuration,
@@ -583,9 +562,10 @@ export default function ProfileSetup() {
                   <h3>Add Funds to Wallet</h3>
                   <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
                   <StkPushForm
-                    initialPhone={mpesaPhone}
-                    apiEndpoint="/api/addFunds"
+                    initialPhone={formData.phone}
+                    apiEndpoint="/api/stkpush"
                     additionalBody={{
+                      type: 'addfund',
                       userId: loggedInUser.id,
                       accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
                       transactionDesc: 'Add funds to wallet'
