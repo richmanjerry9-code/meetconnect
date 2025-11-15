@@ -47,14 +47,14 @@ const isProfileComplete = (p) => {
 
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
-  const [allProfiles, setAllProfiles] = useState(initialProfiles);
+  const [allProfiles, setAllProfiles] = useState(initialProfiles.filter(isProfileComplete)); // ✅ Start with SSR data immediately
   const [lastDoc, setLastDoc] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(initialProfiles.length >= 100); // ✅ Infer from initial
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState('');
   const [user, setUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true); // ✅ Renamed & non-blocking
   const [selectedCounty, setSelectedCounty] = useState('');
   const [selectedWard, setSelectedWard] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
@@ -72,9 +72,8 @@ export default function Home({ initialProfiles = [] }) {
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
 
-  // ✅ Auth state listener with auto-fix for missing profiles
+  // ✅ Auth state listener (non-blocking for page render)
   useEffect(() => {
-    setUserLoading(true);
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
@@ -103,44 +102,65 @@ export default function Home({ initialProfiles = [] }) {
       } else {
         setUser(null);
       }
-      setUserLoading(false);
+      setAuthLoading(false); // ✅ Now unblocks after auth
     });
     return unsubscribe;
   }, []);
 
-  // ✅ Real-time listener for profiles with onSnapshot (filter complete profiles)
+  // ✅ Real-time listener: Merge with initial (don't overwrite if SSR worked)
   useEffect(() => {
-    const q = query(
-      collection(firestore, 'profiles'),
-      orderBy('createdAt', 'desc'),
-      limit(100) // Fetch more initially for better coverage
-    );
-    unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => {
-        const profileData = doc.data();
-        if (profileData.createdAt && profileData.createdAt.toDate) {
-          profileData.createdAt = profileData.createdAt.toDate().toISOString();
-        }
-        return { id: doc.id, ...profileData };
-      });
+    if (allProfiles.length > 0 && initialProfiles.length > 0) {
+      // If SSR loaded data, just listen for changes (no full reload)
+      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(100));
+      unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+        const newData = snapshot.docs.map((doc) => {
+          const profileData = doc.data();
+          if (profileData.createdAt && profileData.createdAt.toDate) {
+            profileData.createdAt = profileData.createdAt.toDate().toISOString();
+          }
+          return { id: doc.id, ...profileData };
+        }).filter(isProfileComplete);
 
-      // ✅ Only keep fully filled profiles
-      const validProfiles = data.filter(isProfileComplete);
-      setAllProfiles(validProfiles);
-      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-      setHasMore(snapshot.size === 100);
-      setError(null); // Clear errors on successful snapshot
-    }, (err) => {
-      console.error('Snapshot error:', err);
-      setError('Failed to load profiles in real-time. Please refresh.');
-    });
+        // Merge: Add only new/updated, preserve order
+        setAllProfiles(prev => {
+          const merged = [...new Set([...prev, ...newData].map(p => p.id))].map(id => 
+            newData.find(p => p.id === id) || prev.find(p => p.id === id)
+          ).filter(Boolean).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          return merged;
+        });
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+        setHasMore(snapshot.size === 100);
+        setError(null);
+      }, (err) => {
+        console.error('Snapshot error:', err);
+        setError('Failed to update profiles. Refresh for latest.');
+      });
+    } else {
+      // Fallback full load if no SSR
+      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(100));
+      unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map((doc) => {
+          const profileData = doc.data();
+          if (profileData.createdAt && profileData.createdAt.toDate) {
+            profileData.createdAt = profileData.createdAt.toDate().toISOString();
+          }
+          return { id: doc.id, ...profileData };
+        }).filter(isProfileComplete);
+
+        setAllProfiles(data);
+        setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
+        setHasMore(snapshot.size === 100);
+        setError(null);
+      }, (err) => {
+        console.error('Snapshot error:', err);
+        setError('Failed to load profiles. Please refresh.');
+      });
+    }
 
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
+      if (unsubscribeRef.current) unsubscribeRef.current();
     };
-  }, []);
+  }, [initialProfiles.length]); // ✅ Depend on initial length
 
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
@@ -169,17 +189,14 @@ export default function Home({ initialProfiles = [] }) {
           profileData.createdAt = profileData.createdAt.toDate().toISOString();
         }
         return { id: doc.id, ...profileData };
-      });
+      }).filter(isProfileComplete);
 
-      // ✅ Only fully filled profiles
-      const validProfiles = data.filter(isProfileComplete);
-
-      setAllProfiles(prev => [...prev, ...validProfiles]);
-      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
+      setAllProfiles(prev => [...prev, ...data]);
+      setLastDoc(snapshot.docs[snapshot.docs.length - 1] || null);
       setHasMore(snapshot.size === 20);
       cacheRef.current.set(cacheKey, { 
-        profiles: validProfiles, 
-        lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, 
+        profiles: data, 
+        lastDoc: snapshot.docs[snapshot.docs.length - 1] || null, 
         hasMore: snapshot.size === 20 
       });
     } catch (err) {
@@ -201,14 +218,13 @@ export default function Home({ initialProfiles = [] }) {
       { threshold: 0 }
     );
 
-    const currentSentinel = sentinelRef.current; // Copy ref here
-    if (currentSentinel) {
-      observer.observe(currentSentinel);
+    if (sentinelRef.current) {
+      observer.observe(sentinelRef.current);
     }
 
     return () => {
-      if (currentSentinel) { // Use copied value in cleanup
-        observer.unobserve(currentSentinel);
+      if (sentinelRef.current) {
+        observer.unobserve(sentinelRef.current);
       }
     };
   }, [hasMore, isLoadingMore, loadMoreProfiles]);
@@ -416,6 +432,7 @@ export default function Home({ initialProfiles = [] }) {
 
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
+      setAuthLoading(false); // ✅ Unblock immediately
 
       setAuthError('Login successful!');
       setTimeout(() => {
@@ -457,6 +474,8 @@ export default function Home({ initialProfiles = [] }) {
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
+    setUser(null);
+    setAuthLoading(false);
   };
 
   // Handle ESC key for modals
@@ -491,10 +510,7 @@ export default function Home({ initialProfiles = [] }) {
   const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
 
-  if (userLoading) {
-    return <div className={styles.container}>Loading...</div>;
-  }
-
+  // ✅ No full-page block—always render content, auth loads async
   return (
     <div className={styles.container}>
       <Head>
@@ -509,7 +525,7 @@ export default function Home({ initialProfiles = [] }) {
         <meta property="og:type" content="website" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="index, follow" />
-        <link rel="canonical" href="https://yourdomain.com" /> {/* TODO: Replace with actual domain */}
+        <link rel="canonical" href="https://www.meetconnect.co.ke" /> {/* Updated domain */}
       </Head>
 
       <header className={styles.header}>
@@ -519,13 +535,14 @@ export default function Home({ initialProfiles = [] }) {
           </h1>
         </div>
         <div className={styles.authButtons}>
-          {!user && (
+          {authLoading ? (
+            <div style={{ fontSize: '14px', color: '#666' }}>Loading user...</div> // ✅ Small async indicator
+          ) : !user ? (
             <>
               <button onClick={() => setShowRegister(true)} className={styles.button}>Register</button>
               <button onClick={() => setShowLogin(true)} className={`${styles.button} ${styles.login}`}>Login</button>
             </>
-          )}
-          {user && (
+          ) : (
             <>
               <button onClick={() => router.push({ pathname: '/profile-setup', query: { t: Date.now() } })} className={styles.button}>My Profile</button>
               <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>Logout</button>
@@ -609,7 +626,13 @@ export default function Home({ initialProfiles = [] }) {
         </div>
 
         <div className={styles.profiles} role="list">
-          {filteredProfiles.map((p) => <ProfileCard key={p.id} p={p} router={router} />)}
+          {filteredProfiles.length > 0 ? (
+            filteredProfiles.map((p) => <ProfileCard key={p.id} p={p} router={router} />)
+          ) : (
+            <p className={styles.noProfiles}>
+              {allProfiles.length === 0 ? 'Loading profiles...' : 'No ladies found. Complete your profile with a photo to appear here.'}
+            </p>
+          )}
           {error && <p className={styles.noProfiles} style={{ color: 'red' }}>{error}</p>}
           {isLoadingMore && (
             <>
@@ -624,11 +647,6 @@ export default function Home({ initialProfiles = [] }) {
                 </div>
               ))}
             </>
-          )}
-          {filteredProfiles.length === 0 && !isLoadingMore && !error && (
-            <p className={styles.noProfiles}>
-              No ladies found. Complete your profile with a photo to appear here.
-            </p>
           )}
           {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
         </div>
@@ -717,6 +735,7 @@ export default function Home({ initialProfiles = [] }) {
   );
 }
 
+// ProfileCard & Modal components unchanged...
 const ProfileCard = memo(({ p, router }) => {
   const { username = '', profilePic = null, name = 'Anonymous Lady', membership = 'Regular', verified = false, area = '', ward = '', county = 'Nairobi', services = [], phone = '' } = p;
   
@@ -797,7 +816,7 @@ export async function getStaticProps() {
         credential: admin.credential.cert({
           projectId: process.env.FIREBASE_PROJECT_ID,
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
         }),
       });
     }
@@ -820,10 +839,11 @@ export async function getStaticProps() {
       .filter(isProfileComplete); // ✅ Filter incomplete
   } catch (err) {
     console.error('Error fetching initial profiles:', err);
+    // ✅ Graceful fallback—no crash
   }
 
   return {
     props: { initialProfiles },
-    revalidate: 60, // rebuild the page every 60 seconds
+    revalidate: 60, // Rebuild every 60s
   };
 }
