@@ -729,7 +729,7 @@ const ProfileCard = memo(({ p, router }) => {
   };
 
   const handleImageError = (e) => {
-    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pc3NpbmcgUGljPC90ZXh0Pjwvc3ZnPg==';
+    e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pc3NpbmcgUGljPC90ZXh0Pjwvc3ZnPg==';
   };
 
   const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county || 'Location TBD');
@@ -790,12 +790,25 @@ Modal.displayName = 'Modal';
 export async function getStaticProps() {
   let initialProfiles = [];
   try {
-    const q = query(
-      collection(firestore, 'profiles'),
-      orderBy('createdAt', 'desc'),
-      limit(100) // More for initial
-    );
-    const snapshot = await getDocs(q);
+    const admin = (await import('firebase-admin')).default;
+
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        }),
+      });
+    }
+
+    const adminDb = admin.firestore();
+
+    const q = adminDb.collection('profiles')
+      .orderBy('createdAt', 'desc')
+      .limit(100);
+
+    const snapshot = await q.get();
     initialProfiles = snapshot.docs
       .map((doc) => {
         const data = doc.data();
