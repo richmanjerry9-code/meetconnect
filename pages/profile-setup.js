@@ -1,11 +1,11 @@
-// pages/profilesetup.js
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
+import Link from 'next/link';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
-import { db, auth } from '@/lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
@@ -51,8 +51,8 @@ export default function ProfileSetup() {
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  const [loading, setLoading] = useState(true); // New loading state for profile fetch
-  const [saveLoading, setSaveLoading] = useState(false); // New for submit
+  const [loading, setLoading] = useState(true); //  New loading state for profile fetch
+  const [saveLoading, setSaveLoading] = useState(false); //  New for submit
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -96,7 +96,7 @@ export default function ProfileSetup() {
     fetchProfile();
   }, [router]);
 
-  // Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
+  //  Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
   const formatPhoneForMpesa = (phone) => {
     if (!phone) throw new Error('Phone number is required');
     let formatted = phone.replace(/[^\d]/g, ''); // Clean to digits only
@@ -116,7 +116,7 @@ export default function ProfileSetup() {
     return formatted;
   };
 
-  // Helper to shorten userId to last 10 chars for ref
+  //  Helper to shorten userId to last 10 chars for ref
   const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
   const handleChange = (e) => {
@@ -222,7 +222,7 @@ export default function ProfileSetup() {
       return;
     }
 
-    // Validate phone format before saving
+    //  Validate phone format before saving
     try {
       formatPhoneForMpesa(formData.phone);
     } catch (err) {
@@ -308,7 +308,7 @@ export default function ProfileSetup() {
       return;
     }
 
-    // Validate phone before proceeding to payment
+    //  Validate phone before proceeding to payment
     if (!formData.phone) {
       alert('Please add your phone number to your profile first.');
       return;
@@ -422,8 +422,13 @@ export default function ProfileSetup() {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect Ladies 
+            Meet Connect ❤️
           </h1>
+        </div>
+        <div className={styles.nav}>
+          <Link href="/">VVIP</Link>
+          <Link href="/vip">VIP</Link>
+          <Link href="/prime">Prime</Link>
         </div>
         <div className={styles.authButtons}>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
@@ -524,12 +529,11 @@ export default function ProfileSetup() {
                   </div>
                   {selectedPaymentMethod === 'mpesa' && (
                     <StkPushForm
-                      initialPhone={formData.phone}
+                      initialPhone={mpesaPhone}
                       initialAmount={plans[selectedLevel][selectedDuration]}
                       readOnlyAmount={true}
-                      apiEndpoint="/api/stkpush"
+                      apiEndpoint="/api/upgrade"
                       additionalBody={{
-                        type: 'upgrade',
                         userId: loggedInUser.id,
                         level: selectedLevel,
                         duration: selectedDuration,
@@ -562,10 +566,9 @@ export default function ProfileSetup() {
                   <h3>Add Funds to Wallet</h3>
                   <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
                   <StkPushForm
-                    initialPhone={formData.phone}
-                    apiEndpoint="/api/stkpush"
+                    initialPhone={mpesaPhone}
+                    apiEndpoint="/api/addFunds"
                     additionalBody={{
-                      type: 'addfund',
                       userId: loggedInUser.id,
                       accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
                       transactionDesc: 'Add funds to wallet'
