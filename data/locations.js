@@ -67,7 +67,6 @@ export const Nairobi = {
   Makadara: ['Makadara', 'Hamza'],
   Mathare: ['Mathare'],
   Mlolongo: ['Mlolongo'],
-  Mwiki: ['Mwiki'],
   'Nairobi Town': ['Nairobi Town', 'CBD', 'Gikomba', 'Kamukunji', 'Muthurwa'],
   'Nairobi West': ['Nairobi West', 'Kisauni Road', 'Shopping Centre'],
   Ngara: ['Ngara'],
