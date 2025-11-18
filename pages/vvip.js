@@ -1,4 +1,4 @@
-// index.js
+// vvip.js
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -6,28 +6,24 @@ import Image from 'next/image';
 import Link from 'next/link';
 import * as Counties from '../data/locations';
 import styles from '../styles/Home.module.css';
-import { db as firestore } from '../lib/firebase.js'; // Renamed for clarity
+import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, limit, getDocs, addDoc, where, startAfter, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, getDocs, startAfter, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
-
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedValue(value);
     }, delay);
-
     return () => {
       clearTimeout(handler);
     };
   }, [value, delay]);
-
   return debouncedValue;
 }
 
-// Helper to check profile completeness
 const isProfileComplete = (p) => {
   return (
     p &&
@@ -36,7 +32,7 @@ const isProfileComplete = (p) => {
     p.name &&
     p.name.trim() !== '' &&
     p.profilePic &&
-    p.profilePic.trim() !== '' && // Ensure it's not empty string
+    p.profilePic.trim() !== '' &&
     p.county &&
     p.county.trim() !== '' &&
     p.ward &&
@@ -46,7 +42,7 @@ const isProfileComplete = (p) => {
   );
 };
 
-export default function Home({ initialProfiles = [] }) {
+export default function Vvip({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
   const [lastDoc, setLastDoc] = useState(null);
@@ -73,7 +69,6 @@ export default function Home({ initialProfiles = [] }) {
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
 
-  // Auth state listener with auto-fix for missing profiles
   useEffect(() => {
     setUserLoading(true);
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -84,7 +79,6 @@ export default function Home({ initialProfiles = [] }) {
           if (profileDoc.exists()) {
             userData = { id: profileDoc.id, ...profileDoc.data() };
           } else {
-            // Auto-make basic profile if missing
             const basicProfile = {
               uid: currentUser.uid,
               name: currentUser.email.split('@')[0],
@@ -109,12 +103,11 @@ export default function Home({ initialProfiles = [] }) {
     return unsubscribe;
   }, []);
 
-  // Real-time listener for profiles with onSnapshot (filter complete profiles)
   useEffect(() => {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
-      limit(100) // Fetch more initially for better coverage
+      limit(100)
     );
     unsubscribeRef.current = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map((doc) => {
@@ -124,18 +117,15 @@ export default function Home({ initialProfiles = [] }) {
         }
         return { id: doc.id, ...profileData };
       });
-
-      // Only keep fully filled profiles
       const validProfiles = data.filter(isProfileComplete);
       setAllProfiles(validProfiles);
       setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
       setHasMore(snapshot.size === 100);
-      setError(null); // Clear errors on successful snapshot
+      setError(null);
     }, (err) => {
       console.error('Snapshot error:', err);
       setError('Failed to load profiles in real-time. Please refresh.');
     });
-
     return () => {
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
@@ -171,10 +161,7 @@ export default function Home({ initialProfiles = [] }) {
         }
         return { id: doc.id, ...profileData };
       });
-
-      // Only fully filled profiles
       const validProfiles = data.filter(isProfileComplete);
-
       setAllProfiles(prev => [...prev, ...validProfiles]);
       setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
       setHasMore(snapshot.size === 20);
@@ -191,7 +178,6 @@ export default function Home({ initialProfiles = [] }) {
     }
   }, [isLoadingMore, hasMore, lastDoc]);
 
-  // IntersectionObserver for infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -201,20 +187,17 @@ export default function Home({ initialProfiles = [] }) {
       },
       { threshold: 0 }
     );
-
-    const currentSentinel = sentinelRef.current; // Copy ref here
+    const currentSentinel = sentinelRef.current;
     if (currentSentinel) {
       observer.observe(currentSentinel);
     }
-
     return () => {
-      if (currentSentinel) { // Use copied value in cleanup
+      if (currentSentinel) {
         observer.unobserve(currentSentinel);
       }
     };
   }, [hasMore, isLoadingMore, loadMoreProfiles]);
 
-  // Filter locations for search
   useEffect(() => {
     if (!debouncedSearchLocation || !Counties) return setFilteredLocations([]);
     const matches = [];
@@ -234,37 +217,31 @@ export default function Home({ initialProfiles = [] }) {
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
 
-  // NEW: Auto-detect and set filters if search term exactly matches a known ward
   useEffect(() => {
     if (!debouncedSearchLocation) {
       setSelectedWard('');
       setSelectedCounty('');
       return;
     }
-
     const lowerSearch = debouncedSearchLocation.trim().toLowerCase();
     let foundWard = null;
     let foundCounty = null;
-
-    // Search for exact ward match across counties
     Object.keys(Counties).some((county) => {
       return Object.keys(Counties[county]).some((ward) => {
         if (ward.toLowerCase() === lowerSearch) {
           foundWard = ward;
           foundCounty = county;
-          return true; // Break inner loop
+          return true;
         }
         return false;
       });
     });
-
     if (foundWard && foundCounty) {
       setSelectedCounty(foundCounty);
       setSelectedWard(foundWard);
       setSelectedArea('');
-      // Optionally auto-update search input to full format
       setSearchLocation(`${foundCounty}, ${foundWard}`);
-      setFilteredLocations([]); // Hide dropdown since exact match
+      setFilteredLocations([]);
     }
   }, [debouncedSearchLocation]);
 
@@ -281,60 +258,39 @@ export default function Home({ initialProfiles = [] }) {
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter((p) => {
-      // Minimal filter: always include (since source is already complete), but check location/search matches
       const countyMatch = selectedCounty ? p.county === selectedCounty : true;
       const wardMatch = selectedWard ? p.ward === selectedWard : true;
       const areaMatch = selectedArea ? p.area === selectedArea : true;
       const searchMatch = debouncedSearchLocation
         ? [p.county || '', p.ward || '', p.area || '', ...(p.nearby || [])]
-            .map(s => s.toLowerCase())
-            .join(' ')
-            .includes(searchTerm)
+          .map(s => s.toLowerCase())
+          .join(' ')
+          .includes(searchTerm)
         : true;
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
 
     const isLocationFiltered = selectedCounty || selectedWard || selectedArea || debouncedSearchLocation;
 
-    // Group by membership
-    const groups = {
-      VIP: [],
-      Prime: [],
-      Regular: [],
-      VVIP: [] // if any
-    };
-
-    filtered.forEach(p => {
-      const mem = p.membership || 'Regular';
-      if (groups.hasOwnProperty(mem)) {
-        groups[mem].push(p);
-      } else {
-        // For any other, treat as Regular
-        groups.Regular.push(p);
-      }
-    });
-
-    // Shuffle each group
-    Object.keys(groups).forEach(key => {
-      groups[key].sort(() => Math.random() - 0.5);
-    });
-
-    // Concatenate in order: VIP, Prime, Regular (VVIP first if exist)
-    let ordered = [];
-    if (groups.VVIP.length > 0) ordered = ordered.concat(groups.VVIP);
-    ordered = ordered.concat(groups.VIP);
-    ordered = ordered.concat(groups.Prime);
-    ordered = ordered.concat(groups.Regular);
-
     if (!isLocationFiltered && filtered.length > 0) {
       const maxPriority = Math.max(...filtered.map(p => membershipPriority[p.membership] || 1));
-      ordered = ordered.filter(p => (membershipPriority[p.membership] || 1) === maxPriority);
+      filtered = filtered.filter(p => (membershipPriority[p.membership] || 1) === maxPriority);
     }
 
-    return ordered;
+    filtered.sort((a, b) => {
+      const aPriority = membershipPriority[a.membership] || 1;
+      const bPriority = membershipPriority[b.membership] || 1;
+      if (bPriority !== aPriority) {
+        return bPriority - aPriority;
+      }
+      const aDate = a.createdAt ? new Date(a.createdAt) : new Date(0);
+      const bDate = b.createdAt ? new Date(b.createdAt) : new Date(0);
+      return bDate - aDate;
+    });
+
+    return filtered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]);
 
-  // Abstracted form validation
   const validateForm = (form, isRegister = false) => {
     if (isRegister) {
       if (!form.name?.trim()) return 'Please enter your full name.';
@@ -349,7 +305,8 @@ export default function Home({ initialProfiles = [] }) {
       if (form.password.length < 6) return 'Password must be at least 6 characters.';
     }
     return null;
-  };  // Registration with Firebase Auth
+  };
+
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -381,100 +338,94 @@ export default function Home({ initialProfiles = [] }) {
       console.error('Registration error:', err);
       setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Error during registration. Try again.');
     }
-  };  // Login with Firebase Auth and auto-fix for missing profile
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
-    setLoginLoading(true);const { email, password } = loginForm;
+    setLoginLoading(true);
+    const { email, password } = loginForm;
+    if (!email || !password) {
+      setAuthError('Please enter email and password.');
+      setLoginLoading(false);
+      return;
+    }
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setAuthError('Please enter a valid email address.');
+      setLoginLoading(false);
+      return;
+    }
+    if (trimmedPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters.');
+      setLoginLoading(false);
+      return;
+    }
+    try {
+      const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+      const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
+      let profileData;
+      if (profileDoc.exists()) {
+        profileData = { id: profileDoc.id, ...profileDoc.data() };
+      } else {
+        const basicProfile = {
+          uid: user.uid,
+          name: user.email.split('@')[0],
+          email: user.email,
+          username: user.email.split('@')[0],
+          membership: 'Regular',
+          createdAt: serverTimestamp(),
+        };
+        await setDoc(doc(firestore, 'profiles', user.uid), basicProfile);
+        profileData = { id: user.uid, ...basicProfile };
+        alert('Welcome back! Quick setup needed—let\'s add your details.');
+      }
+      localStorage.setItem('loggedInUser', JSON.stringify(profileData));
+      setUser(profileData);
+      setAuthError('Login successful!');
+      setTimeout(() => {
+        router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
+        setShowLogin(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Login error details:', err.code, err.message);
+      let userMessage = 'Login failed. Please try again.';
+      switch (err.code) {
+        case 'auth/invalid-credential':
+          userMessage = 'Oops! Wrong email or password. Double-check and try again.';
+          break;
+        case 'auth/user-not-found':
+          userMessage = 'No account here yet. Hit Register to join the fun!';
+          break;
+        case 'auth/wrong-password':
+          userMessage = 'Password doesn\'t match. Forgot it? We can add reset later.';
+          break;
+        case 'auth/invalid-email':
+          userMessage = 'That email looks funny—try again?';
+          break;
+        case 'auth/too-many-requests':
+          userMessage = 'Whoa, too many tries! Wait a bit or use a different email.';
+          break;
+        case 'auth/network-request-failed':
+          userMessage = 'Spotty connection? Check WiFi and retry.';
+          break;
+        default:
+          userMessage = 'Something wiggly—try refresh or email support@yourapp.com.';
+      }
+      setAuthError(userMessage);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
-if (!email || !password) {
-  setAuthError('Please enter email and password.');
-  setLoginLoading(false);
-  return;
-}
-
-const trimmedEmail = email.trim().toLowerCase();
-const trimmedPassword = password.trim();
-
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-if (!emailRegex.test(trimmedEmail)) {
-  setAuthError('Please enter a valid email address.');
-  setLoginLoading(false);
-  return;
-}
-
-if (trimmedPassword.length < 6) {
-  setAuthError('Password must be at least 6 characters.');
-  setLoginLoading(false);
-  return;
-}
-
-try {
-  console.log('Attempting login for:', trimmedEmail);
-
-  const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-
-  console.log('Login successful for user:', user.uid);
-
-  const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
-  let profileData;
-  if (profileDoc.exists()) {
-    profileData = { id: profileDoc.id, ...profileDoc.data() };
-  } else {
-    const basicProfile = {
-      uid: user.uid,
-      name: user.email.split('@')[0],
-      email: user.email,
-      username: user.email.split('@')[0],
-      membership: 'Regular',
-      createdAt: serverTimestamp(),
-    };
-    await setDoc(doc(firestore, 'profiles', user.uid), basicProfile);
-    profileData = { id: user.uid, ...basicProfile };
-    alert('Welcome back! Quick setup needed—let\'s add your details.');  // Friendly nudge
-  }
-
-  localStorage.setItem('loggedInUser', JSON.stringify(profileData));
-  setUser(profileData);
-
-  setAuthError('Login successful!');
-  setTimeout(() => {
-    router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
-    setShowLogin(false);
-  }, 1500);
-} catch (err) {
-  console.error('Login error details:', err.code, err.message);
-
-  let userMessage = 'Login failed. Please try again.';
-  switch (err.code) {
-    case 'auth/invalid-credential':
-      userMessage = 'Oops! Wrong email or password. Double-check and try again.';
-      break;
-    case 'auth/user-not-found':
-      userMessage = 'No account here yet. Hit Register to join the fun!';
-      break;
-    case 'auth/wrong-password':
-      userMessage = 'Password doesn\'t match. Forgot it? We can add reset later.';
-      break;
-    case 'auth/invalid-email':
-      userMessage = 'That email looks funny—try again?';
-      break;
-    case 'auth/too-many-requests':
-      userMessage = 'Whoa, too many tries! Wait a bit or use a different email.';
-      break;
-    case 'auth/network-request-failed':
-      userMessage = 'Spotty connection? Check WiFi and retry.';
-      break;
-    default:
-      userMessage = 'Something wiggly—try refresh or email support@yourapp.com.';
-  }
-  setAuthError(userMessage);
-} finally {
-  setLoginLoading(false);
-}  };  const handleLogout = async () => {
+  const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
-  };  // Handle ESC key for modals
+  };
+
+  // Handle ESC key for modals
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -484,7 +435,9 @@ try {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);  // Click outside to close modals
+  }, []);
+
+  // Click outside to close modals
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) {
@@ -498,31 +451,43 @@ try {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showLogin, showRegister]);  const countyOptions = Object.keys(Counties);
+  }, [showLogin, showRegister]);
+
+  const countyOptions = Object.keys(Counties);
   const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
-  const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];  if (userLoading) {
+  const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
+
+  if (userLoading) {
     return <div className={styles.container}>Loading...</div>;
-  }  return (
+  }
+
+  return (
     <div className={styles.container}>
       <Head>
-        <title>Meet Connect Ladies - For Gentlemen</title>
+        <title>Meet Connect Ladies - VVIP</title>
         <meta
           name="description"
-          content="Discover stunning ladies across Kenya on Meet Connect Ladies, designed for gentlemen seeking meaningful connections."
+          content="Discover VVIP ladies across Kenya on Meet Connect Ladies."
         />
         <meta name="keywords" content="dating Kenya, ladies Nairobi, meet connect, gentlemen profiles" />
-        <meta property="og:title" content="Meet Connect Ladies - For Gentlemen" />
-        <meta property="og:description" content="Connect with elegant ladies across Kenya." />
+        <meta property="og:title" content="Meet Connect Ladies - VVIP" />
+        <meta property="og:description" content="Connect with VVIP ladies across Kenya." />
         <meta property="og:type" content="website" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="index, follow" />
-        <link rel="canonical" href="https://yourdomain.com" /> {/* TODO: Replace with actual domain */}
+        <link rel="canonical" href="https://yourdomain.com/vvip" />
       </Head>
+
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
             Meet Connect ❤️
           </h1>
+        </div>
+        <div className={styles.nav}>
+          <Link href="/vvip">VVIP</Link>
+          <Link href="/vip">VIP</Link>
+          <Link href="/prime">Prime</Link>
         </div>
         <div className={styles.authButtons}>
           {!user && (
@@ -633,7 +598,7 @@ try {
           )}
           {filteredProfiles.length === 0 && !isLoadingMore && !error && (
             <p className={styles.noProfiles}>
-              No ladies found. Complete your profile with a photo to appear here.
+              No ladies found in this tier. Try a different location or view other tiers.
             </p>
           )}
           {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
@@ -728,7 +693,7 @@ const ProfileCard = memo(({ p, router }) => {
   const handleClick = () => {
     if (!username || username.trim() === '') {
       console.warn('Skipping click: Missing username for profile:', p.id);
-      return;  // Quiet skip—no alert
+      return;
     }
     router.push(`/view-profile/${encodeURIComponent(username)}`);
   };
@@ -795,7 +760,7 @@ export async function getStaticProps() {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
-      limit(100) // More for initial
+      limit(100)
     );
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
@@ -806,17 +771,12 @@ export async function getStaticProps() {
         }
         return { id: doc.id, ...data };
       })
-      .filter(isProfileComplete); // Filter incomplete
+      .filter(isProfileComplete);
   } catch (err) {
     console.error('Error fetching initial profiles:', err);
   }
-
   return {
     props: { initialProfiles },
-    revalidate: 60, // rebuild the page every 60 seconds
+    revalidate: 60,
   };
 }
-
-
-
-

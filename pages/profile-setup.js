@@ -1,3 +1,4 @@
+// profile-setup.js
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -37,6 +38,7 @@ export default function ProfileSetup() {
     services: [], // ensure array so .includes won't crash
     otherServices: '',
     profilePic: '',
+    verified: false, // Added for verification system
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
@@ -51,8 +53,9 @@ export default function ProfileSetup() {
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet'); // 'wallet' or 'mpesa'
   const [mpesaPhone, setMpesaPhone] = useState(''); // For M-Pesa prompt phone
-  const [loading, setLoading] = useState(true); //  New loading state for profile fetch
-  const [saveLoading, setSaveLoading] = useState(false); //  New for submit
+  const [loading, setLoading] = useState(true); // New loading state for profile fetch
+  const [saveLoading, setSaveLoading] = useState(false); // New for submit
+  const [verificationRequested, setVerificationRequested] = useState(false); // For verification system
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('loggedInUser'));
@@ -69,6 +72,19 @@ export default function ProfileSetup() {
           let loadedPhone = data.phone || '';
           // Clean phone to digits only on load
           loadedPhone = loadedPhone.replace(/[^\d]/g, '');
+          // Check for membership expiration
+          let effectiveMembership = data.membership || 'Regular';
+          if (data.membershipExpiresAt) {
+            const expiresAt = new Date(data.membershipExpiresAt.seconds * 1000);
+            if (expiresAt < new Date()) {
+              effectiveMembership = 'Regular';
+              // Update DB to revert
+              await setDoc(doc(db, 'profiles', user.id), {
+                membership: 'Regular',
+                membershipExpiresAt: null
+              }, { merge: true });
+            }
+          }
           setFormData((prev) => ({
             ...prev,
             ...data,
@@ -77,10 +93,11 @@ export default function ProfileSetup() {
             services: data.services || [],
             nearby: data.nearby || [],
             age: data.age || prev.age,
+            verified: data.verified || false, // Load verified status
           }));
           setSelectedWard(data.ward || '');
           setWalletBalance(data.walletBalance || 0);
-          setMembership(data.membership || 'Regular');
+          setMembership(effectiveMembership);
           setMpesaPhone(loadedPhone); // Raw cleaned phone for M-Pesa
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
@@ -96,7 +113,7 @@ export default function ProfileSetup() {
     fetchProfile();
   }, [router]);
 
-  //  Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
+  // Helper to format phone for M-Pesa (2547XXXXXXXX) - validates strictly
   const formatPhoneForMpesa = (phone) => {
     if (!phone) throw new Error('Phone number is required');
     let formatted = phone.replace(/[^\d]/g, ''); // Clean to digits only
@@ -116,12 +133,11 @@ export default function ProfileSetup() {
     return formatted;
   };
 
-  //  Helper to shorten userId to last 10 chars for ref
+  // Helper to shorten userId to last 10 chars for ref
   const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-
     if (type === 'checkbox') {
       // handle nearby with max 4, services with normal toggle
       if (name === 'nearby') {
@@ -193,7 +209,6 @@ export default function ProfileSetup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
-
     // Age validation: allow typing but block below 18
     const numericAge = parseInt(formData.age, 10);
     if (isNaN(numericAge) || numericAge < 18) {
@@ -222,7 +237,7 @@ export default function ProfileSetup() {
       return;
     }
 
-    //  Validate phone format before saving
+    // Validate phone format before saving
     try {
       formatPhoneForMpesa(formData.phone);
     } catch (err) {
@@ -288,6 +303,20 @@ export default function ProfileSetup() {
     }
   };
 
+  const handleRequestVerification = async () => {
+    if (verificationRequested) {
+      alert('Verification request already sent.');
+      return;
+    }
+    try {
+      await setDoc(doc(db, 'profiles', loggedInUser.id), { verificationRequested: true }, { merge: true });
+      setVerificationRequested(true);
+      alert('Verification request sent. An admin will review your profile.');
+    } catch (err) {
+      setError('Failed to request verification.');
+    }
+  };
+
   const handleUpgrade = (level) => {
     if (level === 'Regular') {
       alert('Regular membership is free! No upgrade needed.');
@@ -307,8 +336,7 @@ export default function ProfileSetup() {
       alert('Please select a duration.');
       return;
     }
-
-    //  Validate phone before proceeding to payment
+    // Validate phone before proceeding to payment
     if (!formData.phone) {
       alert('Please add your phone number to your profile first.');
       return;
@@ -351,11 +379,21 @@ export default function ProfileSetup() {
       alert('Insufficient balance');
       return;
     }
+    const daysMap = {
+      '3 Days': 3,
+      '7 Days': 7,
+      '15 Days': 15,
+      '30 Days': 30
+    };
+    const days = daysMap[selectedDuration];
+    const expiresAt = serverTimestamp(); // Initial, but calculate client-side
+    const clientExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
       const newBalance = walletBalance - price;
       setWalletBalance(newBalance);
       await setDoc(doc(db, 'profiles', loggedInUser.id), { 
         membership: selectedLevel,
+        membershipExpiresAt: clientExpiresAt,
         walletBalance: newBalance 
       }, { merge: true });
       setMembership(selectedLevel);
@@ -422,11 +460,11 @@ export default function ProfileSetup() {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect ❤️
+            Meet Connect 
           </h1>
         </div>
         <div className={styles.nav}>
-          <Link href="/">VVIP</Link>
+          <Link href="/vvip">VVIP</Link>
           <Link href="/vip">VIP</Link>
           <Link href="/prime">Prime</Link>
         </div>
@@ -781,6 +819,15 @@ export default function ProfileSetup() {
 
               <button type="submit" className={styles.button} disabled={saveLoading}>
                 {saveLoading ? 'Saving...' : 'Save Profile'}
+              </button>
+
+              <button 
+                type="button" 
+                onClick={handleRequestVerification} 
+                className={styles.button} 
+                disabled={verificationRequested || formData.verified}
+              >
+                {formData.verified ? 'Verified' : verificationRequested ? 'Verification Pending' : 'Request Verification'}
               </button>
             </form>
           </div>
