@@ -13,17 +13,14 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, on
 
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
-
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedValue(value);
     }, delay);
-
     return () => {
       clearTimeout(handler);
     };
   }, [value, delay]);
-
   return debouncedValue;
 }
 
@@ -124,7 +121,6 @@ export default function Home({ initialProfiles = [] }) {
         }
         return { id: doc.id, ...profileData };
       });
-
       // Only keep fully filled profiles
       const validProfiles = data.filter(isProfileComplete);
       setAllProfiles(validProfiles);
@@ -171,7 +167,6 @@ export default function Home({ initialProfiles = [] }) {
         }
         return { id: doc.id, ...profileData };
       });
-
       // Only fully filled profiles
       const validProfiles = data.filter(isProfileComplete);
 
@@ -201,7 +196,6 @@ export default function Home({ initialProfiles = [] }) {
       },
       { threshold: 0 }
     );
-
     const currentSentinel = sentinelRef.current; // Copy ref here
     if (currentSentinel) {
       observer.observe(currentSentinel);
@@ -241,7 +235,6 @@ export default function Home({ initialProfiles = [] }) {
       setSelectedCounty('');
       return;
     }
-
     const lowerSearch = debouncedSearchLocation.trim().toLowerCase();
     let foundWard = null;
     let foundCounty = null;
@@ -293,7 +286,6 @@ export default function Home({ initialProfiles = [] }) {
         : true;
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
-
     const isLocationFiltered = selectedCounty || selectedWard || selectedArea || debouncedSearchLocation;
 
     // Group by membership
@@ -349,7 +341,9 @@ export default function Home({ initialProfiles = [] }) {
       if (form.password.length < 6) return 'Password must be at least 6 characters.';
     }
     return null;
-  };  // Registration with Firebase Auth
+  };
+
+  // Registration with Firebase Auth
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -381,100 +375,97 @@ export default function Home({ initialProfiles = [] }) {
       console.error('Registration error:', err);
       setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Error during registration. Try again.');
     }
-  };  // Login with Firebase Auth and auto-fix for missing profile
+  };
+
+  // Login with Firebase Auth and auto-fix for missing profile
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
-    setLoginLoading(true);const { email, password } = loginForm;
+    setLoginLoading(true);
+    const { email, password } = loginForm;
+    if (!email || !password) {
+      setAuthError('Please enter email and password.');
+      setLoginLoading(false);
+      return;
+    }
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setAuthError('Please enter a valid email address.');
+      setLoginLoading(false);
+      return;
+    }
+    if (trimmedPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters.');
+      setLoginLoading(false);
+      return;
+    }
+    try {
+      console.log('Attempting login for:', trimmedEmail);
+      const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+      console.log('Login successful for user:', user.uid);
+      const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
+      let profileData;
+      if (profileDoc.exists()) {
+        profileData = { id: profileDoc.id, ...profileDoc.data() };
+      } else {
+        const basicProfile = {
+          uid: user.uid,
+          name: user.email.split('@')[0],
+          email: user.email,
+          username: user.email.split('@')[0],
+          membership: 'Regular',
+          createdAt: serverTimestamp(),
+        };
+        await setDoc(doc(firestore, 'profiles', user.uid), basicProfile);
+        profileData = { id: user.uid, ...basicProfile };
+        alert('Welcome back! Quick setup needed—let\'s add your details.');  // Friendly nudge
+      }
+      localStorage.setItem('loggedInUser', JSON.stringify(profileData));
+      setUser(profileData);
+      setAuthError('Login successful!');
+      setTimeout(() => {
+        router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
+        setShowLogin(false);
+      }, 1500);
+    } catch (err) {
+      console.error('Login error details:', err.code, err.message);
+      let userMessage = 'Login failed. Please try again.';
+      switch (err.code) {
+        case 'auth/invalid-credential':
+          userMessage = 'Oops! Wrong email or password. Double-check and try again.';
+          break;
+        case 'auth/user-not-found':
+          userMessage = 'No account here yet. Hit Register to join the fun!';
+          break;
+        case 'auth/wrong-password':
+          userMessage = 'Password doesn\'t match. Forgot it? We can add reset later.';
+          break;
+        case 'auth/invalid-email':
+          userMessage = 'That email looks funny—try again?';
+          break;
+        case 'auth/too-many-requests':
+          userMessage = 'Whoa, too many tries! Wait a bit or use a different email.';
+          break;
+        case 'auth/network-request-failed':
+          userMessage = 'Spotty connection? Check WiFi and retry.';
+          break;
+        default:
+          userMessage = 'Something wiggly—try refresh or email support@yourapp.com.';
+      }
+      setAuthError(userMessage);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
-if (!email || !password) {
-  setAuthError('Please enter email and password.');
-  setLoginLoading(false);
-  return;
-}
-
-const trimmedEmail = email.trim().toLowerCase();
-const trimmedPassword = password.trim();
-
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-if (!emailRegex.test(trimmedEmail)) {
-  setAuthError('Please enter a valid email address.');
-  setLoginLoading(false);
-  return;
-}
-
-if (trimmedPassword.length < 6) {
-  setAuthError('Password must be at least 6 characters.');
-  setLoginLoading(false);
-  return;
-}
-
-try {
-  console.log('Attempting login for:', trimmedEmail);
-
-  const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-
-  console.log('Login successful for user:', user.uid);
-
-  const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
-  let profileData;
-  if (profileDoc.exists()) {
-    profileData = { id: profileDoc.id, ...profileDoc.data() };
-  } else {
-    const basicProfile = {
-      uid: user.uid,
-      name: user.email.split('@')[0],
-      email: user.email,
-      username: user.email.split('@')[0],
-      membership: 'Regular',
-      createdAt: serverTimestamp(),
-    };
-    await setDoc(doc(firestore, 'profiles', user.uid), basicProfile);
-    profileData = { id: user.uid, ...basicProfile };
-    alert('Welcome back! Quick setup needed—let\'s add your details.');  // Friendly nudge
-  }
-
-  localStorage.setItem('loggedInUser', JSON.stringify(profileData));
-  setUser(profileData);
-
-  setAuthError('Login successful!');
-  setTimeout(() => {
-    router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
-    setShowLogin(false);
-  }, 1500);
-} catch (err) {
-  console.error('Login error details:', err.code, err.message);
-
-  let userMessage = 'Login failed. Please try again.';
-  switch (err.code) {
-    case 'auth/invalid-credential':
-      userMessage = 'Oops! Wrong email or password. Double-check and try again.';
-      break;
-    case 'auth/user-not-found':
-      userMessage = 'No account here yet. Hit Register to join the fun!';
-      break;
-    case 'auth/wrong-password':
-      userMessage = 'Password doesn\'t match. Forgot it? We can add reset later.';
-      break;
-    case 'auth/invalid-email':
-      userMessage = 'That email looks funny—try again?';
-      break;
-    case 'auth/too-many-requests':
-      userMessage = 'Whoa, too many tries! Wait a bit or use a different email.';
-      break;
-    case 'auth/network-request-failed':
-      userMessage = 'Spotty connection? Check WiFi and retry.';
-      break;
-    default:
-      userMessage = 'Something wiggly—try refresh or email support@yourapp.com.';
-  }
-  setAuthError(userMessage);
-} finally {
-  setLoginLoading(false);
-}  };  const handleLogout = async () => {
+  const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
-  };  // Handle ESC key for modals
+  };
+
+  // Handle ESC key for modals
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -484,7 +475,9 @@ try {
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);  // Click outside to close modals
+  }, []);
+
+  // Click outside to close modals
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) {
@@ -498,11 +491,17 @@ try {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showLogin, showRegister]);  const countyOptions = Object.keys(Counties);
+  }, [showLogin, showRegister]);
+
+  const countyOptions = Object.keys(Counties);
   const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
-  const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];  if (userLoading) {
+  const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
+
+  if (userLoading) {
     return <div className={styles.container}>Loading...</div>;
-  }  return (
+  }
+
+  return (
     <div className={styles.container}>
       <Head>
         <title>Meet Connect Ladies - For Gentlemen</title>
@@ -521,7 +520,7 @@ try {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect ❤️
+            Meet Connect 
           </h1>
         </div>
         <div className={styles.authButtons}>
@@ -539,7 +538,6 @@ try {
           )}
         </div>
       </header>
-
       <main className={styles.main}>
         <div className={styles.searchContainer}>
           <input
@@ -774,7 +772,6 @@ const ProfileCard = memo(({ p, router }) => {
     </div>
   );
 });
-
 ProfileCard.displayName = 'ProfileCard';
 
 const Modal = forwardRef(({ children, title, onClose }, ref) => (
@@ -786,7 +783,6 @@ const Modal = forwardRef(({ children, title, onClose }, ref) => (
     </div>
   </div>
 ));
-
 Modal.displayName = 'Modal';
 
 export async function getStaticProps() {
@@ -810,13 +806,8 @@ export async function getStaticProps() {
   } catch (err) {
     console.error('Error fetching initial profiles:', err);
   }
-
   return {
     props: { initialProfiles },
     revalidate: 60, // rebuild the page every 60 seconds
   };
 }
-
-
-
-
