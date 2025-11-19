@@ -70,9 +70,13 @@ export default function Home({ initialProfiles = [] }) {
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
 
-  // Auth state listener with auto-fix for missing profiles
+  // Auth state listener with auto-fix for missing profiles and localStorage cache
   useEffect(() => {
     setUserLoading(true);
+    const storedUser = localStorage.getItem('loggedInUser');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser)); // Quick set from cache
+    }
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
@@ -94,45 +98,50 @@ export default function Home({ initialProfiles = [] }) {
             userData = { id: currentUser.uid, ...basicProfile };
           }
           setUser(userData);
+          localStorage.setItem('loggedInUser', JSON.stringify(userData)); // Update cache
         } catch (err) {
           console.error('Error fetching profile:', err);
           setUser({ uid: currentUser.uid, email: currentUser.email });
         }
       } else {
         setUser(null);
+        localStorage.removeItem('loggedInUser');
       }
       setUserLoading(false);
     });
     return unsubscribe;
   }, []);
 
-  // Real-time listener for profiles with onSnapshot (filter complete profiles)
+  // Real-time listener for profiles with onSnapshot (filter complete profiles), delayed for initial load
   useEffect(() => {
-    const q = query(
-      collection(firestore, 'profiles'),
-      orderBy('createdAt', 'desc'),
-      limit(100) // Fetch more initially for better coverage
-    );
-    unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map((doc) => {
-        const profileData = doc.data();
-        if (profileData.createdAt && profileData.createdAt.toDate) {
-          profileData.createdAt = profileData.createdAt.toDate().toISOString();
-        }
-        return { id: doc.id, ...profileData };
+    const timer = setTimeout(() => {
+      const q = query(
+        collection(firestore, 'profiles'),
+        orderBy('createdAt', 'desc'),
+        limit(30) // Reduced for faster initial load
+      );
+      unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map((doc) => {
+          const profileData = doc.data();
+          if (profileData.createdAt && profileData.createdAt.toDate) {
+            profileData.createdAt = profileData.createdAt.toDate().toISOString();
+          }
+          return { id: doc.id, ...profileData };
+        });
+        // Only keep fully filled profiles
+        const validProfiles = data.filter(isProfileComplete);
+        setAllProfiles(validProfiles);
+        setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
+        setHasMore(snapshot.size === 30);
+        setError(null); // Clear errors on successful snapshot
+      }, (err) => {
+        console.error('Snapshot error:', err);
+        setError('Failed to load profiles in real-time. Please refresh.');
       });
-      // Only keep fully filled profiles
-      const validProfiles = data.filter(isProfileComplete);
-      setAllProfiles(validProfiles);
-      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-      setHasMore(snapshot.size === 100);
-      setError(null); // Clear errors on successful snapshot
-    }, (err) => {
-      console.error('Snapshot error:', err);
-      setError('Failed to load profiles in real-time. Please refresh.');
-    });
+    }, 1000); // Delay by 1s to prioritize initial render
 
     return () => {
+      clearTimeout(timer);
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
@@ -323,6 +332,11 @@ export default function Home({ initialProfiles = [] }) {
       ordered = ordered.filter(p => (membershipPriority[p.membership] || 1) === maxPriority);
     }
 
+    // Cap initial view if no filters
+    if (!isLocationFiltered) {
+      ordered = ordered.slice(0, 20);
+    }
+
     return ordered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]);
 
@@ -498,7 +512,54 @@ export default function Home({ initialProfiles = [] }) {
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
 
   if (userLoading) {
-    return <div className={styles.container}>Loading...</div>;
+    return (
+      <div className={styles.container}>
+        <header className={styles.header}>
+          <div className={styles.logoContainer}>
+            <h1 onClick={() => router.push('/')} className={styles.title}>
+              Meet Connect 
+            </h1>
+          </div>
+          <div className={styles.authButtons}>
+            <button className={styles.button}>Register</button>
+            <button className={`${styles.button} ${styles.login}`}>Login</button>
+          </div>
+        </header>
+        <main className={styles.main}>
+          <div className={styles.searchContainer}>
+            <input
+              type="text"
+              placeholder="Search ladies by location (e.g., 'Kilimani', 'Busia')..."
+              className={styles.searchInput}
+              aria-label="Search by location"
+              disabled
+            />
+          </div>
+          <div className={styles.filters}>
+            <select className={styles.select} disabled><option>All Counties</option></select>
+            <select className={styles.select} disabled><option>All Wards</option></select>
+            <select className={styles.select} disabled><option>All Areas</option></select>
+          </div>
+          <div className={styles.profiles} role="list">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className={styles.skeletonCard}>
+                <div className={styles.skeletonImage}></div>
+                <div className={styles.skeletonInfo}>
+                  <div className={styles.skeletonText}></div>
+                  <div className={styles.skeletonTextSmall}></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+        <footer className={styles.footer}>
+          <div className={styles.footerLinks}>
+            <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
+            <Link href="/terms" className={styles.footerLink}>Terms of Service</Link>
+          </div>
+        </footer>
+      </div>
+    );
   }
 
   return (
@@ -791,7 +852,7 @@ export async function getStaticProps() {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
-      limit(100) // More for initial
+      limit(30) // Reduced for faster initial load
     );
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
