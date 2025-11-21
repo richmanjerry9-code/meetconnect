@@ -9,6 +9,10 @@ import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
+<<<<<<< HEAD
+=======
+import { serverTimestamp } from 'firebase/firestore';  // Added import for serverTimestamp (though client-side calc is used)
+>>>>>>> 0d7307e (Update payment handlers and profile setup with fixes for 404, membership expiration, and M-Pesa integration)
 import StkPushForm from '../components/StkPushForm';
 
 const servicesList = [
@@ -386,8 +390,12 @@ export default function ProfileSetup() {
       '30 Days': 30
     };
     const days = daysMap[selectedDuration];
+<<<<<<< HEAD
     const expiresAt = serverTimestamp(); // Initial, but calculate client-side
     const clientExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+=======
+    const clientExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);  // Removed unused expiresAt
+>>>>>>> 0d7307e (Update payment handlers and profile setup with fixes for 404, membership expiration, and M-Pesa integration)
     if (confirm(`Upgrading to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet. Proceed?`)) {
       const newBalance = walletBalance - price;
       setWalletBalance(newBalance);
@@ -570,9 +578,16 @@ export default function ProfileSetup() {
                       initialPhone={mpesaPhone}
                       initialAmount={plans[selectedLevel][selectedDuration]}
                       readOnlyAmount={true}
+<<<<<<< HEAD
                       apiEndpoint="/api/upgrade"
                       additionalBody={{
                         userId: loggedInUser.id,
+=======
+                      apiEndpoint="/api/stkpush"  // Changed from /api/upgrade
+                      additionalBody={{
+                        userId: loggedInUser.id,
+                        type: 'upgrade',  // Added required type
+>>>>>>> 0d7307e (Update payment handlers and profile setup with fixes for 404, membership expiration, and M-Pesa integration)
                         level: selectedLevel,
                         duration: selectedDuration,
                         accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
@@ -605,9 +620,16 @@ export default function ProfileSetup() {
                   <p>Phone: {formData.phone} (will be formatted for M-Pesa)</p>
                   <StkPushForm
                     initialPhone={mpesaPhone}
+<<<<<<< HEAD
                     apiEndpoint="/api/addFunds"
                     additionalBody={{
                       userId: loggedInUser.id,
+=======
+                    apiEndpoint="/api/stkpush"  // Changed from /api/addFunds
+                    additionalBody={{
+                      userId: loggedInUser.id,
+                      type: 'addfund',  // Added required type
+>>>>>>> 0d7307e (Update payment handlers and profile setup with fixes for 404, membership expiration, and M-Pesa integration)
                       accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
                       transactionDesc: 'Add funds to wallet'
                     }}

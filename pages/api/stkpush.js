@@ -138,6 +138,7 @@ export default async function handler(req, res) {
     console.error('🔥 STK Push Error:', err);
     return res.status(500).json({ error: err.message });
   }
+<<<<<<< HEAD
 }
 
 
@@ -145,3 +146,6 @@ export default async function handler(req, res) {
 
 
 
+=======
+}
+>>>>>>> 0d7307e (Update payment handlers and profile setup with fixes for 404, membership expiration, and M-Pesa integration)
