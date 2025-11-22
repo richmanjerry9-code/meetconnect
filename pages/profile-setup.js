@@ -351,7 +351,7 @@ export default function ProfileSetup() {
     }
 
     const plans = {
-      Prime: { '3 Days': 150, '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
+      Prime: { '3 Days': 100, '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
       VIP: { '3 Days': 300, '7 Days': 600, '15 Days': 1000, '30 Days': 2000 },
       VVIP: { '3 Days': 400, '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
     };
@@ -371,9 +371,9 @@ export default function ProfileSetup() {
 
   const handleConfirmWalletUpgrade = async () => {
     const plans = {
-      Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
-      VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
-      VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+      Prime: { '3 Days': 100, '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
+      VIP: { '3 Days': 300, '7 Days': 600, '15 Days': 1000, '30 Days': 2000 },
+      VVIP: { '3 Days': 400, '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
     };
     const price = plans[selectedLevel][selectedDuration];
     if (walletBalance < price) {
@@ -440,9 +440,9 @@ export default function ProfileSetup() {
   const areas = useMemo(() => selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : [], [formData.county, selectedWard]);
 
   const plans = useMemo(() => ({
-    Prime: { '3 Days': 100, '7 Days': 250, '15 Days': 400, '30 Days': 1000 },
-    VIP: { '3 Days': 200, '7 Days': 500, '15 Days': 800, '30 Days': 2000 },
-    VVIP: { '3 Days': 300, '7 Days': 700, '15 Days': 1200, '30 Days': 3000 },
+    Prime: { '3 Days': 100, '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
+    VIP: { '3 Days': 300, '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },
+    VVIP: { '3 Days': 400, '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
   }), []);
 
   if (loading) {
