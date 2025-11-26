@@ -251,7 +251,14 @@ export default function ProfilePage() {
                   style={{ objectFit: 'cover' }}
                   className={isEx && !isSubscribed ? styles.blurred : ''}
                 />
-                {isEx && !isSubscribed && <div className={styles.lockOverlay}>For Fans</div>}
+                {isEx && !isSubscribed && (
+                  <div className={styles.lockOverlay}>
+                    For Fans
+                    {currentTab === 'posts' && (profile.exclusivePics?.length || 0) > 1 && (
+                      <div>+{(profile.exclusivePics?.length || 0) - 1} more</div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           }) : <p>No posts yet</p>}
