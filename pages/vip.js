@@ -741,27 +741,39 @@ Modal.displayName = 'Modal';
 
 export async function getStaticProps() {
   let initialProfiles = [];
+
   try {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
       limit(100)
     );
+
     const snapshot = await getDocs(q);
+
     initialProfiles = snapshot.docs
       .map((doc) => {
         const data = doc.data();
-        if (data.createdAt && data.createdAt.toDate) {
-          data.createdAt = data.createdAt.toDate().toISOString();
-        }
-        return { id: doc.id, ...data };
+
+        return {
+          id: doc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.()?.toISOString() ?? null,
+          membershipExpiresAt: data.membershipExpiresAt?.toDate?.()?.toISOString() ?? null,
+          updatedAt: data.updatedAt?.toDate?.()?.toISOString() ?? null,
+        };
       })
       .filter(isProfileComplete);
+
   } catch (err) {
-    console.error('Error fetching initial profiles:', err);
+    console.error('Error fetching profiles in getStaticProps:', err);
+    initialProfiles = [];
   }
+
   return {
-    props: { initialProfiles },
+    props: {
+      initialProfiles,
+    },
     revalidate: 60,
   };
 }

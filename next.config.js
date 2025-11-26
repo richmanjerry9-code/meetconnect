@@ -1,4 +1,3 @@
-// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
@@ -10,15 +9,11 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: '**', // allow all external hosts (optional)
+        hostname: '**',
       },
     ],
-  },
-  api: {
-    bodyParser: {
-      sizeLimit: '25mb',  // Increased limit for larger payloads (fallback if needed)
-    },
   },
 };
 
 module.exports = nextConfig;
+

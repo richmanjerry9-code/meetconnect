@@ -1000,7 +1000,7 @@ export default function ProfileSetup() {
                   <div className={styles.captionCounter}>{postCaption.length}/500</div>
 
                   <div className={styles.postPrivacy}>
-                    <span>Share with Subscribers only<br /><small>Only your Subscribers will see this post</small></span>
+                    <span>Share with Subscribers only<br /><small>Only your Subscribers{'’'} will see this post</small></span>
                     <label className={styles.toggleSwitch}>
                       <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
                       <span className={styles.slider}></span>
@@ -1111,7 +1111,7 @@ export default function ProfileSetup() {
 
             {showInappropriateBanner && (
               <div className={styles.inappropriateBanner}>
-                <p>Inappropriate images aren't allowed in the public gallery. Please upload suitable content or mark as exclusive.</p>
+                <p>Inappropriate images aren{'’'}t allowed in the public gallery. Please upload suitable content or mark as exclusive.</p>
                 <button onClick={() => setShowInappropriateBanner(false)}>Dismiss</button>
               </div>
             )}
