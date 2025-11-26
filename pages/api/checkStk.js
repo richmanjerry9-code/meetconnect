@@ -1,4 +1,5 @@
 import { adminDb } from '../../lib/firebaseAdmin';
+import { FieldValue } from 'firebase-admin/firestore';
 
 const getAccessToken = async () => {
   const consumerKey = process.env.MPESA_CONSUMER_KEY;
@@ -67,6 +68,27 @@ export default async function handler(req, res) {
         await userRef.update({ membership: pending.level });
       } else if (pending.type === 'addfund') {
         await userRef.update({ walletBalance: adminDb.FieldValue.increment(pending.amount) });
+      } else if (pending.type === 'subscription') {
+        const days = pending.durationDays;
+        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        const subId = `${pending.userId}_${pending.creatorId}`;
+        await adminDb.collection('subscriptions').doc(subId).set({
+          userId: pending.userId,
+          creatorId: pending.creatorId,
+          amount: pending.amount,
+          durationDays: days,
+          expiresAt,
+          updatedAt: new Date(),
+          mpesaReceipt,
+          transactionDate,
+        }, { merge: true });
+
+        // Credit 80% to creator's earnings wallet
+        const creatorRef = adminDb.collection('profiles').doc(pending.creatorId);
+        const earnings = Math.floor(pending.amount * 0.8); // 80% (platform retains 20%)
+        await creatorRef.update({
+          earningsBalance: FieldValue.increment(earnings),
+        });
       }
 
       const updateData = {

@@ -861,23 +861,33 @@ export async function getStaticProps() {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
-      limit(30) // Reduced for faster initial load
+      limit(100)
     );
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
       .map((doc) => {
         const data = doc.data();
+
+        // Convert ALL Firebase Timestamps to ISO strings
         if (data.createdAt && data.createdAt.toDate) {
           data.createdAt = data.createdAt.toDate().toISOString();
         }
+        if (data.membershipExpiresAt && data.membershipExpiresAt.toDate) {
+          data.membershipExpiresAt = data.membershipExpiresAt.toDate().toISOString();
+        }
+        if (data.updatedAt && data.updatedAt.toDate) {
+          data.updatedAt = data.updatedAt.toDate().toISOString();
+        }
+
         return { id: doc.id, ...data };
       })
-      .filter(isProfileComplete); // Filter incomplete
+      .filter(isProfileComplete);
   } catch (err) {
-    console.error('Error fetching initial profiles:', err);
+    console.error('Error fetching homepage profiles:', err);
   }
+
   return {
     props: { initialProfiles },
-    revalidate: 60, // rebuild the page every 60 seconds
+    revalidate: 60,
   };
 }
