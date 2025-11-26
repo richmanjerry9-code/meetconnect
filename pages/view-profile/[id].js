@@ -89,27 +89,33 @@ export default function ProfilePage() {
     let postList = [];
 
     if (currentTab === 'posts') {
-      postList = [
-        ...normalPics.map((url) => ({
-          url,
-          type: 'normal',
-          createdAt: profile.normalPicsDates?.[url] || profile.createdAt,
-        })),
-        ...exclusivePics.map((url) => ({
+      let latestExclusive = null;
+      if (exclusivePics.length > 0) {
+        const exWithDates = exclusivePics.map((url) => ({
           url,
           type: 'exclusive',
           createdAt: profile.exclusivePicsDates?.[url] || profile.createdAt,
-        })),
-      ];
+        }));
+        exWithDates.sort((a, b) => b.createdAt - a.createdAt);
+        latestExclusive = exWithDates[0];
+      }
+
+      const normalPosts = normalPics.map((url) => ({
+        url,
+        type: 'normal',
+        createdAt: profile.normalPicsDates?.[url] || profile.createdAt,
+      })).sort((a, b) => b.createdAt - a.createdAt);
+
+      postList = latestExclusive ? [latestExclusive, ...normalPosts] : normalPosts;
     } else if (currentTab === 'exclusive') {
       postList = exclusivePics.map((url) => ({
         url,
         type: 'exclusive',
         createdAt: profile.exclusivePicsDates?.[url] || profile.createdAt,
       }));
+      postList.sort((a, b) => b.createdAt - a.createdAt);
     }
 
-    postList.sort((a, b) => b.createdAt - a.createdAt);
     setPosts(postList);
   }, [currentTab, profile]);
 
@@ -245,7 +251,7 @@ export default function ProfilePage() {
                   style={{ objectFit: 'cover' }}
                   className={isEx && !isSubscribed ? styles.blurred : ''}
                 />
-                {isEx && !isSubscribed && <div className={styles.lockOverlay}>Pay to Unlock</div>}
+                {isEx && !isSubscribed && <div className={styles.lockOverlay}>For Fans</div>}
               </div>
             );
           }) : <p>No posts yet</p>}
@@ -307,4 +313,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
