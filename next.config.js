@@ -1,3 +1,4 @@
+// next.config.js
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
@@ -13,7 +14,11 @@ const nextConfig = {
       },
     ],
   },
+  api: {
+    bodyParser: {
+      sizeLimit: '25mb',  // Increased limit for larger payloads (fallback if needed)
+    },
+  },
 };
 
 module.exports = nextConfig;
-

@@ -1,7 +1,7 @@
 import { adminDb } from '../../lib/firebaseAdmin';
 import { Timestamp } from 'firebase-admin/firestore';
 
-// 1️⃣ M-PESA ACCESS TOKEN
+// 1️⃣ M-PESA ACCESS TOKEN (same as stkpush.js)
 const getAccessToken = async () => {
   const consumerKey = process.env.MPESA_CONSUMER_KEY;
   const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
@@ -21,11 +21,11 @@ const getAccessToken = async () => {
   return data.access_token;
 };
 
-// 2️⃣ INITIATE STK PUSH
+// 2️⃣ INITIATE STK PUSH (same as stkpush.js)
 const initiateStkPush = async (phone, amount, transactionDesc) => {
   const token = await getAccessToken();
-  const businessShortCode = process.env.MPESA_SHORTCODE; // Head office shortcode (e.g., '3574457')
-  const tillNumber = process.env.MPESA_TILL; // Till number for PartyB (e.g., '6679416' if valid)
+  const businessShortCode = process.env.MPESA_SHORTCODE;
+  const tillNumber = process.env.MPESA_TILL;
   const passkey = process.env.MPESA_PASSKEY;
   const callbackUrl = process.env.MPESA_CALLBACK_URL;
 
@@ -43,10 +43,10 @@ const initiateStkPush = async (phone, amount, transactionDesc) => {
     TransactionType: 'CustomerBuyGoodsOnline',
     Amount: parseInt(amount),
     PartyA: phone,
-    PartyB: tillNumber, // Till number here
+    PartyB: tillNumber,
     PhoneNumber: phone,
     CallBackURL: callbackUrl,
-    AccountReference: 'MeetConnect', // Optional: Use a string like store ref or till for tracking
+    AccountReference: 'MeetConnect',
     TransactionDesc: transactionDesc,
   };
 
@@ -74,7 +74,7 @@ const initiateStkPush = async (phone, amount, transactionDesc) => {
   return responseData;
 };
 
-// 3️⃣ FORMAT PHONE NUMBER
+// 3️⃣ FORMAT PHONE NUMBER (same as stkpush.js)
 const formatPhoneForMpesa = (phone) => {
   if (!phone) throw new Error('Phone number is required');
   let formatted = phone.replace(/[^\d]/g, '');
@@ -89,20 +89,23 @@ const formatPhoneForMpesa = (phone) => {
   return formatted;
 };
 
+// Helper to shorten IDs (same as in profilesetup.js)
+const shortenUserId = (userId) => userId ? userId.slice(-10) : '';
+
 // 4️⃣ MAIN API HANDLER
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { phone, amount, userId, type, level, duration, transactionDesc } = req.body;
+  const { phoneNumber, amount, userId, creatorId, durationDays } = req.body;
 
-  if (!phone || !amount || !userId || !type || !transactionDesc)
+  if (!phoneNumber || !amount || !userId || !creatorId || !durationDays)
     return res.status(400).json({ error: 'Missing required fields' });
 
-  if (type === 'upgrade' && (!level || !duration))
-    return res.status(400).json({ error: 'Missing upgrade fields' });
+  const type = 'subscription'; // Fixed type for this endpoint
+  const transactionDesc = `Exclusive subscription for ${durationDays} days`;
 
   try {
-    const formattedPhone = formatPhoneForMpesa(phone);
+    const formattedPhone = formatPhoneForMpesa(phoneNumber);
     const stkRes = await initiateStkPush(formattedPhone, amount, transactionDesc);
 
     if (stkRes.ResponseCode === '0') {
@@ -110,22 +113,20 @@ export default async function handler(req, res) {
 
       const pendingData = {
         userId,
+        creatorId,
         type,
         amount: parseInt(amount),
+        durationDays: parseInt(durationDays),
         phone: formattedPhone,
         status: 'pending',
         createdAt: Timestamp.now(),
         transactionDesc,
       };
 
-      if (type === 'upgrade') {
-        pendingData.level = level;
-        pendingData.duration = duration;
-      }
-
       await adminDb.collection('pendingPayments').doc(checkoutRequestID).set(pendingData);
 
       return res.status(200).json({
+        success: true,
         message: 'STK Push initiated successfully',
         checkoutRequestID,
       });
@@ -139,6 +140,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err.message });
   }
 }
-
-
-
