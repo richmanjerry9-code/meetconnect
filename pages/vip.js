@@ -469,11 +469,6 @@ export default function Vip({ initialProfiles = [] }) {
             Meet Connect 
           </h1>
         </div>
-        <div className={styles.nav}>
-          <Link href="/vvip">VVIP</Link>
-          <Link href="/vip">VIP</Link>
-          <Link href="/prime">Prime</Link>
-        </div>
         <div className={styles.authButtons}>
           {!user && (
             <>

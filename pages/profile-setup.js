@@ -652,11 +652,6 @@ export default function ProfileSetup() {
             Meet Connect
           </h1>
         </div>
-        <div className={styles.nav}>
-          <Link href="/vvip">VVIP</Link>
-          <Link href="/vip">VIP</Link>
-          <Link href="/prime">Prime</Link>
-        </div>
         <div className={styles.authButtons}>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
             Logout

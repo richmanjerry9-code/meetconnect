@@ -466,13 +466,8 @@ export default function Prime({ initialProfiles = [] }) {
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect ❤️
+            Meet Connect 
           </h1>
-        </div>
-        <div className={styles.nav}>
-          <Link href="/vvip">VVIP</Link>
-          <Link href="/vip">VIP</Link>
-          <Link href="/prime">Prime</Link>
         </div>
         <div className={styles.authButtons}>
           {!user && (
