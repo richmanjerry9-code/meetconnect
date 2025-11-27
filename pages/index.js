@@ -783,6 +783,37 @@ export default function Home({ initialProfiles = [] }) {
 
 const ProfileCard = memo(({ p, router }) => {
   const { username = '', profilePic = null, name = 'Anonymous Lady', membership = 'Regular', verified = false, area = '', ward = '', county = 'Nairobi', services = [], phone = '' } = p;
+  const [touchStartY, setTouchStartY] = useState(null);
+  const [touchEndY, setTouchEndY] = useState(null);
+  const minSwipeDistance = 10;
+
+  const handleTouchStart = (e) => {
+    setTouchEndY(null);
+    setTouchStartY(e.targetTouches[0].clientY);
+  };
+
+  const handleTouchMove = (e) => {
+    setTouchEndY(e.targetTouches[0].clientY);
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStartY || !touchEndY) {
+      // No movement, treat as click
+      handleClick();
+      return;
+    }
+    const distance = touchStartY - touchEndY;
+    const isVerticalSwipe = Math.abs(distance) > minSwipeDistance;
+    if (isVerticalSwipe) {
+      // Cancel click if scrolling
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    // Minimal movement, treat as click
+    handleClick();
+  };
+
   const handleClick = () => {
     if (!username || username.trim() === '') {
       console.warn('Skipping click: Missing username for profile:', p.id);
@@ -790,12 +821,20 @@ const ProfileCard = memo(({ p, router }) => {
     }
     router.push(`/view-profile/${encodeURIComponent(username)}`);
   };
+
   const handleImageError = (e) => {
     e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk1pc3NpbmcgUGljPC90ZXh0Pjwvc3ZnPg==';
   };
   const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county || 'Location TBD');
   return (
-    <div className={styles.profileCard} onClick={handleClick} role="listitem">
+    <div 
+      className={styles.profileCard} 
+      onClick={handleClick} 
+      role="listitem"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className={styles.imageContainer}>
         <Image 
           src={profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgWT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='} 
