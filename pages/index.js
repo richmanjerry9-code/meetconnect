@@ -336,16 +336,6 @@ export default function Home({ initialProfiles = [] }) {
     ordered = ordered.concat(groups.Prime);
     ordered = ordered.concat(groups.Regular);
 
-    if (!isLocationFiltered && filtered.length > 0) {
-      const maxPriority = Math.max(...filtered.map(p => membershipPriority[p.membership] || 1));
-      ordered = ordered.filter(p => (membershipPriority[p.membership] || 1) === maxPriority);
-    }
-
-    // Cap initial view if no filters
-    if (!isLocationFiltered) {
-      ordered = ordered.slice(0, 20);
-    }
-
     return ordered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority, shuffleKey]);
 
