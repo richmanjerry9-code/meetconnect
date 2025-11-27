@@ -70,13 +70,24 @@ export default async function handler(req, res) {
         if (resource_type === 'video') {
           modEndpoint = '/api/moderateVideo';  // Assume you have/add a video moderation endpoint
         }
-        const modRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}${modEndpoint}`, {
+        const modUrl = `${process.env.NEXT_PUBLIC_BASE_URL}${modEndpoint}`;
+        console.log(`Moderating at: ${modUrl}`);  // Debug log
+
+        const modRes = await fetch(modUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ [resource_type === 'image' ? 'imageUrl' : 'videoUrl']: finalUrl }),
         });
-        const modData = await modRes.json();
-        if (!modRes.ok || !modData.isSafe) {
+
+        if (!modRes.ok) {
+          const errorText = await modRes.text();  // Safe: get as text
+          console.error(`Moderation failed: ${modRes.status} - ${errorText}`);
+          await cloudinary.uploader.destroy(uploadResponse.public_id, { resource_type });
+          return res.status(modRes.status).json({ error: 'Moderation failed', details: errorText });
+        }
+
+        const modData = await modRes.json();  // Now safe to parse
+        if (!modData.isSafe) {
           await cloudinary.uploader.destroy(uploadResponse.public_id, { resource_type });
           return res.status(400).json({ error: 'Inappropriate content detected' });
         }
