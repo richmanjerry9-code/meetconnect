@@ -1,160 +1,255 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
 import { auth, db } from '../../lib/firebase';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc
+} from 'firebase/firestore';
+import {
+  onAuthStateChanged,
+  signInAnonymously
+} from 'firebase/auth';
 import styles from '../../styles/Profile.module.css';
 
-export default function ProfilePage() {
+export default function ViewProfile() {
   const router = useRouter();
   const { id } = router.query;
 
-  // ----- State -----
+  // State
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [currentTab, setCurrentTab] = useState('posts');
   const [isSubscribed, setIsSubscribed] = useState(false);
+
+  // Payment
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedMedia, setSelectedMedia] = useState(null);
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneError, setPhoneError] = useState('');
+
+  // Full-screen media viewer
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
+  const [selectedGallery, setSelectedGallery] = useState([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Touch
+  const touchStartX = useRef(0);
+  const touchStartY = useRef(0);
 
   const subscriptionPlans = [
     { label: '3 Days', amount: 499, duration: 3 },
     { label: '7 Days', amount: 999, duration: 7 },
     { label: '15 Days', amount: 1999, duration: 15 },
-    { label: '30 Days', amount: 4999, duration: 30 },
+    { label: '30 Days', amount: 4999, duration: 30 }
   ];
 
-  // ----- Auth listener -----
+  // --- Auth Listener ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      if (!currentUser) signInAnonymously(auth).catch(console.error);
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      if (!u) signInAnonymously(auth);
     });
-    return unsubscribe;
+    return unsub;
   }, []);
 
-  // ----- Fetch profile & subscription -----
+  // --- Load Profile ---
   useEffect(() => {
     if (!id) return;
 
-    const fetchProfile = async () => {
+    async function loadProfile() {
       try {
-        const q = query(collection(db, 'profiles'), where('username', '==', id));
-        const snapshot = await getDocs(q);
+        const q = query(
+          collection(db, 'profiles'),
+          where('username', '==', id)
+        );
+        const snap = await getDocs(q);
 
-        if (snapshot.empty) {
+        if (snap.empty) {
           setProfile(null);
           setLoading(false);
           return;
         }
 
-        const docSnap = snapshot.docs[0];
+        const docSnap = snap.docs[0];
         const data = docSnap.data();
 
-        if (data.membershipExpiresAt?.toDate) data.membershipExpiresAt = data.membershipExpiresAt.toDate();
         if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate();
+        if (data.membershipExpiresAt?.toDate)
+          data.membershipExpiresAt = data.membershipExpiresAt.toDate();
 
         setProfile({ id: docSnap.id, ...data });
 
-        // Check if user is subscribed
+        // check subscription
         if (user) {
-          const subRef = doc(db, 'subscriptions', `${user.uid}_${docSnap.id}`);
-          const subDoc = await getDoc(subRef);
-          if (subDoc.exists() && subDoc.data().expiresAt > new Date()) setIsSubscribed(true);
+          const sref = doc(db, 'subscriptions', `${user.uid}_${docSnap.id}`);
+          const sdoc = await getDoc(sref);
+          if (sdoc.exists() && sdoc.data().expiresAt > new Date()) {
+            setIsSubscribed(true);
+          }
         }
 
         setLoading(false);
       } catch (err) {
-        console.error('Firestore error:', err);
+        console.error(err);
         setLoading(false);
       }
-    };
+    }
 
-    fetchProfile();
+    loadProfile();
   }, [id, user]);
 
-  // ----- Build posts array -----
+  // --- Build Posts ---
   useEffect(() => {
     if (!profile) return;
 
-    const normalPics = Array.isArray(profile.normalPics) ? profile.normalPics : [];
-    const exclusivePics = Array.isArray(profile.exclusivePics) ? profile.exclusivePics : [];
+    const normal = profile.normalPics || [];
+    const exclusive = profile.exclusivePics || [];
 
-    let postList = [];
+    let list = [];
 
     if (currentTab === 'posts') {
       let latestExclusive = null;
-      if (exclusivePics.length > 0) {
-        const exWithDates = exclusivePics.map((url) => ({
-          url,
-          type: 'exclusive',
-          createdAt: profile.exclusivePicsDates?.[url] || profile.createdAt,
-        }));
-        exWithDates.sort((a, b) => b.createdAt - a.createdAt);
-        latestExclusive = exWithDates[0];
+
+      if (exclusive.length) {
+        const ex = exclusive
+          .map((url) => ({
+            url,
+            type: 'exclusive',
+            createdAt:
+              profile.exclusivePicsDates?.[url] || profile.createdAt
+          }))
+          .sort((a, b) => b.createdAt - a.createdAt);
+
+        latestExclusive = ex[0];
       }
 
-      const normalPosts = normalPics.map((url) => ({
-        url,
-        type: 'normal',
-        createdAt: profile.normalPicsDates?.[url] || profile.createdAt,
-      })).sort((a, b) => b.createdAt - a.createdAt);
+      const normalPosts = normal
+        .map((url) => ({
+          url,
+          type: 'normal',
+          createdAt:
+            profile.normalPicsDates?.[url] || profile.createdAt
+        }))
+        .sort((a, b) => b.createdAt - a.createdAt);
 
-      postList = latestExclusive ? [latestExclusive, ...normalPosts] : normalPosts;
-    } else if (currentTab === 'exclusive') {
-      postList = exclusivePics.map((url) => ({
-        url,
-        type: 'exclusive',
-        createdAt: profile.exclusivePicsDates?.[url] || profile.createdAt,
-      }));
-      postList.sort((a, b) => b.createdAt - a.createdAt);
+      list = latestExclusive ? [latestExclusive, ...normalPosts] : normalPosts;
     }
 
-    setPosts(postList);
-  }, [currentTab, profile]);
+    if (currentTab === 'exclusive') {
+      list = exclusive
+        .map((url) => ({
+          url,
+          type: 'exclusive',
+          createdAt:
+            profile.exclusivePicsDates?.[url] || profile.createdAt
+        }))
+        .sort((a, b) => b.createdAt - a.createdAt);
+    }
 
-  // ----- Loading & Not Found -----
-  if (loading) return <div className={styles.loading}>Loading...</div>;
-  if (!profile) return <div className={styles.notFound}>Profile not found</div>;
+    setPosts(list);
+  }, [profile, currentTab]);
 
-  // ----- Helpers -----
+  // --- Helpers ---
   const isVideo = (url) => /\.(mp4|webm|ogg)$/i.test(url);
-  const getThumbnail = (url) => {
+
+  const getThumb = (url) => {
     if (!isVideo(url)) return url;
-    let thumb = url.replace('/video/upload/', '/image/upload/c_thumb,w_200,h_200,g_center/');
-    return thumb.replace(/\.(mp4|webm|ogg)$/, '.jpg');
+    return url
+      .replace('/video/upload/', '/image/upload/c_thumb,w_300,h_300,g_center/')
+      .replace(/\.(mp4|webm|ogg)$/i, '.jpg');
   };
 
+  // --- FIXED: Open unblurred clean viewer ---
   const handleMediaClick = (post) => {
     if (post.type === 'exclusive' && !isSubscribed) {
-      setSelectedPlan(subscriptionPlans[subscriptionPlans.length - 1]); // default 30 days
+      setSelectedPlan(subscriptionPlans[3]);
       setShowPaymentModal(true);
+      return;
+    }
+
+    const gallery = posts
+      .filter((p) => isSubscribed || p.type !== 'exclusive')
+      .map((p) => p.url);
+
+    const idx = gallery.indexOf(post.url);
+
+    setSelectedGallery(gallery);
+    setSelectedIndex(idx === -1 ? 0 : idx);
+    setShowMediaViewer(true);
+  };
+
+  // Touch Swipe
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchEnd = (e) => {
+    const endX = e.changedTouches[0].clientX;
+    const endY = e.changedTouches[0].clientY;
+
+    const diffX = touchStartX.current - endX;
+    const diffY = touchStartY.current - endY;
+
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      // horizontal: next / prev
+      if (diffX > 50) {
+        setSelectedIndex((i) =>
+          i < selectedGallery.length - 1 ? i + 1 : 0
+        );
+      } else if (diffX < -50) {
+        setSelectedIndex((i) =>
+          i > 0 ? i - 1 : selectedGallery.length - 1
+        );
+      }
     } else {
-      setSelectedMedia(post.url);
+      // vertical scroll between photos
+      if (diffY > 50) {
+        setSelectedIndex((i) =>
+          i < selectedGallery.length - 1 ? i + 1 : 0
+        );
+      } else if (diffY < -50) {
+        setSelectedIndex((i) =>
+          i > 0 ? i - 1 : selectedGallery.length - 1
+        );
+      }
     }
   };
 
-  const normalizePhoneNumber = (value) => {
-    let val = value.trim().replace(/\D/g, '');
-    if (val.startsWith('07')) val = '254' + val.slice(1);
-    return val;
+  // Wheel scroll for desktop
+  const handleWheel = (e) => {
+    if (e.deltaY > 0) {
+      setSelectedIndex((i) =>
+        i < selectedGallery.length - 1 ? i + 1 : 0
+      );
+    } else if (e.deltaY < 0) {
+      setSelectedIndex((i) =>
+        i > 0 ? i - 1 : selectedGallery.length - 1
+      );
+    }
+  };
+
+  const normalizePhone = (v) => {
+    let n = v.replace(/\D/g, '');
+    if (n.startsWith('07')) n = '254' + n.slice(1);
+    return n;
   };
 
   const handlePhoneChange = (e) => {
-    const normalized = normalizePhoneNumber(e.target.value);
-    setPhoneNumber(normalized);
-    setPhoneError(/^2547\d{8}$/.test(normalized) ? '' : 'Enter a valid phone number e.g. 2547XXXXXXXX');
+    const v = normalizePhone(e.target.value);
+    setPhoneNumber(v);
+    setPhoneError(/^2547\d{8}$/.test(v) ? '' : 'Invalid phone number.');
   };
 
   const handlePay = async (plan) => {
-    if (!user) return alert('Please log in to subscribe.');
-    if (!phoneNumber || phoneError) return alert('Enter a valid phone number to proceed.');
+    if (!user) return alert('Login first');
+    if (!phoneNumber || phoneError) return alert('Invalid phone');
 
     try {
       const res = await fetch('/api/mpesa-pay', {
@@ -165,29 +260,29 @@ export default function ProfilePage() {
           creatorId: profile.id,
           amount: plan.amount,
           durationDays: plan.duration,
-          phoneNumber,
-        }),
+          phoneNumber
+        })
       });
 
       const data = await res.json();
       if (data.success) {
-        alert('Payment initiated! Check your phone for the STK prompt.');
+        alert('STK sent to phone');
         setShowPaymentModal(false);
-      } else {
-        alert('Payment failed: ' + data.message);
-      }
+      } else alert('Payment failed');
     } catch (err) {
-      console.error('Payment error:', err);
-      alert('Payment failed. Try again.');
+      alert('Error');
     }
   };
 
-  // ----- JSX -----
+  // UI
+  if (loading) return <div className={styles.loading}>Loading…</div>;
+  if (!profile) return <div className={styles.notFound}>Profile not found</div>;
+
   return (
     <div className={styles.container}>
       <main className={styles.main}>
 
-        {/* Profile Picture */}
+        {/* Profile Photo */}
         <div className={styles.profilePicSection}>
           <Image
             src={profile.profilePic || '/placeholder.jpg'}
@@ -198,7 +293,7 @@ export default function ProfilePage() {
           />
         </div>
 
-        {/* Profile Info */}
+        {/* Info */}
         <div className={styles.profileInfo}>
           <h1>{profile.name}</h1>
           <p><strong>Gender:</strong> {profile.gender || '—'}</p>
@@ -208,88 +303,73 @@ export default function ProfilePage() {
           <p><strong>County:</strong> {profile.county || '—'}</p>
           <p><strong>Ward:</strong> {profile.ward || '—'}</p>
           <p><strong>Area:</strong> {profile.area || '—'}</p>
-
-          {/* Nearby & Services */}
-          <div className={styles.nearby}>
-            <strong>Nearby:</strong>
-            {profile.nearby?.length ? profile.nearby.map((n, i) => (
-              <span key={i} className={styles.tagItem}>{n}</span>
-            )) : <p>—</p>}
-          </div>
-
-          <div className={styles.services}>
-            <strong>Services:</strong>
-            {profile.services?.length ? profile.services.map((s, i) => (
-              <span key={i} className={styles.tagItem}>{s}</span>
-            )) : <p>—</p>}
-          </div>
-
-          {profile.phone && (
-            <div className={styles.callButton}>
-              <a href={`tel:${profile.phone}`}>Call {profile.phone}</a>
-            </div>
-          )}
         </div>
 
         {/* Tabs */}
         <div className={styles.tabButtons}>
-          <button onClick={() => setCurrentTab('posts')} className={currentTab === 'posts' ? styles.activeTab : ''}>Posts</button>
-          <button onClick={() => setCurrentTab('exclusive')} className={currentTab === 'exclusive' ? styles.activeTab : ''}>Exclusive</button>
+          <button
+            onClick={() => setCurrentTab('posts')}
+            className={currentTab === 'posts' ? styles.activeTab : ''}
+          >
+            Posts
+          </button>
+          <button
+            onClick={() => setCurrentTab('exclusive')}
+            className={currentTab === 'exclusive' ? styles.activeTab : ''}
+          >
+            Exclusive
+          </button>
         </div>
 
         {/* Feed */}
         <div className={styles.feed}>
-          {posts.length ? posts.map((post, i) => {
-            const isEx = post.type === 'exclusive';
+          {posts.map((post, i) => {
+            const locked = post.type === 'exclusive' && !isSubscribed;
+
             return (
-              <div key={i} className={styles.postItem} onClick={() => handleMediaClick(post)}>
+              <div
+                key={i}
+                className={styles.postItem}
+                onClick={() => handleMediaClick(post)}
+              >
                 <Image
-                  src={getThumbnail(post.url)}
+                  src={getThumb(post.url)}
                   alt="Post"
                   width={300}
                   height={300}
                   style={{ objectFit: 'cover' }}
-                  className={isEx && !isSubscribed ? styles.blurred : ''}
+                  className={locked ? styles.blurred : ''}
                 />
-                {isEx && !isSubscribed && (
-                  <div className={styles.lockOverlay}>
-                    For Fans
-                    {currentTab === 'posts' && (profile.exclusivePics?.length || 0) > 1 && (
-                      <div>+{(profile.exclusivePics?.length || 0) - 1} more</div>
-                    )}
-                  </div>
-                )}
               </div>
             );
-          }) : <p>No posts yet</p>}
+          })}
         </div>
-
       </main>
 
-      {/* Payment Modal */}
+      {/* PAYMENT MODAL */}
       {showPaymentModal && (
         <div className={styles.modal}>
           <div className={styles.modalContent}>
-            <h3>Subscribe to Exclusive Content</h3>
-            <p>Select a plan:</p>
+            <h3>Subscribe</h3>
 
             <div className={styles.planGrid}>
-              {subscriptionPlans.map((plan) => (
+              {subscriptionPlans.map((p) => (
                 <div
-                  key={plan.label}
-                  className={`${styles.planCard} ${selectedPlan?.label === plan.label ? styles.activePlan : ''}`}
-                  onClick={() => setSelectedPlan(plan)}
+                  key={p.label}
+                  className={`${styles.planCard} ${
+                    selectedPlan?.label === p.label ? styles.activePlan : ''
+                  }`}
+                  onClick={() => setSelectedPlan(p)}
                 >
-                  <h4>{plan.label}</h4>
-                  <p className={styles.planAmount}>KSh {plan.amount.toLocaleString()}</p>
-                  <p className={styles.planDuration}>{plan.duration} {plan.duration > 1 ? 'days' : 'day'}</p>
+                  <h4>{p.label}</h4>
+                  <p>KSh {p.amount.toLocaleString()}</p>
                 </div>
               ))}
             </div>
 
             <input
               type="tel"
-              placeholder="Enter phone number e.g. 2547XXXXXXXX"
+              placeholder="2547XXXXXXXX"
               value={phoneNumber}
               onChange={handlePhoneChange}
               className={styles.phoneInput}
@@ -297,26 +377,90 @@ export default function ProfilePage() {
             {phoneError && <p style={{ color: 'red' }}>{phoneError}</p>}
 
             <div className={styles.modalActions}>
-              <button onClick={() => selectedPlan && handlePay(selectedPlan)} disabled={!selectedPlan || !phoneNumber || phoneError}>Pay Now</button>
+              <button
+                disabled={!selectedPlan || phoneError}
+                onClick={() => handlePay(selectedPlan)}
+              >
+                Pay Now
+              </button>
               <button onClick={() => setShowPaymentModal(false)}>Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Media Viewer */}
-      {selectedMedia && (
-        <div className={styles.modalOverlay} onClick={() => setSelectedMedia(null)}>
-          <div className={styles.mediaViewer}>
-            {isVideo(selectedMedia) ? (
-              <video src={selectedMedia} controls autoPlay loop style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            ) : (
-              <Image src={selectedMedia} alt="Media" width={600} height={600} style={{ objectFit: 'contain' }} />
-            )}
+      {/* FULLSCREEN MEDIA VIEWER */}
+      {showMediaViewer && (
+        <div
+          className={styles.mediaViewerOverlay}
+          onClick={() => setShowMediaViewer(false)}
+        >
+          <div
+            className={styles.mediaViewerContainer}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onWheel={handleWheel}
+          >
+            {/* Prev */}
+            <button
+              className={styles.viewerNavPrev}
+              onClick={() =>
+                setSelectedIndex((i) =>
+                  i > 0 ? i - 1 : selectedGallery.length - 1
+                )
+              }
+            >
+              &lt;
+            </button>
+
+            {/* Content */}
+            <div className={styles.viewerMediaWrapper}>
+              {isVideo(selectedGallery[selectedIndex]) ? (
+                <video
+                  src={selectedGallery[selectedIndex]}
+                  controls
+                  autoPlay
+                  loop
+                  className={styles.viewerMedia}
+                  style={{ filter: 'none' }}
+                />
+              ) : (
+                <Image
+                  src={selectedGallery[selectedIndex]}
+                  alt="Media"
+                  fill
+                  sizes="100vw"
+                  className={styles.viewerMedia}
+                  style={{
+                    objectFit: 'contain',
+                    filter: 'none'
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Next */}
+            <button
+              className={styles.viewerNavNext}
+              onClick={() =>
+                setSelectedIndex((i) =>
+                  i < selectedGallery.length - 1 ? i + 1 : 0
+                )
+              }
+            >
+              &gt;
+            </button>
+
+            <button
+              className={styles.viewerClose}
+              onClick={() => setShowMediaViewer(false)}
+            >
+              ×
+            </button>
           </div>
         </div>
       )}
-
     </div>
   );
 }
