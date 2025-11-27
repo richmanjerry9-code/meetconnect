@@ -67,9 +67,11 @@ export default async function handler(req, res) {
       // Moderate only public posts (non-exclusive)
       if (!isExclusive) {
         let modEndpoint = resource_type === 'video' ? 'moderateVideo' : 'moderateImage';
-        console.log(`Moderating at: /api/${modEndpoint}`);  // Debug log (relative)
+        const port = process.env.PORT || '3000';
+        const modUrl = `http://127.0.0.1:${port}/api/${modEndpoint}`;
+        console.log(`Moderating at: ${modUrl}`);  // Debug log
 
-        const modRes = await fetch(`/api/${modEndpoint}`, {
+        const modRes = await fetch(modUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ [resource_type === 'image' ? 'imageUrl' : 'videoUrl']: finalUrl }),
