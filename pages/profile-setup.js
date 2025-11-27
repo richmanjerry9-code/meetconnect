@@ -1,4 +1,3 @@
-// pages/profile-setup.js
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -6,20 +5,10 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
-import {
-  doc,
-  setDoc,
-  getDoc,
-  onSnapshot,
-  collection,
-  query,
-  where,
-  getDocs,
-  arrayUnion,
-  deleteDoc,
-} from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, deleteDoc, } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
+
 const servicesList = [
   'Dinner Date',
   'Just Vibes',
@@ -28,27 +17,12 @@ const servicesList = [
   'Friendship',
   'Companionship / Meetup',
 ];
+
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
   const [formData, setFormData] = useState({
-    username: '',
-    name: '',
-    phone: '',
-    gender: 'Female',
-    sexualOrientation: 'Straight',
-    age: '18',
-    nationality: '',
-    county: '',
-    ward: '',
-    area: '',
-    nearby: [],
-    services: [],
-    otherServices: '',
-    profilePic: '',
-    normalPics: [],
-    exclusivePics: [],
-    verified: false,
+    username: '', name: '', phone: '', gender: 'Female', sexualOrientation: 'Straight', age: '18', nationality: '', county: '', ward: '', area: '', nearby: [], services: [], otherServices: '', profilePic: '', normalPics: [], exclusivePics: [], verified: false,
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
@@ -103,15 +77,13 @@ export default function ProfileSetup() {
   const [deleteReasons, setDeleteReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
   const reasons = ['Not interested anymore', 'Too expensive', 'Found alternative', 'Privacy concerns', 'Technical issues', 'Other'];
-  // ----------------------------
+
+  // ---------------------------- 
   // Lifecycle: load profile & subscriptions
-  // ----------------------------
+  // ---------------------------- 
   useEffect(() => {
     const raw = localStorage.getItem('loggedInUser');
-    if (!raw) {
-      router.push('/');
-      return;
-    }
+    if (!raw) { router.push('/'); return; }
     const user = JSON.parse(raw);
     setLoggedInUser(user);
     const profileRef = doc(db, 'profiles', user.id);
@@ -163,6 +135,7 @@ export default function ProfileSetup() {
         setLoading(false);
       }
     );
+
     // fetch transactions (creator subscriptions)
     (async function fetchTxs() {
       try {
@@ -194,6 +167,7 @@ export default function ProfileSetup() {
         console.error('Failed to fetch transactions', e);
       }
     })();
+
     // fetch my subscriptions (as subscriber)
     (async function fetchMySubs() {
       try {
@@ -235,6 +209,7 @@ export default function ProfileSetup() {
         console.error('Failed to fetch my subscriptions', e);
       }
     })();
+
     return () => {
       unsub();
       // revoke previews
@@ -243,9 +218,10 @@ export default function ProfileSetup() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
-  // ----------------------------
+
+  // ---------------------------- 
   // Helpers
-  // ----------------------------
+  // ---------------------------- 
   const formatPhoneForMpesa = (phone) => {
     if (!phone) throw new Error('Phone number is required');
     let formatted = phone.replace(/[^\d]/g, '');
@@ -256,30 +232,30 @@ export default function ProfileSetup() {
     }
     return formatted;
   };
+
   const shortenUserId = (id) => (id ? id.slice(-10) : '');
+
   const isVideo = (urlOrFile) => {
     if (!urlOrFile) return false;
-    // If it's a File object, check its type
     if (typeof urlOrFile === 'object' && urlOrFile.type) return urlOrFile.type.startsWith('video/');
-    // else assume string URL
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(urlOrFile));
   };
+
   const getThumbnail = (url) => {
     if (!url) return '';
-    // Attempt Cloudinary-style thumbnail if URL looks like Cloudinary video path
     try {
       if (/\bcloudinary\.com\b/i.test(url) && /\/video\/upload\//i.test(url)) {
         return url.replace('/video/upload/', '/image/upload/c_thumb,w_200,h_200,g_center/').replace(/\.(mp4|webm|ogg)(\?.*)?$/i, '.jpg');
       }
     } catch (e) {
-      // ignore transform on error
+      // ignore
     }
-    // fallback: for videos return url (video element will show), for images return url
     return url;
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Form handlers
-  // ----------------------------
+  // ---------------------------- 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (type === 'checkbox' && name === 'nearby') {
@@ -319,13 +295,15 @@ export default function ProfileSetup() {
     }
     setFormData((prev) => ({ ...prev, [name]: v }));
   };
+
   const handleWardChange = (e) => {
     const ward = e.target.value;
     setSelectedWard(ward);
     setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
   };
+
   const handleAreaChange = (e) => setFormData((prev) => ({ ...prev, area: e.target.value }));
-  // Profile picture file selection and local preview (object URL)
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -333,13 +311,13 @@ export default function ProfileSetup() {
     setProfilePicFile(file);
     setProfilePicPreview(URL.createObjectURL(file));
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Post file selection & previews
-  // ----------------------------
+  // ---------------------------- 
   const handlePostFileSelect = (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-    // Basic validation: only images/videos, limit total files to 10, 50MB each
     const allowed = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
     const oversize = allowed.find((f) => f.size > 50 * 1024 * 1024);
     if (oversize) {
@@ -356,6 +334,7 @@ export default function ProfileSetup() {
     setPostPreviews((prev) => [...prev, ...newPreviews]);
     setError('');
   };
+
   const handleRemovePostPreview = (index) => {
     setPostPreviews((prev) => {
       const url = prev[index];
@@ -364,9 +343,10 @@ export default function ProfileSetup() {
     });
     setPostFiles((prev) => prev.filter((_, i) => i !== index));
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Create post (upload)
-  // ----------------------------
+  // ---------------------------- 
   const handleCreatePost = async () => {
     if (!loggedInUser) return;
     if (postFiles.length === 0) return;
@@ -396,12 +376,10 @@ export default function ProfileSetup() {
       }
       const fieldToUpdate = postIsExclusive ? 'exclusivePics' : 'normalPics';
       await setDoc(doc(db, 'profiles', loggedInUser.id), { [fieldToUpdate]: arrayUnion(...uploadedUrls) }, { merge: true });
-      // Instant UI update - ensure only update the correct field
       setFormData((prev) => ({
         ...prev,
         [fieldToUpdate]: [...(postIsExclusive ? (prev.exclusivePics || []) : (prev.normalPics || [])), ...uploadedUrls],
       }));
-      // cleanup previews
       postPreviews.forEach((u) => URL.revokeObjectURL(u));
       setPostPreviews([]);
       setPostFiles([]);
@@ -416,31 +394,36 @@ export default function ProfileSetup() {
       setPostUploading(false);
     }
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Remove media from profile
-  // ----------------------------
+  // ---------------------------- 
   const handleRemoveNormalPic = async (index) => {
     const newList = (formData.normalPics || []).filter((_, i) => i !== index);
     setFormData((p) => ({ ...p, normalPics: newList }));
     await setDoc(doc(db, 'profiles', loggedInUser.id), { normalPics: newList }, { merge: true });
   };
+
   const handleRemoveExclusivePic = async (index) => {
     const newList = (formData.exclusivePics || []).filter((_, i) => i !== index);
     setFormData((p) => ({ ...p, exclusivePics: newList }));
     await setDoc(doc(db, 'profiles', loggedInUser.id), { exclusivePics: newList }, { merge: true });
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Media viewer controls
-  // ----------------------------
+  // ---------------------------- 
   const handleMediaClick = (gallery, index) => {
     if (!Array.isArray(gallery) || gallery.length === 0) return;
     setSelectedGallery(gallery);
     setSelectedIndex(index || 0);
     setShowMediaViewer(true);
   };
+
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
   };
+
   const handleTouchEnd = (e) => {
     const touchEndX = e.changedTouches[0].clientX;
     if (touchStartX.current - touchEndX > 50) {
@@ -449,9 +432,10 @@ export default function ProfileSetup() {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1));
     }
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Validation / stepper
-  // ----------------------------
+  // ---------------------------- 
   const validateStep = (step) => {
     switch (step) {
       case 0:
@@ -464,9 +448,7 @@ export default function ProfileSetup() {
           setError('You must be 18 or older.');
           return false;
         }
-        try {
-          formatPhoneForMpesa(formData.phone);
-        } catch (err) {
+        try { formatPhoneForMpesa(formData.phone); } catch (err) {
           setError(err.message);
           return false;
         }
@@ -494,9 +476,7 @@ export default function ProfileSetup() {
 
   const validateAll = () => {
     for (let i = 0; i < 3; i++) {
-      if (!validateStep(i)) {
-        return false;
-      }
+      if (!validateStep(i)) return false;
     }
     return true;
   };
@@ -507,10 +487,12 @@ export default function ProfileSetup() {
       setActiveStep((s) => Math.min(s + 1, steps.length - 1));
     }
   };
+
   const handlePrevStep = () => setActiveStep((s) => Math.max(s - 1, 0));
-  // ----------------------------
+
+  // ---------------------------- 
   // Save profile
-  // ----------------------------
+  // ---------------------------- 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
@@ -520,15 +502,11 @@ export default function ProfileSetup() {
       return;
     }
     let profilePicUrl = formData.profilePic;
-    // If a new profile pic file is selected, upload it to Cloudinary
     if (profilePicFile) {
       try {
         const fd = new FormData();
         fd.append('image', profilePicFile);
-        const res = await fetch('/api/uploadProfilePic', {
-          method: 'POST',
-          body: fd,
-        });
+        const res = await fetch('/api/uploadProfilePic', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || !data.url) {
           setError(data.error || 'Failed to upload image.');
@@ -536,7 +514,6 @@ export default function ProfileSetup() {
           return;
         }
         profilePicUrl = data.url;
-        // Moderate
         const modRes = await fetch('/api/moderateImage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -571,9 +548,10 @@ export default function ProfileSetup() {
       setSaveLoading(false);
     }
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // Verification, membership, payments
-  // ----------------------------
+  // ---------------------------- 
   const handleRequestVerification = async () => {
     if (verificationRequested || formData.verified) {
       alert('Verification already requested or verified.');
@@ -587,12 +565,15 @@ export default function ProfileSetup() {
       setError('Failed to request verification.');
     }
   };
+
   const handleUpgrade = (level) => {
     setSelectedLevel(level);
     setSelectedDuration('');
     setShowModal(true);
   };
+
   const handleDurationSelect = (d) => setSelectedDuration(d);
+
   const handleProceedToPayment = () => {
     if (!selectedDuration) {
       alert('Select duration.');
@@ -610,7 +591,9 @@ export default function ProfileSetup() {
     setShowPaymentChoice(true);
     setShowModal(false);
   };
+
   const handlePaymentMethodChange = (m) => setSelectedPaymentMethod(m);
+
   const handleConfirmWalletUpgrade = async () => {
     const price = plans[selectedLevel][selectedDuration];
     if (fundingBalance < price) {
@@ -623,12 +606,17 @@ export default function ProfileSetup() {
     if (!confirm(`Upgrade to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet?`)) return;
     const newBalance = fundingBalance - price;
     setFundingBalance(newBalance);
-    await setDoc(doc(db, 'profiles', loggedInUser.id), { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance }, { merge: true });
+    await setDoc(doc(db, 'profiles', loggedInUser.id), {
+      membership: selectedLevel,
+      membershipExpiresAt: clientExpiresAt,
+      fundingBalance: newBalance
+    }, { merge: true });
     setMembership(selectedLevel);
     setShowPaymentChoice(false);
     setSelectedDuration('');
     alert('Upgrade successful!');
   };
+
   const handleAddFund = () => {
     try {
       if (!formData.phone) throw new Error('Add phone first.');
@@ -638,6 +626,7 @@ export default function ProfileSetup() {
       setError(err.message);
     }
   };
+
   const handleWithdraw = async () => {
     try {
       if (!formData.phone) throw new Error('Add phone first.');
@@ -646,7 +635,11 @@ export default function ProfileSetup() {
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       if (!confirm(`Withdraw KSh ${amount} to ${formattedPhone}?`)) return;
       setWithdrawLoading(true);
-      const res = await fetch('/api/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: loggedInUser.id, amount, phoneNumber: formattedPhone }) });
+      const res = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: loggedInUser.id, amount, phoneNumber: formattedPhone })
+      });
       const data = await res.json();
       if (data.success) {
         alert('Withdrawal initiated! It may take a few minutes to process. Balance will update automatically on success.');
@@ -661,20 +654,24 @@ export default function ProfileSetup() {
       setWithdrawLoading(false);
     }
   };
+
   const handleViewCreatorProfile = (creatorId) => {
     router.push(`/profiles/${creatorId}`);
   };
+
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     setLoggedInUser(null);
     await signOut(auth);
     router.push('/');
   };
+
   // New: Delete profile handlers
   const handleReasonChange = (e, reason) => {
     const checked = e.target.checked;
     setDeleteReasons((prev) => checked ? [...prev, reason] : prev.filter((r) => r !== reason));
   };
+
   const handleDeleteProfile = async () => {
     if (deleteReasons.length === 0) {
       alert('Please select at least one reason.');
@@ -683,17 +680,16 @@ export default function ProfileSetup() {
     if (!confirm('Are you sure you want to delete your profile? This action cannot be undone.')) return;
     try {
       await deleteDoc(doc(db, 'profiles', loggedInUser.id));
-      // Optionally, store feedback in a 'feedback' collection
-      // await addDoc(collection(db, 'feedback'), { userId: loggedInUser.id, reasons: deleteReasons, other: otherReason, timestamp: new Date() });
       handleLogout();
     } catch (err) {
       console.error('Delete profile failed', err);
       alert('Failed to delete profile. Please try again.');
     }
   };
-  // ----------------------------
+
+  // ---------------------------- 
   // UI derived values
-  // ----------------------------
+  // ---------------------------- 
   const countyList = useMemo(() => Object.keys(locations).sort(), []);
   const wards = useMemo(() => (formData.county && locations[formData.county] ? Object.keys(locations[formData.county]) : []), [formData.county]);
   const areas = useMemo(() => (selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : []), [formData.county, selectedWard]);
@@ -705,10 +701,12 @@ export default function ProfileSetup() {
     }),
     []
   );
+
   if (loading) return <div className={styles.container}>Loading...</div>;
-  // ----------------------------
+
+  // ---------------------------- 
   // Render
-  // ----------------------------
+  // ---------------------------- 
   return (
     <div className={`${styles.container} ${styles.premiumTheme}`}>
       <Head>
@@ -716,6 +714,7 @@ export default function ProfileSetup() {
         <meta name="description" content="Set up your profile" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+
       <header className={`${styles.header} ${styles.premiumHeader}`}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>Meet Connect</h1>
@@ -732,6 +731,7 @@ export default function ProfileSetup() {
           )}
         </div>
       </header>
+
       <main className={`${styles.main} ${styles.premiumMain}`}>
         <div className={styles.profileSetupContainer}>
           <aside className={`${styles.membershipSection} ${styles.premiumSidebar}`}>
@@ -758,177 +758,207 @@ export default function ProfileSetup() {
               <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>My Exclusive Subscriptions</button>
             </div>
           </aside>
-          {showMediaViewer ? (
-            <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-              <button className={styles.viewerBack} onClick={() => setShowMediaViewer(false)}>
-                ←
-              </button>
-              <button className={styles.viewerLeft} onClick={() => setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1))}>
-                ‹
-              </button>
-              <div className={styles.viewerContent}>
-                {isVideo(selectedGallery[selectedIndex]) ? (
-                  <video src={selectedGallery[selectedIndex]} controls autoPlay className={styles.viewerMedia} />
-                ) : (
-                  <Image src={selectedGallery[selectedIndex]} fill className={styles.viewerMedia} alt="" />
-                )}
-              </div>
-              <button className={styles.viewerRight} onClick={() => setSelectedIndex((prev) => (prev < selectedGallery.length - 1 ? prev + 1 : 0))}>
-                ›
-              </button>
+
+          {/* Profile form is now ALWAYS visible */}
+          <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
+            <h1 className={styles.setupTitle}>My Profile Setup</h1>
+            <p className={styles.tip}>Complete one step at a time. We'll guide you!</p>
+            <div className={styles.stepper}>
+              {steps.map((s, idx) => (
+                <button
+                  key={s}
+                  onClick={() => {
+                    if (idx < activeStep || validateStep(activeStep - 1)) setActiveStep(idx);
+                  }}
+                  className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
+                >
+                  {s}
+                </button>
+              ))}
             </div>
-          ) : (
-            <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
-              <h1 className={styles.setupTitle}>My Profile Setup</h1>
-              <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
-              <div className={styles.stepper}>
-                {steps.map((s, idx) => (
-                  <button
-                    key={s}
-                    onClick={() => {
-                      if (idx < activeStep || validateStep(activeStep - 1)) setActiveStep(idx);
-                    }}
-                    className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-              {error && <p className={styles.error}>{error}</p>}
-              <form onSubmit={handleSubmit} className={styles.profileForm}>
-                {activeStep === 0 && (
-                  <div className={styles.stepContent}>
-                    <h2>Basics</h2>
-                    <label className={styles.label}>
-                      Profile Picture
-                      <input type="file" accept="image/*" onChange={handleImageUpload} className={styles.profilePicInput} />
-                      {(profilePicPreview || formData.profilePic) && (
-                        profilePicPreview ? (
-                          <Image src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
-                        ) : (
-                          <Image src={formData.profilePic} alt="Profile" width={150} height={150} className={styles.profilePic} />
-                        )
-                      )}
-                    </label>
-                    <label className={styles.label}>
-                      Name
-                      <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required />
-                    </label>
-                    <label className={styles.label}>
-                      Phone (e.g., 0712345678)
-                      <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required />
-                    </label>
-                    <label className={styles.label}>
-                      Gender
-                      <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select}>
-                        <option value="Female">Female</option>
-                        <option value="Male">Male</option>
-                      </select>
-                    </label>
-                    <label className={styles.label}>
-                      Sexual Orientation
-                      <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select}>
-                        <option value="Straight">Straight</option>
-                        <option value="Gay">Gay</option>
-                        <option value="Bisexual">Bisexual</option>
-                        <option value="Other">Other</option>
-                      </select>
-                    </label>
-                    <label className={styles.label}>
-                      Age (18+)
-                      <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required />
-                    </label>
-                    <label className={styles.label}>
-                      Nationality
-                      <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} />
-                    </label>
-                  </div>
-                )}
-                {activeStep === 1 && (
-                  <div className={styles.stepContent}>
-                    <h2>Location</h2>
-                    <label className={styles.label}>
-                      County
-                      <select name="county" value={formData.county} onChange={handleChange} className={styles.select}>
-                        <option value="">Select County</option>
-                        {countyList.map((c) => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </label>
-                    <label className={styles.label}>
-                      City/Town
-                      <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county}>
-                        <option value="">Select City/Town</option>
-                        {wards.map((w) => <option key={w} value={w}>{w}</option>)}
-                      </select>
-                    </label>
-                    <label className={styles.label}>
-                      Area
-                      <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard}>
-                        <option value="">Select Area</option>
-                        {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                    </label>
-                    {formData.area && (
-                      <label className={styles.label}>
-                        Nearby Places (up to 4)
-                        <div className={styles.checkboxGroup}>
-                          {areas.map((place) => (
-                            <div key={place}>
-                              <input type="checkbox" value={place} checked={(formData.nearby || []).includes(place)} onChange={handleChange} name="nearby" />
-                              <span>{place}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </label>
+            {error && <p className={styles.error}>{error}</p>}
+            <form onSubmit={handleSubmit} className={styles.profileForm}>
+              {/* === All steps exactly unchanged === */}
+              {activeStep === 0 && (
+                <div className={styles.stepContent}>
+                  <h2>Basics</h2>
+                  <label className={styles.label}>
+                    Profile Picture
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className={styles.profilePicInput} />
+                    {(profilePicPreview || formData.profilePic) && (
+                      profilePicPreview ? (
+                        <Image src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
+                      ) : (
+                        <Image src={formData.profilePic} alt="Profile" width={150} height={150} className={styles.profilePic} />
+                      )
                     )}
-                  </div>
-                )}
-                {activeStep === 2 && (
-                  <div className={styles.stepContent}>
-                    <h2>Services</h2>
+                  </label>
+                  <label className={styles.label}>
+                    Name
+                    <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required />
+                  </label>
+                  <label className={styles.label}>
+                    Phone (e.g., 0712345678)
+                    <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required />
+                  </label>
+                  <label className={styles.label}>
+                    Gender
+                    <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select}>
+                      <option value="Female">Female</option>
+                      <option value="Male">Male</option>
+                    </select>
+                  </label>
+                  <label className={styles.label}>
+                    Sexual Orientation
+                    <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select}>
+                      <option value="Straight">Straight</option>
+                      <option value="Gay">Gay</option>
+                      <option value="Bisexual">Bisexual</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+                  <label className={styles.label}>
+                    Age (18+)
+                    <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required />
+                  </label>
+                  <label className={styles.label}>
+                    Nationality
+                    <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} />
+                  </label>
+                </div>
+              )}
+              {activeStep === 1 && (
+                <div className={styles.stepContent}>
+                  <h2>Location</h2>
+                  <label className={styles.label}>
+                    County
+                    <select name="county" value={formData.county} onChange={handleChange} className={styles.select}>
+                      <option value="">Select County</option>
+                      {countyList.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.label}>
+                    City/Town
+                    <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county}>
+                      <option value="">Select City/Town</option>
+                      {wards.map((w) => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                  </label>
+                  <label className={styles.label}>
+                    Area
+                    <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard}>
+                      <option value="">Select Area</option>
+                      {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </label>
+                  {formData.area && (
                     <label className={styles.label}>
-                      Select Services (at least 1)
+                      Nearby Places (up to 4)
                       <div className={styles.checkboxGroup}>
-                        {servicesList.map((service) => (
-                          <div key={service}>
-                            <input type="checkbox" value={service} checked={(formData.services || []).includes(service)} onChange={handleChange} name="services" />
-                            <span>{service}</span>
+                        {areas.map((place) => (
+                          <div key={place}>
+                            <input type="checkbox" value={place} checked={(formData.nearby || []).includes(place)} onChange={handleChange} name="nearby" />
+                            <span>{place}</span>
                           </div>
                         ))}
                       </div>
                     </label>
-                  </div>
-                )}
-                {activeStep === 3 && (
-                  <div className={styles.stepContent}>
-                    <h2>Media</h2>
-                    <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>+ Create Post</button>
-                    <div className={styles.viewButtonsContainer}>
-                      <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>View Posts</button>
-                      <button type="button" onClick={() => setShowExclusiveModal(true)} className={styles.viewExclusiveButton}>View Exclusive</button>
-                    </div>
-                    <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
-                  </div>
-                )}
-                {activeStep === 4 && (
-                  <div className={styles.stepContent}>
-                    <h2>Membership & Wallets</h2>
-                    <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
-                    <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
-                      {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
-                    </button>
-                  </div>
-                )}
-                <div className={styles.stepButtons}>
-                  {activeStep > 0 && <button type="button" onClick={handlePrevStep} className={styles.button}>Previous</button>}
-                  {activeStep < steps.length - 1 && <button type="button" onClick={handleNextStep} className={styles.button}>Next</button>}
-                  <button type="submit" className={styles.button} disabled={saveLoading}>{saveLoading ? 'Saving...' : 'Save Profile'}</button>
+                  )}
                 </div>
-              </form>
-            </div>
-          )}
+              )}
+              {activeStep === 2 && (
+                <div className={styles.stepContent}>
+                  <h2>Services</h2>
+                  <label className={styles.label}>
+                    Select Services (at least 1)
+                    <div className={styles.checkboxGroup}>
+                      {servicesList.map((service) => (
+                        <div key={service}>
+                          <input type="checkbox" value={service} checked={(formData.services || []).includes(service)} onChange={handleChange} name="services" />
+                          <span>{service}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </label>
+                </div>
+              )}
+              {activeStep === 3 && (
+                <div className={styles.stepContent}>
+                  <h2>Media</h2>
+                  <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>+ Create Post</button>
+                  <div className={styles.viewButtonsContainer}>
+                    <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>View Posts</button>
+                    <button type="button" onClick={() => setShowExclusiveModal(true)} className={styles.viewExclusiveButton}>View Exclusive</button>
+                  </div>
+                  <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
+                </div>
+              )}
+              {activeStep === 4 && (
+                <div className={styles.stepContent}>
+                  <h2>Membership & Wallets</h2>
+                  <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
+                  <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
+                    {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
+                  </button>
+                </div>
+              )}
+              <div className={styles.stepButtons}>
+                {activeStep > 0 && <button type="button" onClick={handlePrevStep} className={styles.button}>Previous</button>}
+                {activeStep < steps.length - 1 && <button type="button" onClick={handleNextStep} className={styles.button}>Next</button>}
+                <button type="submit" className={styles.button} disabled={saveLoading}>{saveLoading ? 'Saving...' : 'Save Profile'}</button>
+              </div>
+            </form>
+          </div>
         </div>
-        {/* ---------- Modals & Overlays ---------- */}
+
+        {/* ======================== FULL SCREEN MEDIA VIEWER OVERLAY ======================== */}
+        {showMediaViewer && (
+          <div className={styles.mediaViewerOverlay}>
+            <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+              <button className={styles.viewerClose} onClick={() => setShowMediaViewer(false)} aria-label="Close">
+                ×
+              </button>
+              <button
+                className={styles.viewerLeft}
+                onClick={() => setSelectedIndex(prev => prev > 0 ? prev - 1 : selectedGallery.length - 1)}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              <button
+                className={styles.viewerRight}
+                onClick={() => setSelectedIndex(prev => prev < selectedGallery.length - 1 ? prev + 1 : 0)}
+                aria-label="Next"
+              >
+                ›
+              </button>
+              <div className={styles.viewerContent}>
+                {isVideo(selectedGallery[selectedIndex]) ? (
+                  <video
+                    src={selectedGallery[selectedIndex]}
+                    controls
+                    autoPlay
+                    playsInline
+                    className={styles.viewerMedia}
+                  />
+                ) : (
+                  <div className={styles.imageWrapper}>
+                    <Image
+                      src={selectedGallery[selectedIndex]}
+                      alt="Full view"
+                      fill
+                      sizes="95vw"
+                      style={{ objectFit: 'contain' }}
+                      priority
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========== ALL MODALS (unchanged except gallery thumbs upgraded) ========== */}
         {showModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -945,6 +975,7 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
+
         {showPaymentChoice && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -975,16 +1006,27 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
+
         {showAddFundModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>Add Funds</h3>
               <p>Phone: {formData.phone}</p>
-              <StkPushForm initialPhone={mpesaPhone} apiEndpoint="/api/stkpush" additionalBody={{ userId: loggedInUser.id, type: 'addfund', accountReference: `wal_${shortenUserId(loggedInUser.id)}`, transactionDesc: 'Add funds' }} />
+              <StkPushForm
+                initialPhone={mpesaPhone}
+                apiEndpoint="/api/stkpush"
+                additionalBody={{
+                  userId: loggedInUser.id,
+                  type: 'addfund',
+                  accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
+                  transactionDesc: 'Add funds'
+                }}
+              />
               <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>Close</button>
             </div>
           </div>
         )}
+
         {showWithdrawModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -996,6 +1038,7 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
+
         {showEarningsHistory && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1010,6 +1053,7 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
+
         {showMySubscriptions && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1040,29 +1084,19 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {/* New: Delete Profile Modal */}
+
         {showDeleteModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>Delete Profile?</h3>
-              <p>Please tell us why you&apos;re leaving:</p>
+              <p>Please tell us why you're leaving:</p>
               <div className={styles.checkboxGroup}>
                 {reasons.map((reason) => (
                   <div key={reason}>
-                    <input
-                      type="checkbox"
-                      id={reason}
-                      checked={deleteReasons.includes(reason)}
-                      onChange={(e) => handleReasonChange(e, reason)}
-                    />
+                    <input type="checkbox" id={reason} checked={deleteReasons.includes(reason)} onChange={(e) => handleReasonChange(e, reason)} />
                     <label htmlFor={reason}>{reason}</label>
                     {reason === 'Other' && deleteReasons.includes('Other') && (
-                      <textarea
-                        value={otherReason}
-                        onChange={(e) => setOtherReason(e.target.value)}
-                        placeholder="Please specify"
-                        className={styles.input}
-                      />
+                      <textarea value={otherReason} onChange={(e) => setOtherReason(e.target.value)} placeholder="Please specify" className={styles.input} />
                     )}
                   </div>
                 ))}
@@ -1072,7 +1106,7 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {/* Create Post Modal - overlay stopsPropagation on inner content */}
+
         {showCreatePostModal && (
           <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
             <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
@@ -1096,8 +1130,7 @@ export default function ProfileSetup() {
               </div>
               <textarea value={postCaption} onChange={(e) => setPostCaption(e.target.value.slice(0, 500))} placeholder="Caption..." rows={4} />
               <div>{postCaption.length}/500</div>
-              <label>
-                Exclusive?
+              <label> Exclusive?
                 <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
               </label>
               <div style={{ marginTop: 12 }}>
@@ -1109,7 +1142,8 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {/* Posts Modal */}
+
+        {/* Posts Modal - upgraded square lazy thumbnails with play icon */}
         {showPostsModal && (
           <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
             <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
@@ -1118,20 +1152,24 @@ export default function ProfileSetup() {
               <div className={styles.gallery}>
                 {(formData.normalPics || []).map((url, index) => (
                   <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.normalPics, index)}>
-                    {isVideo(url) ? (
-                      // show a thumbnail if possible; fallback to a video element
-                      <video src={url} className={styles.galleryMedia} />
-                    ) : (
-                      <Image src={getThumbnail(url)} alt="" width={100} height={100} className={styles.galleryPic} />
-                    )}
-                    <button onClick={(e) => { e.stopPropagation(); handleRemoveNormalPic(index); }}>×</button>
+                    <Image
+                      src={getThumbnail(url)}
+                      alt=""
+                      fill
+                      sizes="140px"
+                      style={{ objectFit: 'cover' }}
+                      loading="lazy"
+                    />
+                    {isVideo(url) && <div className={styles.playIcon}>▶</div>}
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveNormalPic(index); }} className={styles.removeButton}>×</button>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         )}
-        {/* Exclusive Modal */}
+
+        {/* Exclusive Modal - same upgraded thumbnails */}
         {showExclusiveModal && (
           <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
             <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
@@ -1140,14 +1178,23 @@ export default function ProfileSetup() {
               <div className={styles.gallery}>
                 {(formData.exclusivePics || []).map((url, index) => (
                   <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.exclusivePics, index)}>
-                    {isVideo(url) ? <video src={url} className={styles.galleryMedia} /> : <Image src={getThumbnail(url)} alt="" width={100} height={100} className={styles.galleryPic} />}
-                    <button onClick={(e) => { e.stopPropagation(); handleRemoveExclusivePic(index); }}>×</button>
+                    <Image
+                      src={getThumbnail(url)}
+                      alt=""
+                      fill
+                      sizes="140px"
+                      style={{ objectFit: 'cover' }}
+                      loading="lazy"
+                    />
+                    {isVideo(url) && <div className={styles.playIcon}>▶</div>}
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveExclusivePic(index); }} className={styles.removeButton}>×</button>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         )}
+
         {showInappropriateBanner && (
           <div className={styles.inappropriateBanner}>
             <p>Inappropriate content detected. Use exclusive or change image.</p>
