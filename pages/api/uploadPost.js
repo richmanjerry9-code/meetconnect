@@ -1,7 +1,6 @@
 // pages/api/uploadPost.js
 import { v2 as cloudinary } from 'cloudinary';
 import multer from 'multer';
-import { adminDb } from '../../lib/firebaseAdmin';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -32,7 +31,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Upload error' });
     }
 
-    const { userId, isExclusive } = req.body;  // Still get these from form
+    const { userId, isExclusive: isExclusiveStr } = req.body;  // Still get these from form
+    const isExclusive = isExclusiveStr === 'true';  // Parse to boolean
     if (!req.file || !userId) {
       return res.status(400).json({ error: 'Missing media file or userId' });
     }
@@ -64,11 +64,11 @@ export default async function handler(req, res) {
 
       const finalUrl = uploadResponse.secure_url;
 
-      // Moderate only public posts (update for video if needed)
+      // Moderate only public posts (non-exclusive)
       if (!isExclusive) {
         let modEndpoint = '/api/moderateImage';
         if (resource_type === 'video') {
-          modEndpoint = '/api/moderateVideo';  // Assume you add a video moderation endpoint
+          modEndpoint = '/api/moderateVideo';  // Assume you have/add a video moderation endpoint
         }
         const modRes = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}${modEndpoint}`, {
           method: 'POST',
@@ -81,24 +81,6 @@ export default async function handler(req, res) {
           return res.status(400).json({ error: 'Inappropriate content detected' });
         }
       }
-
-      // Update Firestore (assuming same structure for images/videos; adjust fields if videos go elsewhere)
-      const profileRef = adminDb.collection('profiles').doc(userId);
-      const profileSnap = await profileRef.get();
-      const profileData = profileSnap.exists ? profileSnap.data() : {};
-
-      const updatedNormalPics = isExclusive
-        ? profileData.normalPics || []
-        : [...(profileData.normalPics || []), finalUrl];
-
-      const updatedExclusivePics = isExclusive
-        ? [...(profileData.exclusivePics || []), finalUrl]
-        : profileData.exclusivePics || [];
-
-      await profileRef.set({
-        normalPics: updatedNormalPics,
-        exclusivePics: updatedExclusivePics,
-      }, { merge: true });
 
       return res.status(200).json({ url: finalUrl });
 
