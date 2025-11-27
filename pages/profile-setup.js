@@ -16,10 +16,10 @@ import {
   where,
   getDocs,
   arrayUnion,
+  deleteDoc,
 } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
-
 const servicesList = [
   'Dinner Date',
   'Just Vibes',
@@ -28,7 +28,6 @@ const servicesList = [
   'Friendship',
   'Companionship / Meetup',
 ];
-
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -73,6 +72,9 @@ export default function ProfileSetup() {
   // Transactions
   const [showEarningsHistory, setShowEarningsHistory] = useState(false);
   const [transactions, setTransactions] = useState([]);
+  // My Subscriptions (as subscriber)
+  const [showMySubscriptions, setShowMySubscriptions] = useState(false);
+  const [mySubscriptions, setMySubscriptions] = useState([]);
   // Create post states
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [postFiles, setPostFiles] = useState([]); // File objects
@@ -92,9 +94,15 @@ export default function ProfileSetup() {
   // Profile pic file and preview
   const [profilePicFile, setProfilePicFile] = useState(null);
   const [profilePicPreview, setProfilePicPreview] = useState('');
-  const steps = ['Basics', 'Location', 'Services', 'Media', 'Membership & Wallets'];
+  const steps = ['Profile', 'Location', 'Services', 'Media', 'Membership & Wallets'];
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
+  // New states for menu and delete profile
+  const [showMenu, setShowMenu] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteReasons, setDeleteReasons] = useState([]);
+  const [otherReason, setOtherReason] = useState('');
+  const reasons = ['Not interested anymore', 'Too expensive', 'Found alternative', 'Privacy concerns', 'Technical issues', 'Other'];
   // ----------------------------
   // Lifecycle: load profile & subscriptions
   // ----------------------------
@@ -106,7 +114,6 @@ export default function ProfileSetup() {
     }
     const user = JSON.parse(raw);
     setLoggedInUser(user);
-
     const profileRef = doc(db, 'profiles', user.id);
     const unsub = onSnapshot(
       profileRef,
@@ -124,7 +131,6 @@ export default function ProfileSetup() {
               setDoc(profileRef, { membership: 'Regular', membershipExpiresAt: null }, { merge: true }).catch(() => {});
             }
           }
-
           setFormData((prev) => ({
             ...prev,
             ...data,
@@ -137,7 +143,6 @@ export default function ProfileSetup() {
             age: data.age || prev.age,
             verified: data.verified || false,
           }));
-
           setSelectedWard(data.ward || '');
           setFundingBalance(data.fundingBalance || 0);
           setEarningsBalance(data.earningsBalance || 0);
@@ -158,7 +163,6 @@ export default function ProfileSetup() {
         setLoading(false);
       }
     );
-
     // fetch transactions (creator subscriptions)
     (async function fetchTxs() {
       try {
@@ -190,7 +194,47 @@ export default function ProfileSetup() {
         console.error('Failed to fetch transactions', e);
       }
     })();
-
+    // fetch my subscriptions (as subscriber)
+    (async function fetchMySubs() {
+      try {
+        const q = query(collection(db, 'subscriptions'), where('userId', '==', user.id));
+        const snapshot = await getDocs(q);
+        const subs = await Promise.all(
+          snapshot.docs.map(async (d) => {
+            const data = d.data();
+            let creatorName = 'Unknown';
+            let creatorPic = '';
+            try {
+              const creatorRef = doc(db, 'profiles', data.creatorId);
+              const creatorSnap = await getDoc(creatorRef);
+              if (creatorSnap.exists()) {
+                const creatorData = creatorSnap.data();
+                creatorName = creatorData.name || 'Unknown';
+                creatorPic = creatorData.profilePic || '';
+              }
+            } catch (e) {
+              // ignore
+            }
+            const expiresAtDate = data.expiresAt ? data.expiresAt.toDate() : null;
+            const isActive = expiresAtDate && expiresAtDate > new Date();
+            return {
+              id: d.id,
+              creatorId: data.creatorId,
+              creatorName,
+              creatorPic,
+              amount: data.amount,
+              duration: data.durationDays || data.duration,
+              date: data.updatedAt ? data.updatedAt.toDate().toLocaleString() : '',
+              expiresAt: expiresAtDate ? expiresAtDate.toLocaleString() : '',
+              isActive,
+            };
+          })
+        );
+        setMySubscriptions(subs.sort((a, b) => new Date(b.date) - new Date(a.date)));
+      } catch (e) {
+        console.error('Failed to fetch my subscriptions', e);
+      }
+    })();
     return () => {
       unsub();
       // revoke previews
@@ -254,7 +298,6 @@ export default function ProfileSetup() {
       });
       return;
     }
-
     if (type === 'checkbox') {
       setFormData((prev) => ({
         ...prev,
@@ -262,7 +305,6 @@ export default function ProfileSetup() {
       }));
       return;
     }
-
     let v = value;
     if (name === 'phone') {
       v = value.replace(/[^\d]/g, '');
@@ -270,13 +312,11 @@ export default function ProfileSetup() {
       if (v.length === 10 && v.startsWith('07')) setError('');
       else if (v.length > 0) setError('Phone should be in the format 07XXXXXXXX');
     }
-
     if (name === 'county') {
       setFormData((prev) => ({ ...prev, county: v, ward: '', area: '', nearby: [] }));
       setSelectedWard('');
       return;
     }
-
     setFormData((prev) => ({ ...prev, [name]: v }));
   };
   const handleWardChange = (e) => {
@@ -299,7 +339,6 @@ export default function ProfileSetup() {
   const handlePostFileSelect = (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-
     // Basic validation: only images/videos, limit total files to 10, 50MB each
     const allowed = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
     const oversize = allowed.find((f) => f.size > 50 * 1024 * 1024);
@@ -307,13 +346,11 @@ export default function ProfileSetup() {
       setError('One of the files exceeds 50MB limit.');
       return;
     }
-
     const total = postFiles.length + allowed.length;
     if (total > 10) {
       setError('Maximum 10 files per post.');
       return;
     }
-
     const newPreviews = allowed.map((f) => URL.createObjectURL(f));
     setPostFiles((prev) => [...prev, ...allowed]);
     setPostPreviews((prev) => [...prev, ...newPreviews]);
@@ -336,10 +373,8 @@ export default function ProfileSetup() {
     setPostUploading(true);
     setError('');
     setShowInappropriateBanner(false);
-
     try {
       const uploadedUrls = [];
-
       for (let i = 0; i < postFiles.length; i++) {
         const file = postFiles[i];
         const fd = new FormData();
@@ -347,10 +382,8 @@ export default function ProfileSetup() {
         fd.append('userId', loggedInUser.id);
         fd.append('isExclusive', postIsExclusive ? 'true' : 'false');
         fd.append('caption', postCaption || '');
-
         const res = await fetch('/api/uploadPost', { method: 'POST', body: fd });
         const data = await res.json();
-
         if (!res.ok || !data.url) {
           if (data && data.error === 'Inappropriate content detected') {
             setShowInappropriateBanner(true);
@@ -359,19 +392,15 @@ export default function ProfileSetup() {
           }
           return;
         }
-
         uploadedUrls.push(data.url);
       }
-
       const fieldToUpdate = postIsExclusive ? 'exclusivePics' : 'normalPics';
       await setDoc(doc(db, 'profiles', loggedInUser.id), { [fieldToUpdate]: arrayUnion(...uploadedUrls) }, { merge: true });
-
       // Instant UI update - ensure only update the correct field
       setFormData((prev) => ({
         ...prev,
         [fieldToUpdate]: [...(postIsExclusive ? (prev.exclusivePics || []) : (prev.normalPics || [])), ...uploadedUrls],
       }));
-
       // cleanup previews
       postPreviews.forEach((u) => URL.revokeObjectURL(u));
       setPostPreviews([]);
@@ -462,6 +491,16 @@ export default function ProfileSetup() {
         return true;
     }
   };
+
+  const validateAll = () => {
+    for (let i = 0; i < 3; i++) {
+      if (!validateStep(i)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleNextStep = () => {
     if (validateStep(activeStep)) {
       setError('');
@@ -475,19 +514,17 @@ export default function ProfileSetup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
-    if (!validateStep(activeStep)) {
+    if (!validateAll()) {
+      setError('Please complete all required fields in previous steps.');
       setSaveLoading(false);
       return;
     }
-
     let profilePicUrl = formData.profilePic;
-
     // If a new profile pic file is selected, upload it to Cloudinary
     if (profilePicFile) {
       try {
         const fd = new FormData();
         fd.append('image', profilePicFile);
-
         const res = await fetch('/api/uploadProfilePic', {
           method: 'POST',
           body: fd,
@@ -499,7 +536,6 @@ export default function ProfileSetup() {
           return;
         }
         profilePicUrl = data.url;
-
         // Moderate
         const modRes = await fetch('/api/moderateImage', {
           method: 'POST',
@@ -519,7 +555,6 @@ export default function ProfileSetup() {
         return;
       }
     }
-
     try {
       await setDoc(
         doc(db, 'profiles', loggedInUser.id),
@@ -586,7 +621,6 @@ export default function ProfileSetup() {
     const days = daysMap[selectedDuration] || 0;
     const clientExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
     if (!confirm(`Upgrade to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet?`)) return;
-
     const newBalance = fundingBalance - price;
     setFundingBalance(newBalance);
     await setDoc(doc(db, 'profiles', loggedInUser.id), { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance }, { merge: true });
@@ -611,15 +645,11 @@ export default function ProfileSetup() {
       if (isNaN(amount) || amount <= 0 || amount > earningsBalance) throw new Error('Invalid amount.');
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       if (!confirm(`Withdraw KSh ${amount} to ${formattedPhone}?`)) return;
-
       setWithdrawLoading(true);
       const res = await fetch('/api/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: loggedInUser.id, amount, phoneNumber: formattedPhone }) });
       const data = await res.json();
       if (data.success) {
-        const newBalance = earningsBalance - amount;
-        setEarningsBalance(newBalance);
-        await setDoc(doc(db, 'profiles', loggedInUser.id), { earningsBalance: newBalance }, { merge: true });
-        alert('Withdrawal initiated!');
+        alert('Withdrawal initiated! It may take a few minutes to process. Balance will update automatically on success.');
         setShowWithdrawModal(false);
         setWithdrawAmount('');
       } else {
@@ -631,11 +661,35 @@ export default function ProfileSetup() {
       setWithdrawLoading(false);
     }
   };
+  const handleViewCreatorProfile = (creatorId) => {
+    router.push(`/profiles/${creatorId}`);
+  };
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     setLoggedInUser(null);
     await signOut(auth);
     router.push('/');
+  };
+  // New: Delete profile handlers
+  const handleReasonChange = (e, reason) => {
+    const checked = e.target.checked;
+    setDeleteReasons((prev) => checked ? [...prev, reason] : prev.filter((r) => r !== reason));
+  };
+  const handleDeleteProfile = async () => {
+    if (deleteReasons.length === 0) {
+      alert('Please select at least one reason.');
+      return;
+    }
+    if (!confirm('Are you sure you want to delete your profile? This action cannot be undone.')) return;
+    try {
+      await deleteDoc(doc(db, 'profiles', loggedInUser.id));
+      // Optionally, store feedback in a 'feedback' collection
+      // await addDoc(collection(db, 'feedback'), { userId: loggedInUser.id, reasons: deleteReasons, other: otherReason, timestamp: new Date() });
+      handleLogout();
+    } catch (err) {
+      console.error('Delete profile failed', err);
+      alert('Failed to delete profile. Please try again.');
+    }
   };
   // ----------------------------
   // UI derived values
@@ -643,7 +697,6 @@ export default function ProfileSetup() {
   const countyList = useMemo(() => Object.keys(locations).sort(), []);
   const wards = useMemo(() => (formData.county && locations[formData.county] ? Object.keys(locations[formData.county]) : []), [formData.county]);
   const areas = useMemo(() => (selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : []), [formData.county, selectedWard]);
-
   const plans = useMemo(
     () => ({
       Prime: { '3 Days': 100, '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
@@ -652,7 +705,6 @@ export default function ProfileSetup() {
     }),
     []
   );
-
   if (loading) return <div className={styles.container}>Loading...</div>;
   // ----------------------------
   // Render
@@ -664,16 +716,22 @@ export default function ProfileSetup() {
         <meta name="description" content="Set up your profile" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-
       <header className={`${styles.header} ${styles.premiumHeader}`}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>Meet Connect</h1>
         </div>
         <div className={styles.authButtons}>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>Logout</button>
+          <button onClick={() => setShowMenu(!showMenu)} className={styles.menuButton}>⋯</button>
+          {showMenu && (
+            <div className={styles.dropdown}>
+              <ul>
+                <li onClick={() => { setShowMenu(false); setShowDeleteModal(true); }}>Delete Profile</li>
+              </ul>
+            </div>
+          )}
         </div>
       </header>
-
       <main className={`${styles.main} ${styles.premiumMain}`}>
         <div className={styles.profileSetupContainer}>
           <aside className={`${styles.membershipSection} ${styles.premiumSidebar}`}>
@@ -683,7 +741,6 @@ export default function ProfileSetup() {
               <p className={styles.walletBalance}>KSh {fundingBalance}</p>
               <button onClick={handleAddFund} className={styles.addFundButton}>Add Fund</button>
             </div>
-
             <div className={`${styles.walletSection} ${styles.earningsWallet}`}>
               <div className={styles.walletStripe} />
               <p className={styles.walletLabel}>Earnings Wallet</p>
@@ -691,390 +748,412 @@ export default function ProfileSetup() {
               <button onClick={() => setShowWithdrawModal(true)} className={styles.withdrawButton} disabled={earningsBalance <= 0}>Withdraw</button>
               <button onClick={() => setShowEarningsHistory(true)} className={styles.historyButton}>View Purchases</button>
             </div>
-
             <h2 className={styles.sectionTitle}>My Membership</h2>
             <p>Current: {membership}</p>
             <p>Regular: Free</p>
             <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>Upgrade to Prime</button>
             <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>Upgrade to VIP</button>
             <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>Upgrade to VVIP</button>
-          </aside>
-
-          <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
-            <h1 className={styles.setupTitle}>My Profile Setup</h1>
-            <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
-
-            <div className={styles.stepper}>
-              {steps.map((s, idx) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    if (idx < activeStep || validateStep(activeStep - 1)) setActiveStep(idx);
-                  }}
-                  className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
-                >
-                  {s}
-                </button>
-              ))}
+            <div className={styles.walletSection}>
+              <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>My Exclusive Subscriptions</button>
             </div>
-
-            {error && <p className={styles.error}>{error}</p>}
-
-            <form onSubmit={handleSubmit} className={styles.profileForm}>
-              {activeStep === 0 && (
-                <div className={styles.stepContent}>
-                  <h2>Basics</h2>
-                  <label className={styles.label}>
-                    Profile Picture
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className={styles.profilePicInput} />
-                    {(profilePicPreview || formData.profilePic) && (
-                      profilePicPreview ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
-                      ) : (
-                        <Image src={formData.profilePic} alt="Profile" width={150} height={150} className={styles.profilePic} />
-                      )
-                    )}
-                  </label>
-
-                  <label className={styles.label}>
-                    Name
-                    <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required />
-                  </label>
-
-                  <label className={styles.label}>
-                    Phone (e.g., 0712345678)
-                    <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required />
-                  </label>
-
-                  <label className={styles.label}>
-                    Gender
-                    <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select}>
-                      <option value="Female">Female</option>
-                      <option value="Male">Male</option>
-                    </select>
-                  </label>
-
-                  <label className={styles.label}>
-                    Sexual Orientation
-                    <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select}>
-                      <option value="Straight">Straight</option>
-                      <option value="Gay">Gay</option>
-                      <option value="Bisexual">Bisexual</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </label>
-
-                  <label className={styles.label}>
-                    Age (18+)
-                    <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required />
-                  </label>
-
-                  <label className={styles.label}>
-                    Nationality
-                    <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} />
-                  </label>
-                </div>
-              )}
-
-              {activeStep === 1 && (
-                <div className={styles.stepContent}>
-                  <h2>Location</h2>
-                  <label className={styles.label}>
-                    County
-                    <select name="county" value={formData.county} onChange={handleChange} className={styles.select}>
-                      <option value="">Select County</option>
-                      {countyList.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </label>
-
-                  <label className={styles.label}>
-                    City/Town
-                    <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county}>
-                      <option value="">Select City/Town</option>
-                      {wards.map((w) => <option key={w} value={w}>{w}</option>)}
-                    </select>
-                  </label>
-
-                  <label className={styles.label}>
-                    Area
-                    <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard}>
-                      <option value="">Select Area</option>
-                      {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </label>
-
-                  {formData.area && (
+          </aside>
+          {showMediaViewer ? (
+            <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+              <button className={styles.viewerBack} onClick={() => setShowMediaViewer(false)}>
+                ←
+              </button>
+              <button className={styles.viewerLeft} onClick={() => setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1))}>
+                ‹
+              </button>
+              <div className={styles.viewerContent}>
+                {isVideo(selectedGallery[selectedIndex]) ? (
+                  <video src={selectedGallery[selectedIndex]} controls autoPlay className={styles.viewerMedia} />
+                ) : (
+                  <Image src={selectedGallery[selectedIndex]} fill className={styles.viewerMedia} alt="" />
+                )}
+              </div>
+              <button className={styles.viewerRight} onClick={() => setSelectedIndex((prev) => (prev < selectedGallery.length - 1 ? prev + 1 : 0))}>
+                ›
+              </button>
+            </div>
+          ) : (
+            <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
+              <h1 className={styles.setupTitle}>My Profile Setup</h1>
+              <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
+              <div className={styles.stepper}>
+                {steps.map((s, idx) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      if (idx < activeStep || validateStep(activeStep - 1)) setActiveStep(idx);
+                    }}
+                    className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              {error && <p className={styles.error}>{error}</p>}
+              <form onSubmit={handleSubmit} className={styles.profileForm}>
+                {activeStep === 0 && (
+                  <div className={styles.stepContent}>
+                    <h2>Basics</h2>
                     <label className={styles.label}>
-                      Nearby Places (up to 4)
+                      Profile Picture
+                      <input type="file" accept="image/*" onChange={handleImageUpload} className={styles.profilePicInput} />
+                      {(profilePicPreview || formData.profilePic) && (
+                        profilePicPreview ? (
+                          <Image src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
+                        ) : (
+                          <Image src={formData.profilePic} alt="Profile" width={150} height={150} className={styles.profilePic} />
+                        )
+                      )}
+                    </label>
+                    <label className={styles.label}>
+                      Name
+                      <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required />
+                    </label>
+                    <label className={styles.label}>
+                      Phone (e.g., 0712345678)
+                      <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required />
+                    </label>
+                    <label className={styles.label}>
+                      Gender
+                      <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select}>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                      </select>
+                    </label>
+                    <label className={styles.label}>
+                      Sexual Orientation
+                      <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select}>
+                        <option value="Straight">Straight</option>
+                        <option value="Gay">Gay</option>
+                        <option value="Bisexual">Bisexual</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </label>
+                    <label className={styles.label}>
+                      Age (18+)
+                      <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required />
+                    </label>
+                    <label className={styles.label}>
+                      Nationality
+                      <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} />
+                    </label>
+                  </div>
+                )}
+                {activeStep === 1 && (
+                  <div className={styles.stepContent}>
+                    <h2>Location</h2>
+                    <label className={styles.label}>
+                      County
+                      <select name="county" value={formData.county} onChange={handleChange} className={styles.select}>
+                        <option value="">Select County</option>
+                        {countyList.map((c) => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </label>
+                    <label className={styles.label}>
+                      City/Town
+                      <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county}>
+                        <option value="">Select City/Town</option>
+                        {wards.map((w) => <option key={w} value={w}>{w}</option>)}
+                      </select>
+                    </label>
+                    <label className={styles.label}>
+                      Area
+                      <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard}>
+                        <option value="">Select Area</option>
+                        {areas.map((a) => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </label>
+                    {formData.area && (
+                      <label className={styles.label}>
+                        Nearby Places (up to 4)
+                        <div className={styles.checkboxGroup}>
+                          {areas.map((place) => (
+                            <div key={place}>
+                              <input type="checkbox" value={place} checked={(formData.nearby || []).includes(place)} onChange={handleChange} name="nearby" />
+                              <span>{place}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </label>
+                    )}
+                  </div>
+                )}
+                {activeStep === 2 && (
+                  <div className={styles.stepContent}>
+                    <h2>Services</h2>
+                    <label className={styles.label}>
+                      Select Services (at least 1)
                       <div className={styles.checkboxGroup}>
-                        {areas.map((place) => (
-                          <div key={place}>
-                            <input type="checkbox" value={place} checked={(formData.nearby || []).includes(place)} onChange={handleChange} name="nearby" />
-                            <span>{place}</span>
+                        {servicesList.map((service) => (
+                          <div key={service}>
+                            <input type="checkbox" value={service} checked={(formData.services || []).includes(service)} onChange={handleChange} name="services" />
+                            <span>{service}</span>
                           </div>
                         ))}
                       </div>
                     </label>
-                  )}
-                </div>
-              )}
-
-              {activeStep === 2 && (
-                <div className={styles.stepContent}>
-                  <h2>Services</h2>
-                  <label className={styles.label}>
-                    Select Services (at least 1)
-                    <div className={styles.checkboxGroup}>
-                      {servicesList.map((service) => (
-                        <div key={service}>
-                          <input type="checkbox" value={service} checked={(formData.services || []).includes(service)} onChange={handleChange} name="services" />
-                          <span>{service}</span>
-                        </div>
-                      ))}
+                  </div>
+                )}
+                {activeStep === 3 && (
+                  <div className={styles.stepContent}>
+                    <h2>Media</h2>
+                    <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>+ Create Post</button>
+                    <div className={styles.viewButtonsContainer}>
+                      <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>View Posts</button>
+                      <button type="button" onClick={() => setShowExclusiveModal(true)} className={styles.viewExclusiveButton}>View Exclusive</button>
                     </div>
-                  </label>
-                </div>
-              )}
-
-              {activeStep === 3 && (
-                <div className={styles.stepContent}>
-                  <h2>Media</h2>
-                  <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>+ Create Post</button>
-
-                  <div className={styles.viewButtonsContainer}>
-                    <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>View Posts</button>
-                    <button type="button" onClick={() => setShowExclusiveModal(true)} className={styles.viewExclusiveButton}>View Exclusive</button>
+                    <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
                   </div>
-
-                  <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
-                </div>
-              )}
-
-              {activeStep === 4 && (
-                <div className={styles.stepContent}>
-                  <h2>Membership & Wallets</h2>
-                  <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
-                  <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
-                    {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
-                  </button>
-                </div>
-              )}
-
-              <div className={styles.stepButtons}>
-                {activeStep > 0 && <button type="button" onClick={handlePrevStep} className={styles.button}>Previous</button>}
-                {activeStep < steps.length - 1 ? <button type="button" onClick={handleNextStep} className={styles.button}>Next</button> : <button type="submit" className={styles.button} disabled={saveLoading}>{saveLoading ? 'Saving...' : 'Save Profile'}</button>}
-              </div>
-            </form>
-
-            {/* ---------- Modals & Overlays ---------- */}
-
-            {showModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Select Duration for {selectedLevel}</h3>
-                  <div className={styles.durationList}>
-                    {Object.entries(plans[selectedLevel] || {}).map(([duration, price]) => (
-                      <div key={duration} className={styles.durationItem}>
-                        <label className={styles.durationLabel}>
-                          <input type="radio" name="duration" value={duration} checked={selectedDuration === duration} onChange={() => handleDurationSelect(duration)} />
-                          <span>{duration} = KSh {price}</span>
-                        </label>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={handleProceedToPayment} disabled={!selectedDuration} className={styles.upgradeButton}>Proceed</button>
-                  <button onClick={() => setShowModal(false)} className={styles.closeButton}>Close</button>
-                </div>
-              </div>
-            )}
-
-            {showPaymentChoice && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Payment for {selectedLevel} - {selectedDuration}</h3>
-                  <p>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
-                  <div>
-                    <label><input type="radio" name="paymentMethod" value="wallet" checked={selectedPaymentMethod === 'wallet'} onChange={() => handlePaymentMethodChange('wallet')} /> Wallet (KSh {fundingBalance})</label>
-                    <label><input type="radio" name="paymentMethod" value="mpesa" checked={selectedPaymentMethod === 'mpesa'} onChange={() => handlePaymentMethodChange('mpesa')} /> M-Pesa</label>
-                  </div>
-
-                  {selectedPaymentMethod === 'mpesa' && (
-                    <StkPushForm
-                      initialPhone={mpesaPhone}
-                      initialAmount={plans[selectedLevel][selectedDuration]}
-                      readOnlyAmount={true}
-                      apiEndpoint="/api/stkpush"
-                      additionalBody={{
-                        userId: loggedInUser.id,
-                        type: 'upgrade',
-                        level: selectedLevel,
-                        duration: selectedDuration,
-                        accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
-                        transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
-                      }}
-                    />
-                  )}
-
-                  {selectedPaymentMethod === 'wallet' && <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton}>Confirm</button>}
-                  <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton}>Close</button>
-                </div>
-              </div>
-            )}
-
-            {showAddFundModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Add Funds</h3>
-                  <p>Phone: {formData.phone}</p>
-                  <StkPushForm initialPhone={mpesaPhone} apiEndpoint="/api/stkpush" additionalBody={{ userId: loggedInUser.id, type: 'addfund', accountReference: `wal_${shortenUserId(loggedInUser.id)}`, transactionDesc: 'Add funds' }} />
-                  <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>Close</button>
-                </div>
-              </div>
-            )}
-
-            {showWithdrawModal && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Withdraw</h3>
-                  <p>Available: KSh {earningsBalance}</p>
-                  <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} min="1" max={earningsBalance} className={styles.input} />
-                  <button onClick={handleWithdraw} className={styles.withdrawButton}>{withdrawLoading ? 'Processing...' : 'Withdraw'}</button>
-                  <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton}>Cancel</button>
-                </div>
-              </div>
-            )}
-
-            {showEarningsHistory && (
-              <div className={styles.modal}>
-                <div className={styles.modalContent}>
-                  <h3>Purchase History</h3>
-                  {transactions.length === 0 ? <p>No subscriptions.</p> : (
-                    <table className={styles.historyTable}>
-                      <thead><tr><th>User</th><th>Amount</th><th>Duration</th><th>Date</th><th>Expires</th></tr></thead>
-                      <tbody>{transactions.map((tx) => <tr key={tx.id}><td>{tx.userName}</td><td>{tx.amount}</td><td>{tx.duration}</td><td>{tx.date}</td><td>{tx.expiresAt}</td></tr>)}</tbody>
-                    </table>
-                  )}
-                  <button onClick={() => setShowEarningsHistory(false)} className={styles.closeButton}>Close</button>
-                </div>
-              </div>
-            )}
-
-            {/* Create Post Modal - overlay stopsPropagation on inner content */}
-            {showCreatePostModal && (
-              <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
-                <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => setShowCreatePostModal(false)} className={styles.modalBack}>←</button>
-                  <h2>Create Post</h2>
-                  <p className={styles.tip}>Add photos/videos. Exclusive for subscribers only.</p>
-
-                  <button onClick={() => fileInputRef.current.click()} className={styles.button}>Select Photos/Videos</button>
-                  <input type="file" accept="image/*,video/*" multiple onChange={handlePostFileSelect} className={styles.hiddenFileInput} ref={fileInputRef} />
-
-                  <div className={styles.postPreviewGrid}>
-                    {postPreviews.length === 0 && <p>No files selected</p>}
-                    {postPreviews.map((preview, i) => (
-                      <div key={i} className={styles.postPreviewItem}>
-                        {postFiles[i] && isVideo(postFiles[i]) ? (
-                          <video src={preview} className={styles.postPreviewImg} controls muted />
-                        ) : (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={preview} alt={`preview-${i}`} className={styles.postPreviewImg} />
-                        )}
-                        <button onClick={() => handleRemovePostPreview(i)} className={styles.removePreview}>×</button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <textarea value={postCaption} onChange={(e) => setPostCaption(e.target.value.slice(0, 500))} placeholder="Caption..." rows={4} />
-                  <div>{postCaption.length}/500</div>
-
-                  <label>
-                    Exclusive?
-                    <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
-                  </label>
-
-                  <div style={{ marginTop: 12 }}>
-                    <button onClick={handleCreatePost} disabled={postFiles.length === 0 || postUploading} className={styles.button}>
-                      {postUploading ? 'Posting...' : 'Post'}
+                )}
+                {activeStep === 4 && (
+                  <div className={styles.stepContent}>
+                    <h2>Membership & Wallets</h2>
+                    <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
+                    <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
+                      {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
                     </button>
-                    <button onClick={() => { postPreviews.forEach((u) => URL.revokeObjectURL(u)); setPostPreviews([]); setPostFiles([]); setShowCreatePostModal(false); }} className={styles.closeButton}>Cancel</button>
                   </div>
+                )}
+                <div className={styles.stepButtons}>
+                  {activeStep > 0 && <button type="button" onClick={handlePrevStep} className={styles.button}>Previous</button>}
+                  {activeStep < steps.length - 1 && <button type="button" onClick={handleNextStep} className={styles.button}>Next</button>}
+                  <button type="submit" className={styles.button} disabled={saveLoading}>{saveLoading ? 'Saving...' : 'Save Profile'}</button>
                 </div>
-              </div>
-            )}
-
-            {/* Posts Modal */}
-            {showPostsModal && (
-              <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
-                <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => setShowPostsModal(false)} className={styles.modalBack}>←</button>
-                  <h2>Posts</h2>
-                  <div className={styles.gallery}>
-                    {(formData.normalPics || []).map((url, index) => (
-                      <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.normalPics, index)}>
-                        {isVideo(url) ? (
-                          // show a thumbnail if possible; fallback to a video element
-                          <video src={url} className={styles.galleryMedia} />
-                        ) : (
-                          <Image src={getThumbnail(url)} alt="" width={100} height={100} className={styles.galleryPic} />
-                        )}
-                        <button onClick={(e) => { e.stopPropagation(); handleRemoveNormalPic(index); }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Exclusive Modal */}
-            {showExclusiveModal && (
-              <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
-                <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => setShowExclusiveModal(false)} className={styles.modalBack}>←</button>
-                  <h2>Exclusive Content</h2>
-                  <div className={styles.gallery}>
-                    {(formData.exclusivePics || []).map((url, index) => (
-                      <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.exclusivePics, index)}>
-                        {isVideo(url) ? <video src={url} className={styles.galleryMedia} /> : <Image src={getThumbnail(url)} alt="" width={100} height={100} className={styles.galleryPic} />}
-                        <button onClick={(e) => { e.stopPropagation(); handleRemoveExclusivePic(index); }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Media viewer */}
-            {showMediaViewer && (
-              <div className={styles.viewerOverlay} onClick={() => setShowMediaViewer(false)}>
-                <div className={styles.viewerContent} onClick={(e) => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd} style={{ position: 'relative' }}>
-                  {selectedGallery && selectedGallery[selectedIndex] ? (
-                    isVideo(selectedGallery[selectedIndex]) ? (
-                      <video src={selectedGallery[selectedIndex]} className={styles.viewerMedia} controls autoPlay />
-                    ) : (
-                      <Image src={selectedGallery[selectedIndex]} alt="media-view" fill className={styles.viewerMedia} />
-                    )
-                  ) : (
-                    <div>Nothing to show</div>
-                  )}
-                  <button className={styles.viewerClose} onClick={() => setShowMediaViewer(false)}>×</button>
-                </div>
-
-                {/* arrows */}
-                <button className={styles.navLeft} onClick={(e) => { e.stopPropagation(); setSelectedIndex((p) => (p > 0 ? p - 1 : selectedGallery.length - 1)); }}>‹</button>
-                <button className={styles.navRight} onClick={(e) => { e.stopPropagation(); setSelectedIndex((p) => (p < selectedGallery.length - 1 ? p + 1 : 0)); }}>›</button>
-              </div>
-            )}
-
-            {showInappropriateBanner && (
-              <div className={styles.inappropriateBanner}>
-                <p>Inappropriate content detected. Use exclusive or change image.</p>
-                <button onClick={() => setShowInappropriateBanner(false)}>Dismiss</button>
-              </div>
-            )}
-          </div>
+              </form>
+            </div>
+          )}
         </div>
+        {/* ---------- Modals & Overlays ---------- */}
+        {showModal && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Upgrade to {selectedLevel}</h3>
+              <div className={styles.durationOptions}>
+                {Object.keys(plans[selectedLevel] || {}).map((d) => (
+                  <button key={d} onClick={() => handleDurationSelect(d)} className={selectedDuration === d ? styles.selectedDuration : ''}>
+                    {d} - KSh {plans[selectedLevel][d]}
+                  </button>
+                ))}
+              </div>
+              <button onClick={handleProceedToPayment} disabled={!selectedDuration} className={styles.upgradeButton}>Proceed</button>
+              <button onClick={() => setShowModal(false)} className={styles.closeButton}>Close</button>
+            </div>
+          </div>
+        )}
+        {showPaymentChoice && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Payment for {selectedLevel} - {selectedDuration}</h3>
+              <p>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
+              <div>
+                <label><input type="radio" name="paymentMethod" value="wallet" checked={selectedPaymentMethod === 'wallet'} onChange={() => handlePaymentMethodChange('wallet')} /> Wallet (KSh {fundingBalance})</label>
+                <label><input type="radio" name="paymentMethod" value="mpesa" checked={selectedPaymentMethod === 'mpesa'} onChange={() => handlePaymentMethodChange('mpesa')} /> M-Pesa</label>
+              </div>
+              {selectedPaymentMethod === 'mpesa' && (
+                <StkPushForm
+                  initialPhone={mpesaPhone}
+                  initialAmount={plans[selectedLevel][selectedDuration]}
+                  readOnlyAmount={true}
+                  apiEndpoint="/api/stkpush"
+                  additionalBody={{
+                    userId: loggedInUser.id,
+                    type: 'upgrade',
+                    level: selectedLevel,
+                    duration: selectedDuration,
+                    accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
+                    transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
+                  }}
+                />
+              )}
+              {selectedPaymentMethod === 'wallet' && <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton}>Confirm</button>}
+              <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton}>Close</button>
+            </div>
+          </div>
+        )}
+        {showAddFundModal && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Add Funds</h3>
+              <p>Phone: {formData.phone}</p>
+              <StkPushForm initialPhone={mpesaPhone} apiEndpoint="/api/stkpush" additionalBody={{ userId: loggedInUser.id, type: 'addfund', accountReference: `wal_${shortenUserId(loggedInUser.id)}`, transactionDesc: 'Add funds' }} />
+              <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>Close</button>
+            </div>
+          </div>
+        )}
+        {showWithdrawModal && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Withdraw</h3>
+              <p>Available: KSh {earningsBalance}</p>
+              <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} min="1" max={earningsBalance} className={styles.input} />
+              <button onClick={handleWithdraw} className={styles.withdrawButton}>{withdrawLoading ? 'Processing...' : 'Withdraw'}</button>
+              <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {showEarningsHistory && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Purchase History</h3>
+              {transactions.length === 0 ? <p>No subscriptions.</p> : (
+                <table className={styles.historyTable}>
+                  <thead><tr><th>User</th><th>Amount</th><th>Duration</th><th>Date</th><th>Expires</th></tr></thead>
+                  <tbody>{transactions.map((tx) => <tr key={tx.id}><td>{tx.userName}</td><td>{tx.amount}</td><td>{tx.duration}</td><td>{tx.date}</td><td>{tx.expiresAt}</td></tr>)}</tbody>
+                </table>
+              )}
+              <button onClick={() => setShowEarningsHistory(false)} className={styles.closeButton}>Close</button>
+            </div>
+          </div>
+        )}
+        {showMySubscriptions && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>My Exclusive Subscriptions</h3>
+              {mySubscriptions.length === 0 ? <p>No active subscriptions.</p> : (
+                <div className={styles.subscriptionList}>
+                  {mySubscriptions.map((sub) => (
+                    <div key={sub.id} className={styles.subscriptionItem} onClick={() => handleViewCreatorProfile(sub.creatorId)}>
+                      {sub.creatorPic ? (
+                        <Image src={sub.creatorPic} alt={sub.creatorName} width={50} height={50} className={styles.subProfilePic} />
+                      ) : (
+                        <div className={styles.subPlaceholderPic}>No Pic</div>
+                      )}
+                      <div className={styles.subDetails}>
+                        <h4>{sub.creatorName}</h4>
+                        <p>Amount: KSh {sub.amount}</p>
+                        <p>Duration: {sub.duration} days</p>
+                        <p>Subscribed on: {sub.date}</p>
+                        <p>Expires: {sub.expiresAt}</p>
+                        <p>Status: {sub.isActive ? 'Active' : 'Expired'}</p>
+                      </div>
+                      <button className={styles.viewButton}>View Profile & Exclusive Content</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={() => setShowMySubscriptions(false)} className={styles.closeButton}>Close</button>
+            </div>
+          </div>
+        )}
+        {/* New: Delete Profile Modal */}
+        {showDeleteModal && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Delete Profile?</h3>
+              <p>Please tell us why you&apos;re leaving:</p>
+              <div className={styles.checkboxGroup}>
+                {reasons.map((reason) => (
+                  <div key={reason}>
+                    <input
+                      type="checkbox"
+                      id={reason}
+                      checked={deleteReasons.includes(reason)}
+                      onChange={(e) => handleReasonChange(e, reason)}
+                    />
+                    <label htmlFor={reason}>{reason}</label>
+                    {reason === 'Other' && deleteReasons.includes('Other') && (
+                      <textarea
+                        value={otherReason}
+                        onChange={(e) => setOtherReason(e.target.value)}
+                        placeholder="Please specify"
+                        className={styles.input}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={handleDeleteProfile} className={styles.button}>Confirm Delete</button>
+              <button onClick={() => setShowDeleteModal(false)} className={styles.closeButton}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {/* Create Post Modal - overlay stopsPropagation on inner content */}
+        {showCreatePostModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
+            <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setShowCreatePostModal(false)} className={styles.modalBack}>←</button>
+              <h2>Create Post</h2>
+              <p className={styles.tip}>Add photos/videos. Exclusive for subscribers only.</p>
+              <button onClick={() => fileInputRef.current.click()} className={styles.button}>Select Photos/Videos</button>
+              <input type="file" accept="image/*,video/*" multiple onChange={handlePostFileSelect} className={styles.hiddenFileInput} ref={fileInputRef} />
+              <div className={styles.postPreviewGrid}>
+                {postPreviews.length === 0 && <p>No files selected</p>}
+                {postPreviews.map((preview, i) => (
+                  <div key={i} className={styles.postPreviewItem}>
+                    {postFiles[i] && isVideo(postFiles[i]) ? (
+                      <video src={preview} className={styles.postPreviewImg} controls muted />
+                    ) : (
+                      <Image src={preview} alt={`preview-${i}`} width={100} height={100} className={styles.postPreviewImg} />
+                    )}
+                    <button onClick={() => handleRemovePostPreview(i)} className={styles.removePreview}>×</button>
+                  </div>
+                ))}
+              </div>
+              <textarea value={postCaption} onChange={(e) => setPostCaption(e.target.value.slice(0, 500))} placeholder="Caption..." rows={4} />
+              <div>{postCaption.length}/500</div>
+              <label>
+                Exclusive?
+                <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
+              </label>
+              <div style={{ marginTop: 12 }}>
+                <button onClick={handleCreatePost} disabled={postFiles.length === 0 || postUploading} className={styles.button}>
+                  {postUploading ? 'Posting...' : 'Post'}
+                </button>
+                <button onClick={() => { postPreviews.forEach((u) => URL.revokeObjectURL(u)); setPostPreviews([]); setPostFiles([]); setShowCreatePostModal(false); }} className={styles.closeButton}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Posts Modal */}
+        {showPostsModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
+            <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setShowPostsModal(false)} className={styles.modalBack}>←</button>
+              <h2>Posts</h2>
+              <div className={styles.gallery}>
+                {(formData.normalPics || []).map((url, index) => (
+                  <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.normalPics, index)}>
+                    {isVideo(url) ? (
+                      // show a thumbnail if possible; fallback to a video element
+                      <video src={url} className={styles.galleryMedia} />
+                    ) : (
+                      <Image src={getThumbnail(url)} alt="" width={100} height={100} className={styles.galleryPic} />
+                    )}
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveNormalPic(index); }}>×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Exclusive Modal */}
+        {showExclusiveModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
+            <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setShowExclusiveModal(false)} className={styles.modalBack}>←</button>
+              <h2>Exclusive Content</h2>
+              <div className={styles.gallery}>
+                {(formData.exclusivePics || []).map((url, index) => (
+                  <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.exclusivePics, index)}>
+                    {isVideo(url) ? <video src={url} className={styles.galleryMedia} /> : <Image src={getThumbnail(url)} alt="" width={100} height={100} className={styles.galleryPic} />}
+                    <button onClick={(e) => { e.stopPropagation(); handleRemoveExclusivePic(index); }}>×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        {showInappropriateBanner && (
+          <div className={styles.inappropriateBanner}>
+            <p>Inappropriate content detected. Use exclusive or change image.</p>
+            <button onClick={() => setShowInappropriateBanner(false)}>Dismiss</button>
+          </div>
+        )}
       </main>
     </div>
   );
