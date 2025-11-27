@@ -66,14 +66,10 @@ export default async function handler(req, res) {
 
       // Moderate only public posts (non-exclusive)
       if (!isExclusive) {
-        let modEndpoint = '/api/moderateImage';
-        if (resource_type === 'video') {
-          modEndpoint = '/api/moderateVideo';  // Assume you have/add a video moderation endpoint
-        }
-        const modUrl = `${process.env.NEXT_PUBLIC_BASE_URL}${modEndpoint}`;
-        console.log(`Moderating at: ${modUrl}`);  // Debug log
+        let modEndpoint = resource_type === 'video' ? 'moderateVideo' : 'moderateImage';
+        console.log(`Moderating at: /api/${modEndpoint}`);  // Debug log (relative)
 
-        const modRes = await fetch(modUrl, {
+        const modRes = await fetch(`/api/${modEndpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ [resource_type === 'image' ? 'imageUrl' : 'videoUrl']: finalUrl }),
