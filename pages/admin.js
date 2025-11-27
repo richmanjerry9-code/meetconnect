@@ -13,6 +13,7 @@ import {
   query,
   where,
   updateDoc,
+  orderBy,
 } from 'firebase/firestore';
 
 // Add servicesList definition
@@ -30,6 +31,7 @@ export default function AdminPanel() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [users, setUsers] = useState([]);
+  const [transactions, setTransactions] = useState([]); // New: Transactions state
   const [refresh, setRefresh] = useState(false);
   const [form, setForm] = useState({
     username: '',
@@ -37,7 +39,8 @@ export default function AdminPanel() {
     phone: '',
     role: 'User',
     membership: 'Regular',
-    active: true, // ✅ New: Active status
+    active: true,
+    subscriptionEndDate: '', // New: Subscription end date (ISO string)
     name: '',
     gender: 'Female',
     sexualOrientation: 'Straight',
@@ -63,32 +66,69 @@ export default function AdminPanel() {
   const [allVisits, setAllVisits] = useState([]);
   // New states for activity viewer
   const [activityLogs, setActivityLogs] = useState([]);
-  const [activityFilter, setActivityFilter] = useState('all'); // Filter by action type: all, create, update, delete, etc.
+  const [activityFilter, setActivityFilter] = useState('all'); // Filter by action type
   const [activitySearch, setActivitySearch] = useState(''); // Search term
+  // New: User search and filter
+  const [userSearch, setUserSearch] = useState('');
+  const [userFilter, setUserFilter] = useState('all'); // all, active, inactive, expiring
+  // New: Dashboard metrics
+  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [activeSubscriptions, setActiveSubscriptions] = useState(0);
+  const [expiringSoon, setExpiringSoon] = useState(0);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      const q = query(collection(db, 'profiles'));
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((docSnap) => ({
+    const fetchData = async () => {
+      // Fetch users
+      const usersQuery = query(collection(db, 'profiles'), orderBy('createdAt', 'desc'));
+      const usersSnapshot = await getDocs(usersQuery);
+      const userData = usersSnapshot.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
       }));
-      setUsers(data);
-    };
-    fetchUsers();
+      setUsers(userData);
 
-    // New: Fetch activity logs
-    const fetchActivityLogs = async () => {
-      const q = query(collection(db, 'activityLogs'), where('timestamp', '>=', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))); // Last 30 days
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((docSnap) => ({
+      // Fetch transactions
+      const transactionsQuery = query(collection(db, 'transactions'), orderBy('date', 'desc'));
+      const transactionsSnapshot = await getDocs(transactionsQuery);
+      const transactionData = transactionsSnapshot.docs.map((docSnap) => ({
         id: docSnap.id,
         ...docSnap.data(),
-      })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Desc order
-      setActivityLogs(data);
+      }));
+      setTransactions(transactionData);
+
+      // Fetch activity logs (last 30 days)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const logsQuery = query(
+        collection(db, 'activityLogs'),
+        where('timestamp', '>=', thirtyDaysAgo),
+        orderBy('timestamp', 'desc')
+      );
+      const logsSnapshot = await getDocs(logsQuery);
+      const logData = logsSnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      setActivityLogs(logData);
+
+      // Calculate metrics
+      const revenue = transactionData.reduce((sum, tx) => sum + (tx.amount || 0), 0);
+      setTotalRevenue(revenue);
+
+      const now = new Date();
+      const activeSubs = userData.filter((u) =>
+        u.subscriptionEndDate && new Date(u.subscriptionEndDate) > now
+      ).length;
+      setActiveSubscriptions(activeSubs);
+
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const expiring = userData.filter((u) =>
+        u.subscriptionEndDate &&
+        new Date(u.subscriptionEndDate) > now &&
+        new Date(u.subscriptionEndDate) < sevenDaysFromNow
+      ).length;
+      setExpiringSoon(expiring);
     };
-    fetchActivityLogs();
+    fetchData();
 
     const storedVisits = JSON.parse(localStorage.getItem('visits') || '[]');
     const newVisit = { timestamp: new Date().toISOString() };
@@ -101,22 +141,25 @@ export default function AdminPanel() {
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, [refresh]);
 
-  // New: Function to log activity (call this in existing functions for enhancement)
+  // New: Function to log activity
   const logActivity = async (action, details = {}) => {
     try {
       await addDoc(collection(db, 'activityLogs'), {
         action,
-        details: { ...details, admin: true }, // Mark as admin action
-        timestamp: new Date(),
-        siteId: 'main-site', // Assume single site; extend for multi
-      });
-      // Optimistically update UI
-      setActivityLogs(prev => [{
-        id: Date.now().toString(),
-        action,
         details: { ...details, admin: true },
         timestamp: new Date(),
-      }, ...prev]);
+        siteId: 'main-site',
+      });
+      // Optimistically update UI
+      setActivityLogs((prev) => [
+        {
+          id: Date.now().toString(),
+          action,
+          details: { ...details, admin: true },
+          timestamp: new Date(),
+        },
+        ...prev,
+      ]);
     } catch (error) {
       console.error('Failed to log activity:', error);
     }
@@ -185,10 +228,15 @@ export default function AdminPanel() {
     }
 
     try {
+      const profileData = {
+        ...form,
+        subscriptionEndDate: form.subscriptionEndDate || null, // New: Handle subscription end
+      };
+
       if (isEdit) {
-        await updateDoc(doc(db, 'profiles', editId), form);
+        await updateDoc(doc(db, 'profiles', editId), profileData);
         alert('✅ Profile updated!');
-        setUsers((prev) => prev.map((u) => (u.id === editId ? { ...form, id: editId } : u)));
+        setUsers((prev) => prev.map((u) => (u.id === editId ? { ...profileData, id: editId } : u)));
         logActivity('profile_update', { userId: editId, username: form.username });
       } else {
         const q = query(collection(db, 'profiles'), where('username', '==', form.username));
@@ -201,24 +249,16 @@ export default function AdminPanel() {
         const fakeEmail = form.email || `${form.username.toLowerCase()}@meetconnect.fake`;
         const fakePassword = Math.random().toString(36).slice(-8);
 
-        const profileData = {
-          ...form,
-          active: form.active, // ✅ Include active status
+        const newProfileData = {
+          ...profileData,
           email: fakeEmail,
           password: fakePassword,
           createdAt: Date.now(),
-          county: form.county || '',
-          ward: form.ward || '',
-          area: form.area || '',
-          nearby: form.nearby || [],
-          services: form.services || [],
-          otherServices: form.otherServices || '',
-          profilePic: form.profilePic || '',
         };
 
-        const docRef = await addDoc(collection(db, 'profiles'), profileData);
+        const docRef = await addDoc(collection(db, 'profiles'), newProfileData);
         alert(`✅ Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`);
-        setUsers((prev) => [...prev, { id: docRef.id, ...profileData }]);
+        setUsers((prev) => [...prev, { id: docRef.id, ...newProfileData }]);
         logActivity('profile_create', { userId: docRef.id, username: form.username });
       }
 
@@ -228,7 +268,8 @@ export default function AdminPanel() {
         phone: '',
         role: 'User',
         membership: 'Regular',
-        active: true, // ✅ Reset to active
+        active: true,
+        subscriptionEndDate: '',
         name: '',
         gender: 'Female',
         sexualOrientation: 'Straight',
@@ -252,7 +293,6 @@ export default function AdminPanel() {
     }
   };
 
-  // ✅ New: Handle toggle active/inactive
   const handleToggleActive = async (userId) => {
     const user = users.find((u) => u.id === userId);
     if (!user) return alert('User not found.');
@@ -276,20 +316,15 @@ export default function AdminPanel() {
     const userToDelete = users.find((u) => u.id === userId);
     if (!userToDelete) return alert('User not found.');
     if (userToDelete.role === 'Admin') return alert('Cannot delete admin account!');
-    if (!confirm('Delete this profile??')) return;
+    if (!confirm('Delete this profile?')) return;
 
     try {
       await deleteDoc(doc(db, 'profiles', userId));
-      setDeletedUsers((prev) => [...prev, userToDelete]); // Store deleted user
-      const q = query(collection(db, 'profiles'));
-      const querySnapshot = await getDocs(q);
-      const updatedUsers = querySnapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      }));
-      setUsers(updatedUsers);
+      setDeletedUsers((prev) => [...prev, userToDelete]);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
       alert('✅ Profile deleted successfully!');
       logActivity('profile_delete', { userId, username: userToDelete.username });
+      setRefresh(!refresh);
     } catch (error) {
       console.error('Error deleting profile:', error);
       alert('Failed to delete profile.');
@@ -319,7 +354,7 @@ export default function AdminPanel() {
     try {
       const promises = users.map((u) => deleteDoc(doc(db, 'profiles', u.id)));
       await Promise.all(promises);
-      setDeletedUsers((prev) => [...prev, ...users]); // Store all deleted users
+      setDeletedUsers((prev) => [...prev, ...users]);
       setUsers([]);
       alert('✅ All accounts deleted!');
       logActivity('bulk_delete_all', { count: users.length });
@@ -337,7 +372,7 @@ export default function AdminPanel() {
         addDoc(collection(db, 'profiles'), { ...user, id: undefined })
       );
       await Promise.all(promises);
-      setDeletedUsers([]); // Clear deleted users after restoration
+      setDeletedUsers([]);
       setRefresh(!refresh);
       alert('✅ All deleted accounts restored!');
       logActivity('bulk_restore_all', { count: deletedUsers.length });
@@ -355,7 +390,7 @@ export default function AdminPanel() {
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...previousData, id: userId } : u))
         );
-        setLastEdit(null); // Clear last edit after revert
+        setLastEdit(null);
         alert('✅ Last edit reverted successfully!');
         logActivity('revert_edit', { userId });
         setRefresh(!refresh);
@@ -371,20 +406,40 @@ export default function AdminPanel() {
       ...user,
       services: user.services || [],
       nearby: user.nearby || [],
-      active: user.active || true, // ✅ Include active
+      active: user.active || true,
+      subscriptionEndDate: user.subscriptionEndDate || '',
     });
     setSelectedWard(user.ward || '');
     setIsEdit(true);
     setEditId(user.id);
     setShowPassword(false);
-    setLastEdit({ userId: user.id, previousData: { ...user } }); // Store original data
+    setLastEdit({ userId: user.id, previousData: { ...user } });
     logActivity('start_edit', { userId: user.id });
   };
 
-  // New: Filtered logs for display
-  const filteredLogs = activityLogs.filter(log => {
+  // Filtered users
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch = JSON.stringify(u).toLowerCase().includes(userSearch.toLowerCase());
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    if (userFilter === 'active') return u.active && matchesSearch;
+    if (userFilter === 'inactive') return !u.active && matchesSearch;
+    if (userFilter === 'expiring') {
+      return (
+        matchesSearch &&
+        u.subscriptionEndDate &&
+        new Date(u.subscriptionEndDate) > now &&
+        new Date(u.subscriptionEndDate) < sevenDaysFromNow
+      );
+    }
+    return matchesSearch;
+  });
+
+  // Filtered logs
+  const filteredLogs = activityLogs.filter((log) => {
     if (activityFilter !== 'all' && log.action !== activityFilter) return false;
-    if (activitySearch && !JSON.stringify(log).toLowerCase().includes(activitySearch.toLowerCase())) return false;
+    if (activitySearch && !JSON.stringify(log).toLowerCase().includes(activitySearch.toLowerCase()))
+      return false;
     return true;
   });
 
@@ -392,36 +447,42 @@ export default function AdminPanel() {
     return (
       <div
         style={{
-          padding: '10px',
-          fontFamily: 'Arial',
-          background: '#f0f0f0',
-          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          background: '#f5f5f5',
+          fontFamily: "'Roboto', sans-serif",
         }}
       >
         <Head>
           <title>Admin Login</title>
         </Head>
-        <h1 style={{ color: '#e91e63' }}>Admin Login</h1>
+        <h1 style={{ color: '#333', marginBottom: '20px' }}>Admin Login</h1>
         <input
           type="password"
           value={passwordInput}
           onChange={(e) => setPasswordInput(e.target.value)}
           style={{
-            padding: '8px',
-            margin: '5px 0',
-            width: '200px',
-            fontSize: '0.9rem',
+            padding: '12px',
+            width: '300px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            marginBottom: '10px',
+            fontSize: '1rem',
           }}
         />
-        <br />
         <button
           onClick={handleLogin}
           style={{
-            padding: '8px 16px',
+            padding: '12px 24px',
             background: '#4CAF50',
             color: 'white',
             border: 'none',
-            fontSize: '0.9rem',
+            borderRadius: '4px',
+            fontSize: '1rem',
+            cursor: 'pointer',
           }}
         >
           Login
@@ -436,50 +497,48 @@ export default function AdminPanel() {
 
   return (
     <div
-      style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0', position: 'relative' }}
+      style={{
+        padding: '20px',
+        fontFamily: "'Roboto', sans-serif",
+        background: '#f5f5f5',
+        minHeight: '100vh',
+        position: 'relative',
+      }}
     >
       <Head>
         <title>Admin Panel</title>
       </Head>
 
-      <h1 style={{ textAlign: 'center', color: '#e91e63' }}>Admin Panel</h1>
-
-      <button
-        onClick={handleLogout}
-        style={{
-          padding: '8px 16px',
-          background: '#f44336',
-          color: 'white',
-          border: 'none',
-          fontSize: '0.9rem',
-          marginBottom: '10px',
-        }}
-      >
-        Logout
-      </button>
-
-      {/* New: Current Viewers Display */}
-      <div style={{ textAlign: 'center', marginBottom: '10px', background: '#fff', padding: '10px' }}>
-        <h3>Live Metrics</h3>
-        <p>Current Viewers: {currentViewers}</p>
-        <p>Total Visits Today: {allVisits.filter(v => new Date(v.timestamp).toDateString() === new Date().toDateString()).length}</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <h1 style={{ color: '#333' }}>Admin Panel</h1>
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: '10px 20px',
+            background: '#f44336',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '1rem',
+            cursor: 'pointer',
+          }}
+        >
+          Logout
+        </button>
       </div>
 
-      {/* Global 3-dot menu at top right */}
+      {/* Global 3-dot menu */}
       <button
         onClick={() => setGlobalMenuOpen(!globalMenuOpen)}
         style={{
           position: 'absolute',
           top: '20px',
           right: '20px',
-          background: '#666',
-          color: 'white',
+          background: 'transparent',
+          color: '#333',
           border: 'none',
-          padding: '8px',
-          borderRadius: '50%',
+          fontSize: '24px',
           cursor: 'pointer',
-          fontSize: '18px',
-          zIndex: 100,
         }}
       >
         ⋮
@@ -490,11 +549,11 @@ export default function AdminPanel() {
             position: 'absolute',
             top: '60px',
             right: '20px',
-            background: '#fff',
-            border: '1px solid #ccc',
+            background: 'white',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
             padding: '10px',
-            borderRadius: '5px',
-            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
             zIndex: 100,
           }}
         >
@@ -503,12 +562,11 @@ export default function AdminPanel() {
             style={{
               display: 'block',
               width: '100%',
-              padding: '8px',
-              background: '#f44336',
-              color: 'white',
+              padding: '10px',
+              background: 'transparent',
+              color: '#f44336',
               border: 'none',
-              borderRadius: '3px',
-              marginBottom: '5px',
+              textAlign: 'left',
               cursor: 'pointer',
             }}
           >
@@ -519,390 +577,485 @@ export default function AdminPanel() {
             style={{
               display: 'block',
               width: '100%',
-              padding: '8px',
-              background: '#4CAF50',
-              color: 'white',
+              padding: '10px',
+              background: 'transparent',
+              color: '#4CAF50',
               border: 'none',
-              borderRadius: '3px',
+              textAlign: 'left',
               cursor: 'pointer',
             }}
           >
-            Restore All Deleted Accounts
+            Restore All Deleted
+          </button>
+          <button
+            onClick={handleRevertLastEdit}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '10px',
+              background: 'transparent',
+              color: '#ff9800',
+              border: 'none',
+              textAlign: 'left',
+              cursor: 'pointer',
+            }}
+          >
+            Revert Last Action
           </button>
         </div>
       )}
 
-      <div style={{ background: '#fff', padding: '10px', marginBottom: '10px' }}>
-        <h2 style={{ color: '#e91e63' }}>Create Profile</h2>
-        <input
-          name="username"
-          placeholder="Username"
-          value={form.username}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <input
-          name="email"
-          placeholder="Email (optional)"
-          value={form.email}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        {isEdit && (
-          <div
-            style={{
-              padding: '8px',
-              background: 'lightgray',
-              marginBottom: '5px',
-              display: 'flex',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ marginRight: '10px' }}>Password: </span>
-            <span style={{ flex: 1 }}>{showPassword ? form.password || 'N/A' : '********'}</span>
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: '16px',
-                marginLeft: '10px',
-              }}
-            >
-              {showPassword ? '🙈' : '👁️'}
-            </button>
-          </div>
-        )}
-        <input
-          name="phone"
-          placeholder="Phone"
-          value={form.phone}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <select
-          name="role"
-          value={form.role}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        >
-          <option>User</option>
-          <option>Admin</option>
-        </select>
-        <select
-          name="membership"
-          value={form.membership}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        >
-          <option>Regular</option>
-          <option>Prime</option>
-          <option>VIP</option>
-          <option>VVIP</option>
-        </select>
-        {/* ✅ New: Active toggle in form */}
-        <label style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
-          Active Account:
+      {/* Dashboard Metrics */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '20px',
+          marginBottom: '30px',
+        }}
+      >
+        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginBottom: '10px', color: '#666' }}>Total Users</h3>
+          <p style={{ fontSize: '2rem', color: '#333' }}>{users.length}</p>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginBottom: '10px', color: '#666' }}>Active Subscriptions</h3>
+          <p style={{ fontSize: '2rem', color: '#333' }}>{activeSubscriptions}</p>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginBottom: '10px', color: '#666' }}>Expiring Soon (7 days)</h3>
+          <p style={{ fontSize: '2rem', color: '#333' }}>{expiringSoon}</p>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginBottom: '10px', color: '#666' }}>Total Revenue</h3>
+          <p style={{ fontSize: '2rem', color: '#333' }}>${totalRevenue.toFixed(2)}</p>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginBottom: '10px', color: '#666' }}>Current Viewers</h3>
+          <p style={{ fontSize: '2rem', color: '#333' }}>{currentViewers}</p>
+        </div>
+        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+          <h3 style={{ marginBottom: '10px', color: '#666' }}>Visits Today</h3>
+          <p style={{ fontSize: '2rem', color: '#333' }}>
+            {allVisits.filter((v) => new Date(v.timestamp).toDateString() === new Date().toDateString()).length}
+          </p>
+        </div>
+      </div>
+
+      {/* Create/Edit Profile Form */}
+      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ color: '#333', marginBottom: '20px' }}>{isEdit ? 'Edit Profile' : 'Create Profile'}</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
           <input
-            type="checkbox"
-            name="active"
-            checked={form.active}
+            name="username"
+            placeholder="Username"
+            value={form.username}
             onChange={handleChange}
-            style={{ marginLeft: '10px' }}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
           />
-        </label>
-        <input
-          name="name"
-          placeholder="Full Name"
-          value={form.name}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <select
-          name="gender"
-          value={form.gender}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        >
-          <option value="Female">Female</option>
-          <option value="Male">Male</option>
-        </select>
-        <select
-          name="sexualOrientation"
-          value={form.sexualOrientation}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        >
-          <option value="Straight">Straight</option>
-          <option value="Gay">Gay</option>
-          <option value="Bisexual">Bisexual</option>
-          <option value="Other">Other</option>
-        </select>
-        <input
-          type="number"
-          name="age"
-          min="18"
-          max="100"
-          placeholder="Age"
-          value={form.age}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <input
-          name="nationality"
-          placeholder="Nationality (optional)"
-          value={form.nationality}
-          onChange={handleChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        <select
-          name="county"
-          value={form.county}
-          onChange={handleCountyChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        >
-          <option value="">Select County</option>
-          {counties.map((county) => (
-            <option key={county} value={county}>
-              {county}
-            </option>
-          ))}
-        </select>
-        <select
-          name="ward"
-          value={form.ward}
-          onChange={handleWardChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-          disabled={!form.county}
-        >
-          <option value="">Select City/Town</option>
-          {wards.map((ward) => (
-            <option key={ward} value={ward}>
-              {ward}
-            </option>
-          ))}
-        </select>
-        <select
-          name="area"
-          value={form.area}
-          onChange={handleAreaChange}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-          disabled={!selectedWard}
-        >
-          <option value="">Select Area</option>
-          {areas.map((area) => (
-            <option key={area} value={area}>
-              {area}
-            </option>
-          ))}
-        </select>
-        <div>
-          <label>Nearby Places:</label>
-          {areas.map((place) => (
-            <div key={place}>
-              <input
-                type="checkbox"
-                name="nearby"
-                value={place}
-                checked={(form.nearby || []).includes(place)}
-                onChange={handleChange}
-              />
-              <span>{place}</span>
-            </div>
-          ))}
-        </div>
-        <div>
-          <label>Services:</label>
-          {servicesList.map((service) => (
-            <div key={service}>
-              <input
-                type="checkbox"
-                name="services"
-                value={service}
-                checked={(form.services || []).includes(service)}
-                onChange={handleChange}
-              />
-              <span>{service}</span>
-            </div>
-          ))}
-        </div>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleProfilePic}
-          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
-        />
-        {form.profilePic && (
-          <Image
-            src={form.profilePic}
-            alt="Current Profile Picture"
-            width={150}
-            height={150}
-            style={{
-              objectFit: 'cover',
-              marginTop: '10px',
-              borderRadius: '8px',
-            }}
+          <input
+            name="email"
+            placeholder="Email (optional)"
+            value={form.email}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
           />
-        )}
+          {isEdit && (
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: '4px', padding: '12px' }}>
+              <span style={{ flex: 1 }}>Password: {showPassword ? form.password || 'N/A' : '********'}</span>
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}
+              >
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
+          )}
+          <input
+            name="phone"
+            placeholder="Phone"
+            value={form.phone}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <select
+            name="role"
+            value={form.role}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>User</option>
+            <option>Admin</option>
+          </select>
+          <select
+            name="membership"
+            value={form.membership}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>Regular</option>
+            <option>Prime</option>
+            <option>VIP</option>
+            <option>VVIP</option>
+          </select>
+          <label style={{ display: 'flex', alignItems: 'center' }}>
+            Active:
+            <input
+              type="checkbox"
+              name="active"
+              checked={form.active}
+              onChange={handleChange}
+              style={{ marginLeft: '10px' }}
+            />
+          </label>
+          {/* New: Subscription End Date */}
+          <input
+            type="date"
+            name="subscriptionEndDate"
+            value={form.subscriptionEndDate ? new Date(form.subscriptionEndDate).toISOString().split('T')[0] : ''}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <input
+            name="name"
+            placeholder="Full Name"
+            value={form.name}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <select
+            name="gender"
+            value={form.gender}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>Female</option>
+            <option>Male</option>
+          </select>
+          <select
+            name="sexualOrientation"
+            value={form.sexualOrientation}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>Straight</option>
+            <option>Gay</option>
+            <option>Bisexual</option>
+            <option>Other</option>
+          </select>
+          <input
+            type="number"
+            name="age"
+            min="18"
+            max="100"
+            placeholder="Age"
+            value={form.age}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <input
+            name="nationality"
+            placeholder="Nationality (optional)"
+            value={form.nationality}
+            onChange={handleChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <select
+            name="county"
+            value={form.county}
+            onChange={handleCountyChange}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>Select County</option>
+            {counties.map((county) => (
+              <option key={county} value={county}>
+                {county}
+              </option>
+            ))}
+          </select>
+          <select
+            name="ward"
+            value={form.ward}
+            onChange={handleWardChange}
+            disabled={!form.county}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>Select City/Town</option>
+            {wards.map((ward) => (
+              <option key={ward} value={ward}>
+                {ward}
+              </option>
+            ))}
+          </select>
+          <select
+            name="area"
+            value={form.area}
+            onChange={handleAreaChange}
+            disabled={!selectedWard}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option>Select Area</option>
+            {areas.map((area) => (
+              <option key={area} value={area}>
+                {area}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ marginTop: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '10px' }}>Nearby Places:</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            {areas.map((place) => (
+              <label key={place} style={{ display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  name="nearby"
+                  value={place}
+                  checked={(form.nearby || []).includes(place)}
+                  onChange={handleChange}
+                />
+                {place}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '10px' }}>Services:</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            {servicesList.map((service) => (
+              <label key={service} style={{ display: 'flex', alignItems: 'center' }}>
+                <input
+                  type="checkbox"
+                  name="services"
+                  value={service}
+                  checked={(form.services || []).includes(service)}
+                  onChange={handleChange}
+                />
+                {service}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{ marginTop: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '10px' }}>Profile Picture:</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleProfilePic}
+            style={{ padding: '12px' }}
+          />
+          {form.profilePic && (
+            <Image
+              src={form.profilePic}
+              alt="Profile Picture"
+              width={150}
+              height={150}
+              style={{ borderRadius: '8px', marginTop: '10px' }}
+            />
+          )}
+        </div>
         <button
           onClick={handleSave}
           style={{
+            marginTop: '20px',
+            padding: '12px 24px',
             background: '#4CAF50',
-            color: '#fff',
+            color: 'white',
             border: 'none',
-            padding: '8px 16px',
-            marginTop: '5px',
+            borderRadius: '4px',
+            fontSize: '1rem',
+            cursor: 'pointer',
           }}
         >
-          {isEdit ? 'Update' : 'Save'}
+          {isEdit ? 'Update Profile' : 'Create Profile'}
         </button>
       </div>
 
-      <div style={{ background: '#fff', padding: '10px' }}>
-        <h2 style={{ color: '#e91e63' }}>All Users</h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ background: '#ddd' }}>
-              <th>Username</th>
-              <th>Name</th>
-              <th>Age</th>
-              <th>Area</th>
-              <th>Email</th>
-              <th>Password</th>
-              <th>Phone</th>
-              <th>Role</th>
-              <th>Membership</th>
-              {/* ✅ New: Status column */}
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>{u.username || 'N/A'}</td>
-                <td>{u.name || 'N/A'}</td>
-                <td>{u.age || 'N/A'}</td>
-                <td>{u.area || 'N/A'}</td>
-                <td>{u.email || 'N/A'}</td>
-                <td style={{ display: 'flex', alignItems: 'center' }}>
-                  {showPasswords[u.id] ? u.password || 'N/A' : '********'}
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswords(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '16px',
-                      marginLeft: '10px',
-                    }}
-                  >
-                    {showPasswords[u.id] ? '🙈' : '👁️'}
-                  </button>
-                </td>
-                <td>{u.phone || 'N/A'}</td>
-                <td>{u.role || 'User'}</td>
-                <td>
-                  <select
-                    value={u.membership || 'Regular'}
-                    onChange={(e) => handleUpdateMembership(u.id, e.target.value)}
-                    style={{
-                      padding: '5px',
-                      marginRight: '5px',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    <option>Regular</option>
-                    <option>Prime</option>
-                    <option>VIP</option>
-                    <option>VVIP</option>
-                  </select>
-                </td>
-                {/* ✅ New: Status toggle */}
-                <td>
-                  <span style={{ color: u.active ? 'green' : 'red', fontWeight: 'bold' }}>
-                    {u.active ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td style={{ position: 'relative' }}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent menu open
-                      handleEdit(u);
-                    }}
-                    style={{
-                      background: '#2196F3',
-                      color: 'white',
-                      border: 'none',
-                      padding: '5px 10px',
-                      marginRight: '5px',
-                      cursor: 'pointer',
-                      pointerEvents: 'auto',
-                    }}
-                  >
-                    Edit
-                  </button>
-                  {/* ✅ New: Toggle Active button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleToggleActive(u.id);
-                    }}
-                    style={{
-                      background: u.active ? '#f44336' : '#4CAF50',
-                      color: 'white',
-                      border: 'none',
-                      padding: '5px 10px',
-                      marginRight: '5px',
-                      cursor: 'pointer',
-                      pointerEvents: 'auto',
-                      fontSize: '0.8rem',
-                    }}
-                  >
-                    {u.active ? 'Disable' : 'Activate'}
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(u.id);
-                    }}
-                    style={{
-                      background: '#f44336',
-                      color: 'white',
-                      border: 'none',
-                      padding: '5px 10px',
-                      cursor: 'pointer',
-                      pointerEvents: 'auto',
-                    }}
-                  >
-                    Delete
-                  </button>
-                </td>
+      {/* Users Section */}
+      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ color: '#333', marginBottom: '20px' }}>All Users</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+          <input
+            type="text"
+            placeholder="Search users..."
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            style={{ padding: '12px', width: '300px', border: '1px solid #ddd', borderRadius: '4px' }}
+          />
+          <select
+            value={userFilter}
+            onChange={(e) => setUserFilter(e.target.value)}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
+          >
+            <option value="all">All Users</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="expiring">Expiring Soon</option>
+          </select>
+        </div>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
+                <th style={{ padding: '12px' }}>Username</th>
+                <th style={{ padding: '12px' }}>Name</th>
+                <th style={{ padding: '12px' }}>Age</th>
+                <th style={{ padding: '12px' }}>Area</th>
+                <th style={{ padding: '12px' }}>Email</th>
+                <th style={{ padding: '12px' }}>Password</th>
+                <th style={{ padding: '12px' }}>Phone</th>
+                <th style={{ padding: '12px' }}>Role</th>
+                <th style={{ padding: '12px' }}>Membership</th>
+                <th style={{ padding: '12px' }}>Subscription Ends</th> {/* New */}
+                <th style={{ padding: '12px' }}>Status</th>
+                <th style={{ padding: '12px' }}>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filteredUsers.map((u) => {
+                const subEnd = u.subscriptionEndDate ? new Date(u.subscriptionEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+                const isExpired = u.subscriptionEndDate && new Date(u.subscriptionEndDate) < new Date();
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid #ddd' }}>
+                    <td style={{ padding: '12px' }}>{u.username || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>{u.name || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>{u.age || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>{u.area || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>{u.email || 'N/A'}</td>
+                    <td style={{ padding: '12px', display: 'flex', alignItems: 'center' }}>
+                      {showPasswords[u.id] ? u.password || 'N/A' : '********'}
+                      <button
+                        onClick={() => setShowPasswords((prev) => ({ ...prev, [u.id]: !prev[u.id] }))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '10px' }}
+                      >
+                        {showPasswords[u.id] ? '🙈' : '👁️'}
+                      </button>
+                    </td>
+                    <td style={{ padding: '12px' }}>{u.phone || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>{u.role || 'User'}</td>
+                    <td style={{ padding: '12px' }}>
+                      <select
+                        value={u.membership || 'Regular'}
+                        onChange={(e) => handleUpdateMembership(u.id, e.target.value)}
+                        style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                      >
+                        <option>Regular</option>
+                        <option>Prime</option>
+                        <option>VIP</option>
+                        <option>VVIP</option>
+                      </select>
+                    </td>
+                    <td style={{ padding: '12px', color: isExpired ? 'red' : 'green' }}>{subEnd}</td> {/* New */}
+                    <td style={{ padding: '12px', color: u.active ? 'green' : 'red' }}>
+                      {u.active ? 'Active' : 'Inactive'}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <button
+                        onClick={() => handleEdit(u)}
+                        style={{
+                          padding: '8px 12px',
+                          background: '#2196F3',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          marginRight: '10px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleToggleActive(u.id)}
+                        style={{
+                          padding: '8px 12px',
+                          background: u.active ? '#f44336' : '#4CAF50',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          marginRight: '10px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {u.active ? 'Disable' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(u.id)}
+                        style={{
+                          padding: '8px 12px',
+                          background: '#f44336',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {filteredUsers.length === 0 && (
+            <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No users found.</p>
+          )}
+        </div>
       </div>
 
-      {/* New: Activity Dashboard Section */}
-      <div style={{ background: '#fff', padding: '10px', marginTop: '10px' }}>
-        <h2 style={{ color: '#e91e63' }}>Site Activity Dashboard</h2>
-        <div style={{ marginBottom: '10px' }}>
+      {/* Transactions Section */}
+      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ color: '#333', marginBottom: '20px' }}>All Purchases & Transactions</h2>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
+                <th style={{ padding: '12px' }}>Transaction ID</th>
+                <th style={{ padding: '12px' }}>User</th>
+                <th style={{ padding: '12px' }}>Amount</th>
+                <th style={{ padding: '12px' }}>Date</th>
+                <th style={{ padding: '12px' }}>Type</th>
+                <th style={{ padding: '12px' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {transactions.map((tx) => {
+                const user = users.find((u) => u.id === tx.userId);
+                const txDate = tx.date ? new Date(tx.date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }) : 'N/A';
+                return (
+                  <tr key={tx.id} style={{ borderBottom: '1px solid #ddd' }}>
+                    <td style={{ padding: '12px' }}>{tx.id}</td>
+                    <td style={{ padding: '12px' }}>{user ? user.username : 'Unknown'}</td>
+                    <td style={{ padding: '12px' }}>${tx.amount?.toFixed(2) || 'N/A'}</td>
+                    <td style={{ padding: '12px' }}>{txDate}</td>
+                    <td style={{ padding: '12px' }}>{tx.type || 'Subscription'}</td>
+                    <td style={{ padding: '12px', color: tx.status === 'success' ? 'green' : 'red' }}>{tx.status || 'N/A'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {transactions.length === 0 && (
+            <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No transactions found.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Activity Logs Section */}
+      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+        <h2 style={{ color: '#333', marginBottom: '20px' }}>Activity Logs</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
           <select
             value={activityFilter}
             onChange={(e) => setActivityFilter(e.target.value)}
-            style={{ padding: '5px', marginRight: '10px' }}
+            style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}
           >
             <option value="all">All Actions</option>
             <option value="profile_create">Profile Created</option>
             <option value="profile_update">Profile Updated</option>
             <option value="profile_delete">Profile Deleted</option>
             <option value="membership_update">Membership Updated</option>
-            {/* ✅ New: Add toggle_active to filter options */}
             <option value="toggle_active">Account Toggled</option>
             <option value="admin_login">Admin Login</option>
             <option value="admin_logout">Admin Logout</option>
@@ -912,60 +1065,49 @@ export default function AdminPanel() {
             placeholder="Search logs..."
             value={activitySearch}
             onChange={(e) => setActivitySearch(e.target.value)}
-            style={{ padding: '5px', width: '200px' }}
+            style={{ padding: '12px', width: '300px', border: '1px solid #ddd', borderRadius: '4px' }}
           />
           <button
-            onClick={() => setRefresh(!refresh)} // Refresh logs
-            style={{ padding: '5px 10px', background: '#2196F3', color: 'white', border: 'none', marginLeft: '10px' }}
+            onClick={() => setRefresh(!refresh)}
+            style={{
+              padding: '12px 24px',
+              background: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
           >
             Refresh
           </button>
         </div>
-        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+        <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#ddd' }}>
-                <th>Timestamp</th>
-                <th>Action</th>
-                <th>Details</th>
-                <th>Site</th>
+              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
+                <th style={{ padding: '12px' }}>Timestamp</th>
+                <th style={{ padding: '12px' }}>Action</th>
+                <th style={{ padding: '12px' }}>Details</th>
+                <th style={{ padding: '12px' }}>Site</th>
               </tr>
             </thead>
             <tbody>
-              {filteredLogs.slice(0, 50).map((log) => ( // Limit to last 50 for perf
-                <tr key={log.id}>
-                  <td>{new Date(log.timestamp?.toDate ? log.timestamp.toDate() : log.timestamp).toLocaleString()}</td>
-                  <td style={{ color: log.admin ? '#e91e63' : '#333' }}>{log.action}</td>
-                  <td>{JSON.stringify(log.details).slice(1, -1).replace(/"/g, '') || 'N/A'}</td>
-                  <td>{log.siteId || 'Main'}</td>
+              {filteredLogs.map((log) => (
+                <tr key={log.id} style={{ borderBottom: '1px solid #ddd' }}>
+                  <td style={{ padding: '12px' }}>
+                    {new Date(log.timestamp?.toDate ? log.timestamp.toDate() : log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' })}
+                  </td>
+                  <td style={{ padding: '12px' }}>{log.action}</td>
+                  <td style={{ padding: '12px' }}>{JSON.stringify(log.details).slice(1, -1).replace(/"/g, '') || 'N/A'}</td>
+                  <td style={{ padding: '12px' }}>{log.siteId || 'Main'}</td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && (
-                <tr>
-                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>No activity logs found.</td>
-                </tr>
-              )}
             </tbody>
           </table>
+          {filteredLogs.length === 0 && (
+            <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No activity logs found.</p>
+          )}
         </div>
-        <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>
-          Showing last 50 logs. Total: {activityLogs.length}
-        </p>
-      </div>
-
-      <div style={{ marginTop: '10px' }}>
-        <button
-          onClick={handleRevertLastEdit}
-          style={{
-            padding: '8px 16px',
-            background: '#ff9800',
-            color: 'white',
-            border: 'none',
-            fontSize: '0.9rem',
-          }}
-        >
-          Revert Previous Action
-        </button>
       </div>
     </div>
   );
