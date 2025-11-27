@@ -92,7 +92,7 @@ export default function ProfileSetup() {
   // Profile pic file and preview
   const [profilePicFile, setProfilePicFile] = useState(null);
   const [profilePicPreview, setProfilePicPreview] = useState('');
-  const steps = ['Basics', 'Location', 'Services', 'Media', 'Membership & Wallets'];
+  const steps = ['Profile', 'Location', 'Services', 'Media', 'Membership & Wallets'];
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
   // ----------------------------
