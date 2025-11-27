@@ -1,117 +1,157 @@
-/* styles/Profile.module.css */
-
-/* Container */
 .container {
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
   background-color: var(--background);
   color: var(--foreground);
-  padding: 0;
-  box-sizing: border-box;
-  transition: background-color 0.3s, color 0.3s;
 }
 
-/* Main content */
 .main {
   max-width: 900px;
   margin: 0 auto;
   padding: 1.5rem;
 }
+
 @media (min-width: 769px) {
-  .main {
-    padding: 2.5rem;
-  }
+  .main { padding: 2.5rem; }
 }
 
-/* Profile picture section */
-.profilePicSection {
+/* Header */
+.header {
   text-align: center;
-  margin-bottom: 1rem;
+  margin-bottom: 1.8rem;
 }
+
+.picWrapper {
+  position: relative;
+  display: inline-block;
+}
+
 .profilePic {
-  width: 160px;
-  height: 160px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   object-fit: cover;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-  transition: transform 0.2s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
-.profilePic:hover {
-  transform: scale(1.05);
-}
+
 @media (min-width: 769px) {
-  .profilePic {
-    width: 200px;
-    height: 200px;
-  }
+  .profilePic { width: 180px; height: 180px; }
 }
 
-/* Profile info */
-.profileInfo {
-  text-align: left;
-  background-color: var(--background);
-  padding: 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  margin-bottom: 1.5rem;
-  line-height: 1.5;
-  transition: background-color 0.3s;
-}
-.profileInfo h1 {
-  font-size: 2rem;
-  font-weight: 600;
-  margin-bottom: 0.25rem;
-  text-align: center;
-}
-.profileInfo p {
-  margin: 0.25rem 0;
-  font-size: 1rem;
-  color: var(--foreground);
-}
-
-/* Nearby & Services */
-.nearby,
-.services {
-  margin-top: 1rem;
-  text-align: left;
-}
-.nearby strong,
-.services strong {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--foreground);
-  display: block;
-  margin-bottom: 0.3rem;
-}
-.tagItem {
-  display: inline-block;
-  background-color: rgba(0, 0, 0, 0.05);
-  color: var(--foreground);
-  padding: 4px 10px;
-  margin: 4px 6px 0 0;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  font-weight: 400;
-  transition: background-color 0.2s;
-}
-
-/* Call button */
-.callButton {
-  margin-top: 1rem;
-  text-align: center;
-}
-.callButton a {
-  padding: 0.6rem 1.2rem;
+.verifiedBadge {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
   background-color: #f50057;
-  color: #fff;
-  border-radius: 24px;
-  text-decoration: none;
-  display: inline-block;
-  font-weight: 500;
-  transition: background 0.3s;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
-.callButton a:hover {
+
+.name {
+  font-size: 1.8rem;
+  font-weight: 700;
+  margin: 0.8rem 0 0.2rem;
+  color: var(--foreground);
+}
+
+.username {
+  font-size: 1rem;
+  color: #999;
+}
+
+/* About Card – smaller text */
+.infoCard {
+  background: rgba(255,255,255,0.05);
+  padding: 1.3rem;
+  border-radius: 14px;
+  margin-bottom: 1.3rem;
+}
+
+.infoCard h3 {
+  font-size: 1.15rem;
+  color: #f50057;
+  margin-bottom: 0.8rem;
+}
+
+.infoCard p {
+  font-size: 0.95rem;
+  margin: 0.5rem 0;
+  color: var(--foreground);
+}
+
+/* Area – smaller & centered */
+.centeredArea {
+  text-align: center;
+  margin: 1.5rem 0 1.2rem;
+}
+
+.centeredArea h2 {
+  font-size: 1.7rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--foreground);
+}
+
+/* Pink Labels – smaller */
+.pinkLabel {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #f50057;
+  margin: 1.6rem 0 0.6rem 0.5rem;
+}
+
+/* Tags – smaller & cleaner */
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0.5rem;
+  margin-bottom: 1.2rem;
+}
+
+.tag {
+  background: rgba(245,0,87,0.1);
+  color: #f50057;
+  padding: 6px 12px;
+  border-radius: 16px;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border: 1px solid rgba(245,0,87,0.3);
+}
+
+/* CALL BUTTON – smaller, elegant, shows number */
+.callButtonContainer {
+  text-align: center;
+  margin: 1.8rem 0 1.8rem;
+}
+
+.callButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #f50057;
+  color: white;
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 12px 28px;
+  border-radius: 50px;
+  text-decoration: none;
+  box-shadow: 0 5px 15px rgba(245,0,87,0.3);
+  transition: all 0.3s ease;
+}
+
+.callButton:hover {
   background-color: #d4004a;
+  transform: translateY(-2px);
+}
+
+.callButton::before {
+  content: "Phone";
+  font-size: 1.3rem;
 }
 
 /* Tabs */
@@ -119,345 +159,205 @@
   display: flex;
   justify-content: center;
   gap: 1rem;
-  margin: 1.5rem 0;
+  margin: 1.5rem 0 2rem;
 }
+
 .tabButtons button {
-  padding: 0.75rem 1.5rem;
-  background-color: rgba(0, 0, 0, 0.05);
+  padding: 0.7rem 1.6rem;
+  background: rgba(0,0,0,0.05);
   color: var(--foreground);
   border: none;
-  border-radius: 24px;
+  border-radius: 30px;
   cursor: pointer;
-  font-weight: 500;
-  transition: background 0.3s, color 0.3s;
+  font-size: 1rem;
+  font-weight: 600;
 }
+
 .activeTab {
-  background-color: #f50057 !important;
-  color: #ffffff !important;
+  background: #f50057 !important;
+  color: white !important;
 }
 
 /* Feed */
 .feed {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 1.5rem;
-  transition: opacity 0.2s;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.4rem;
 }
+
 @media (max-width: 768px) {
-  .feed {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
+  .feed { grid-template-columns: 1fr; }
 }
+
 .postItem {
-  position: relative;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  position: relative;
 }
+
 .postItem:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: scale(1.02);
+  transition: 0.3s;
 }
-.media {
-  width: 100%;
-  height: auto;
-  display: block;
-  object-fit: cover;
-  border-radius: 6px;
-}
-.blurred {
-  filter: blur(8px);
-  pointer-events: none;
-}
+
+.blurred { filter: blur(8px); }
+
 .lockOverlay {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #fff;
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  font-weight: 500;
-  z-index: 10;
-}
-
-/* Interactions */
-.interactions {
-  display: flex;
-  justify-content: space-around;
-  padding: 0.5rem;
-  background-color: var(--background);
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-}
-.interactions button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 1.2rem;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  transition: color 0.2s, transform 0.2s;
-}
-.interactions button:hover {
-  transform: scale(1.1);
-}
-.liked {
-  color: #f50057;
-}
-
-/* Comment Section */
-.commentSection {
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 1rem 1.8rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  border: 2px solid #f50057;
   text-align: center;
-  margin-top: 0.75rem;
-  padding-bottom: 1rem;
 }
-.commentSection button {
-  padding: 0.5rem 1rem;
-  background-color: var(--background);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 20px;
-  cursor: pointer;
+
+.lockOverlay div {
   font-size: 0.9rem;
-}
-.commentSection button:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  margin-top: 0.5rem;
 }
 
-/* Media Viewer Modal (kept for image/video full-screen) */
-.mediaViewer {
-  position: relative;
-  width: 90vw;
-  height: 80vh;
-  max-width: 90%;
-  max-height: 90%;
-  overflow: hidden;
-  background-color: #000;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Comments Modal (kept separate) */
-.commentsModal {
-  background-color: var(--background);
-  padding: 1.5rem;
-  border-radius: 12px;
-  max-width: 500px;
-  width: 90%;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-}
-.commentsList {
-  margin-bottom: 1rem;
-}
-.comment {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  padding: 0.5rem 0;
-  color: var(--foreground);
-}
-.commentsModal form {
-  display: flex;
-}
-.commentsModal input {
-  flex: 1;
-  padding: 0.5rem;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 20px 0 0 20px;
-  background-color: var(--background);
-  color: var(--foreground);
-}
-.commentsModal button {
-  padding: 0.5rem 1rem;
-  background-color: #f50057;
-  color: #fff;
-  border: none;
-  border-radius: 0 20px 20px 0;
-  cursor: pointer;
-}
-.commentsModal button:hover {
-  background-color: #d4004a;
-}
-
-/* Loading & Not Found */
-.loading,
-.notFound {
+.loading, .notFound {
   text-align: center;
-  padding: 2rem;
+  padding: 3rem;
   font-size: 1.2rem;
-  color: var(--foreground);
+  color: #aaa;
 }
 
-/* ──────────────────────────────
-   NEW PAYMENT / UNLOCK MODAL STYLES
-   ────────────────────────────── */
+.noPosts {
+  text-align: center;
+  color: #aaa;
+  font-size: 1.2rem;
+  margin: 2rem 0;
+}
 
-/* Modal (overrides any previous generic .modal) */
-.modal {
+/* Payment Modal */
+.modalOverlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.65);
+  background: rgba(0,0,0,0.7);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: fadeIn 0.3s ease-in-out;
 }
 
-.modalContent {
-  background-color: #fff;
+.modal {
+  background: #ffffff;
   padding: 2rem;
-  border-radius: 16px;
-  max-width: 480px;
+  border-radius: 14px;
+  max-width: 600px;
   width: 90%;
+  color: #000000;
   text-align: center;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  transform: translateY(-20px);
-  animation: slideUp 0.3s ease forwards;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  border: 2px solid #f50057;
 }
 
-.modalTitle {
-  font-size: 1.9rem;
-  font-weight: 700;
-  margin-bottom: 0.3rem;
-  color: #333;
-}
-
-.modalSubtitle {
-  font-size: 1rem;
+.modal h3 {
+  font-size: 1.6rem;
+  color: #f50057;
   margin-bottom: 1.5rem;
-  color: #666;
 }
 
-/* Plan Grid */
 .planGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1.5rem;
   margin-bottom: 1.5rem;
 }
 
 .planCard {
-  background: linear-gradient(145deg, #fff, #f9f9f9);
-  padding: 1rem;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  transition: all 0.3s ease;
-  text-align: center;
+  background: #fff0f5;
+  padding: 1.2rem;
+  border-radius: 10px;
+  border: 1px solid #f50057;
 }
 
-.planCard:hover {
-  transform: translateY(-3px) scale(1.03);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
-}
-
-.activePlan {
-  border: 2px solid #f50057;
-  background: linear-gradient(145deg, #ffe6f0, #fff0f5);
-}
-
-/* Plan Text */
-.planLabel {
-  font-size: 1rem;
-  font-weight: 600;
-  margin-bottom: 0.3rem;
-  color: #333;
-}
-
-.planAmount {
-  font-size: 1.25rem;
-  font-weight: 700;
+.planCard strong {
+  display: block;
+  font-size: 1.2rem;
   color: #f50057;
-  margin-bottom: 0.2rem;
 }
 
-.planDuration {
-  font-size: 0.9rem;
-  color: #777;
+.planCard p {
+  font-size: 1.1rem;
+  margin: 0.7rem 0;
+  color: #333333;
 }
 
-/* Phone Input */
-.phoneInput {
+.planCard button {
+  background: #f50057;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
   width: 100%;
-  padding: 0.7rem 1rem;
-  border-radius: 12px;
-  border: 1px solid #ddd;
-  margin-bottom: 0.8rem;
-  font-size: 1rem;
-  transition: border 0.2s, box-shadow 0.2s;
+  transition: background 0.3s;
 }
 
-.phoneInput:focus {
-  border-color: #f50057;
-  box-shadow: 0 0 6px rgba(245, 0, 87, 0.3);
-  outline: none;
+.planCard button:hover {
+  background: #d4004a;
 }
 
-.phoneError {
+.closeButton {
+  background: transparent;
   color: #f50057;
-  font-size: 0.85rem;
-  margin-bottom: 0.5rem;
+  border: 1px solid #f50057;
+  padding: 0.6rem 1.2rem;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 1rem;
 }
 
-/* Modal Actions */
-.modalActions {
+.closeButton:hover {
+  background: #f50057;
+  color: white;
+}
+
+/* Media Viewer */
+.mediaViewerOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.9);
   display: flex;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
 }
 
-.payButton {
-  flex: 1;
-  padding: 0.8rem 1.2rem;
-  background-color: #f50057;
-  color: #fff;
-  font-weight: 600;
-  border: none;
-  border-radius: 12px;
+.mediaViewerContainer {
+  position: relative;
+  width: 90%;
+  height: 90%;
+  max-width: 800px;
+  max-height: 800px;
+}
+
+.viewerCloseX {
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  color: white;
+  font-size: 2rem;
   cursor: pointer;
-  transition: background 0.3s, transform 0.2s;
 }
 
-.payButton:hover {
-  background-color: #d4004a;
-  transform: translateY(-2px);
-}
-
-.cancelButton {
-  flex: 1;
-  padding: 0.8rem 1.2rem;
-  background-color: #f1f1f1;
-  color: #555;
-  font-weight: 600;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background 0.3s, transform 0.2s;
-}
-
-.cancelButton:hover {
-  background-color: #e0e0e0;
-  transform: translateY(-2px);
-}
-
-/* Animations */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+.viewerMedia {
+  object-fit: contain;
 }
