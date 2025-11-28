@@ -240,7 +240,6 @@ export default function ViewProfile() {
             {profile.verified && <span className={styles.verifiedBadge}>Verified</span>}
           </div>
           <h1 className={styles.name}>{profile.name || 'Anonymous'}</h1>
-          <p className={styles.username}>@{profile.username}</p>
         </div>
 
         {/* About Info */}
