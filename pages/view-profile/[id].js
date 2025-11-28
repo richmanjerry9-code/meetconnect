@@ -34,6 +34,7 @@ export default function ViewProfile() {
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [phoneError, setPhoneError] = useState('');
+  const [copied, setCopied] = useState(false); // ← for copy feedback
   const touchStartX = useRef(0);
 
   const subscriptionPlans = [
@@ -190,6 +191,14 @@ export default function ViewProfile() {
     }
   };
 
+  // Copy phone number (formatted as stored)
+  const handleCopyPhone = () => {
+    if (!profile.phone) return;
+    navigator.clipboard.writeText(profile.phone);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleTouchStart = (e) => touchStartX.current = e.touches[0].clientX;
   const handleTouchEnd = (e) => {
     const diff = touchStartX.current - e.changedTouches[0].clientX;
@@ -207,7 +216,7 @@ export default function ViewProfile() {
   const services = profile.services || [];
   const nearby = profile.nearby || [];
   const cleanPhone = profile.phone?.replace(/\D/g, '') || '';
-  const displayPhone = profile.phone || 'Call';
+  const phoneForTel = cleanPhone.startsWith('254') ? cleanPhone : '254' + cleanPhone.replace(/^0/, '');
 
   return (
     <div className={styles.container}>
@@ -250,7 +259,7 @@ export default function ViewProfile() {
             <p className={styles.pinkLabel}>Nearby areas</p>
             <div className={styles.tags}>
               {nearby.map((place, i) => (
-                <span key={i} className={styles.tag}>{place}</span>
+                <span key={i}Ā className={styles.tag}>{place}</span>
               ))}
             </div>
           </>
@@ -268,15 +277,27 @@ export default function ViewProfile() {
           </>
         )}
 
-        {/* CALL BUTTON – Shows actual phone number */}
+        {/* PHONE NUMBER IS NOW DISPLAYED + CALL & COPY BUTTONS */}
         {cleanPhone && (
           <div className={styles.callButtonContainer}>
-            <a
-              href={`tel:${cleanPhone.startsWith('254') ? cleanPhone : '254' + cleanPhone.replace(/^0/, '')}`}
-              className={styles.callButton}
-            >
-              Call {displayPhone}
-            </a>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {/* Call button - shows the actual number with phone emoji */}
+              <a
+                href={`tel:+${phoneForTel}`}
+                className={styles.callButton}
+              >
+                📞 {profile.phone}
+              </a>
+
+              {/* Copy button */}
+              <button
+                onClick={handleCopyPhone}
+                className={styles.callButton}
+                style={{ background: copied ? '#28a745' : '', color: copied ? 'white' : '' }}
+              >
+                {copied ? '✅ Copied!' : '📋 Copy'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -347,7 +368,7 @@ export default function ViewProfile() {
               )}
               <input
                 type="tel"
-                placeholder="Enter phone number (e.g., 0712345678, 712345678, +254712345678)"
+                placeholder="Enter phone number (e.g., 071 встречи2345678, 712345678, +254712345678)"
                 value={phoneNumber}
                 onChange={handlePhoneChange}
                 className={styles.phoneInput}
