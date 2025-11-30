@@ -8,36 +8,30 @@
   display: flex;
   flex-direction: column; /* For sticky footer */
 }
-
 .main {
   display: flex;
   flex-direction: column;
   gap: 20px;
   flex: 1; /* Pushes footer to the bottom */
 }
-
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
 }
-
 .logoContainer {
   cursor: pointer;
 }
-
 .title {
   font-size: 2rem;
   color: #ff69b4; /* Hot pink, kept for branding */
   margin: 0;
 }
-
 .authButtons {
   display: flex;
   gap: 10px;
 }
-
 .button {
   padding: 10px 20px;
   background: #ff80bf; /* Light pinkish-purple */
@@ -47,32 +41,25 @@
   cursor: pointer;
   transition: background 0.2s;
 }
-
 .button:hover {
   background: #ff4d94; /* Softer hot pink */
 }
-
 .login {
   background: #dda0dd; /* Plum */
 }
-
 .login:hover {
   background: #c71585; /* Medium violet red, muted */
 }
-
 .logout {
   background: #ff69b4; /* Hot pink */
 }
-
 .logout:hover {
   background: #ff1493; /* Deep pink, toned down */
 }
-
 .searchContainer {
   position: relative;
   width: 100%;
 }
-
 .searchInput {
   width: 100%;
   padding: 10px;
@@ -82,7 +69,6 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   background: #fff0f5; /* Lavender blush */
 }
-
 .dropdown {
   position: absolute;
   top: 100%;
@@ -96,23 +82,19 @@
   z-index: 10;
   box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
-
 .dropdownItem {
   padding: 12px 10px;
   cursor: pointer;
   transition: background 0.2s;
 }
-
 .dropdownItem:hover {
   background: #ffe4e1; /* Misty rose */
 }
-
 .filters {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
-
 .select {
   padding: 10px;
   font-size: 1rem;
@@ -120,13 +102,11 @@
   border-radius: 5px;
   background: #fff0f5; /* Lavender blush */
 }
-
 .profiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   gap: 20px;
 }
-
 .profileCard {
   background: #fff0f5; /* Lavender blush */
   border: 1px solid #ffb6c1; /* Light coral */
@@ -135,31 +115,26 @@
   text-align: center;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  touch-action: pan-y !important;        /* ← KILLS accidental clicks while scrolling */
+  touch-action: pan-y !important; /* ← KILLS accidental clicks while scrolling */
   user-select: none;
   -webkit-user-select: none;
 }
-
 .profileCard:hover {
   transform: scale(1.05);
   box-shadow: 0 8px 20px rgba(255, 105, 180, 0.25);
 }
-
 .profileImage {
   border-radius: 50%;
   object-fit: cover;
 }
-
 .profileInfo {
   margin-top: 10px;
 }
-
 .profileInfo h3 {
   margin: 5px 0;
   color: #c71585; /* Medium violet red */
   font-size: 1.25rem;
 }
-
 .badge {
   display: inline-block;
   padding: 5px 12px;
@@ -169,18 +144,15 @@
   font-weight: bold;
   margin-top: 5px;
 }
-
-.vvip   { background: #ff4500; } /* Orange red */
-.vip    { background: #ff8c00; } /* Dark orange */
-.prime  { background: #ffd700; } /* Gold */
+.vvip { background: #ff4500; } /* Orange red */
+.vip { background: #ff8c00; } /* Dark orange */
+.prime { background: #ffd700; } /* Gold */
 .regular { background: #b9a9f4; } /* Soft purple for Regular if you want */
-
 .location {
   color: #8a2be2; /* Blue violet, muted */
   margin: 8px 0 4px;
   font-size: 0.95rem;
 }
-
 .services {
   margin-top: 10px;
   display: flex;
@@ -188,7 +160,6 @@
   gap: 6px;
   justify-content: center;
 }
-
 .serviceTag {
   display: inline-block;
   background: #dda0dd; /* Plum */
@@ -198,24 +169,20 @@
   color: white;
   font-size: 0.8rem;
 }
-
 .phoneLink {
   color: #ff69b4; /* Hot pink */
   text-decoration: none;
   font-weight: bold;
 }
-
 .phoneLink:hover {
   text-decoration: underline;
 }
-
 .noProfiles {
   text-align: center;
   color: #8a2be2;
   font-size: 1.1rem;
   grid-column: 1 / -1;
 }
-
 .modal {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -225,7 +192,6 @@
   align-items: center;
   z-index: 1000;
 }
-
 .modalContent {
   background: #fff0f5;
   padding: 25px;
@@ -236,7 +202,6 @@
   border: 1px solid #ffb6c1;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
-
 .close {
   position: absolute;
   top: 10px;
@@ -246,7 +211,6 @@
   color: #ff1493;
   font-weight: bold;
 }
-
 .input {
   width: 100%;
   padding: 12px;
@@ -256,7 +220,6 @@
   background: #fff;
   font-size: 1rem;
 }
-
 .footer {
   text-align: center;
   padding: 15px 0;
@@ -264,25 +227,21 @@
   border-top: 1px solid #ffb6c1;
   margin-top: auto;
 }
-
 .footerLinks {
   display: flex;
   justify-content: center;
   gap: 25px;
   flex-wrap: wrap;
 }
-
 .footerLink {
   color: #ff69b4;
   text-decoration: none;
   font-weight: bold;
   font-size: 0.95rem;
 }
-
 .footerLink:hover {
   text-decoration: underline;
 }
-
 /* Skeleton loading */
 .skeletonCard {
   background: #fff0f5;
@@ -291,7 +250,6 @@
   padding: 15px;
   text-align: center;
 }
-
 .skeletonImage {
   width: 150px;
   height: 150px;
@@ -300,7 +258,6 @@
   margin: 0 auto;
   animation: pulse 1.5s infinite;
 }
-
 .skeletonText {
   height: 20px;
   background: #eee;
@@ -309,7 +266,6 @@
   border-radius: 4px;
   animation: pulse 1.5s infinite;
 }
-
 .skeletonTextSmall {
   height: 16px;
   background: #eee;
@@ -318,11 +274,58 @@
   border-radius: 4px;
   animation: pulse 1.5s infinite;
 }
-
 @keyframes pulse {
   0% { opacity: 0.6; }
   50% { opacity: 1; }
   100% { opacity: 0.6; }
 }
 
+/* Force scrollbar always visible on mobile */
+@media (max-width: 768px) { /* Adjust breakpoint as needed for phones */
+  body {
+    overflow-y: scroll; /* Always show vertical scrollbar */
+    -webkit-overflow-scrolling: touch; /* Enable smooth momentum scrolling on iOS */
+  }
 
+  /* Customize scrollbar for better visibility on mobile */
+  body::-webkit-scrollbar {
+    width: 12px; /* Thicker for easy touch */
+    -webkit-appearance: none; /* Override default hidden style */
+  }
+
+  body::-webkit-scrollbar-track {
+    background: #f1f1f1; /* Light track color */
+    border-radius: 10px;
+  }
+
+  body::-webkit-scrollbar-thumb {
+    background: #888; /* Thumb color */
+    border-radius: 10px;
+    border: 2px solid #f1f1f1; /* Padding around thumb */
+  }
+
+  body::-webkit-scrollbar-thumb:hover {
+    background: #555; /* Darker on hover/touch */
+  }
+}
+
+/* Optional: If you want the profiles container to have its own scrollbar (instead of page-level) */
+.profiles {
+  max-height: calc(100vh - 150px); /* Adjust based on header/footer height to fit screen */
+  overflow-y: scroll; /* Make this div scrollable */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Customize scrollbar for .profiles if using the optional approach */
+.profiles::-webkit-scrollbar {
+  width: 12px;
+}
+
+.profiles::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.profiles::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
