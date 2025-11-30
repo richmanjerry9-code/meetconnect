@@ -8,25 +8,25 @@ import * as Counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { 
-  collection, 
-  query, 
-  orderBy, 
-  limit, 
-  getDocs, 
-  where, 
-  startAfter, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  serverTimestamp, 
-  onSnapshot 
+import {
+  collection,
+  query,
+  orderBy,
+  limit,
+  getDocs,
+  where,
+  startAfter,
+  doc,
+  setDoc,
+  getDoc,
+  serverTimestamp,
+  onSnapshot
 } from 'firebase/firestore';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
 } from 'firebase/auth';
 
 function useDebounce(value, delay) {
@@ -61,7 +61,7 @@ const isProfileComplete = (p) => {
   );
 };
 
-// BULLETPROOF TIMESTAMP CONVERTER (handles any Timestamp field, nested or future)
+// BULLETPROOF TIMESTAMP CONVERTER — handles every possible Timestamp
 const convertTimestamps = (obj) => {
   if (!obj) return obj;
   if (obj && typeof obj.toDate === 'function') {
@@ -194,7 +194,6 @@ export default function Home({ initialProfiles = [] }) {
         setError('Failed to load profiles in real-time. Please refresh.');
       });
     }, 1000);
-
     return () => {
       clearTimeout(timer);
       if (unsubscribeRef.current) {
@@ -232,10 +231,10 @@ export default function Home({ initialProfiles = [] }) {
       setAllProfiles(prev => [...prev, ...validProfiles]);
       setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
       setHasMore(snapshot.size === 20);
-      cacheRef.current.set(cacheKey, { 
-        profiles: validProfiles, 
-        lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null, 
-        hasMore: snapshot.size === 20 
+      cacheRef.current.set(cacheKey, {
+        profiles: validProfiles,
+        lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null,
+        hasMore: snapshot.size === 20
       });
     } catch (err) {
       console.error('Error fetching more profiles:', err);
@@ -347,7 +346,6 @@ export default function Home({ initialProfiles = [] }) {
         : true;
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
-
     const groups = { VIP: [], Prime: [], Regular: [], VVIP: [] };
     filtered.forEach(p => {
       const mem = p.membership || 'Regular';
@@ -357,17 +355,14 @@ export default function Home({ initialProfiles = [] }) {
         groups.Regular.push(p);
       }
     });
-
     Object.keys(groups).forEach(key => {
       groups[key].sort(() => Math.random() - 0.5);
     });
-
     let ordered = [];
     if (groups.VVIP.length > 0) ordered = ordered.concat(groups.VVIP);
     ordered = ordered.concat(groups.VIP);
     ordered = ordered.concat(groups.Prime);
     ordered = ordered.concat(groups.Regular);
-
     return ordered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority, shuffleKey]);
 
@@ -540,77 +535,51 @@ export default function Home({ initialProfiles = [] }) {
   const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
 
-  // PROFILE CARD — ZERO ACCIDENTAL CLICKS + PERFECT TOUCH
+  // FINAL PROFILE CARD — PERFECT SCROLLING USING <Link> (no touch handlers needed)
   const ProfileCard = memo(({ p }) => {
-    const { username = '', profilePic = null, name = 'Anonymous Lady', membership = 'Regular', verified = false, area = '', ward = '', county = 'Nairobi', services = [], phone = '' } = p || {};
-    const [touchStartY, setTouchStartY] = useState(null);
-    const [touchStartX, setTouchStartX] = useState(null);
-    const [wasSwiped, setWasSwiped] = useState(false);
-    const MIN_SWIPE_DISTANCE = 40;
+    if (!p?.username?.trim()) return null;
 
-    const handleTouchStart = (e) => {
-      setWasSwiped(false);
-      setTouchStartY(e.touches[0].clientY);
-      setTouchStartX(e.touches[0].clientX);
-    };
-
-    const handleTouchMove = (e) => {
-      if (!touchStartY || !touchStartX) return;
-      const dy = Math.abs(e.touches[0].clientY - touchStartY);
-      const dx = Math.abs(e.touches[0].clientX - touchStartX);
-      if (dy > MIN_SWIPE_DISTANCE && dy > dx) {
-        setWasSwiped(true);
-      }
-    };
-
-    const handleClick = () => {
-      if (wasSwiped || !username?.trim()) return;
-      router.push(`/view-profile/${encodeURIComponent(username)}`, undefined, { scroll: false });
-    };
-
-    const locationDisplay = ward ? `${ward} (${area || 'All Areas'})` : (area || county || 'Location TBD');
+    const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
 
     return (
-      <div
-        className={styles.profileCard}
-        onClick={handleClick}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        role="listitem"
-      >
-        <div className={styles.imageContainer}>
-          <Image
-            src={profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgYT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='}
-            alt={`${name} Profile`}
-            width={150}
-            height={150}
-            className={styles.profileImage}
-            loading="lazy"
-            sizes="(max-width: 768px) 100vw, 150px"
-            quality={75}
-            placeholder="blur"
-            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
-          />
-          {verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
-        </div>
-        <div className={styles.profileInfo}>
-          <h3>{name}</h3>
-          {membership && membership !== 'Regular' && (
-            <span className={`${styles.badge} ${styles[membership.toLowerCase()]}`}>{membership}</span>
-          )}
-        </div>
-        <p className={styles.location}>{locationDisplay}</p>
-        {services && services.length > 0 && (
-          <div className={styles.services}>
-            {services.slice(0, 3).map((s, idx) => (
-              <span key={idx} className={styles.serviceTag}>{s}</span>
-            ))}
+      <Link href={`/view-profile/${encodeURIComponent(p.username)}`} passHref legacyBehavior>
+        <a className={styles.profileLink}>
+          <div className={styles.profileCard} role="listitem">
+            <div className={styles.imageContainer}>
+              <Image
+                src={p.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgYT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='}
+                alt={`${p.name} Profile`}
+                width={150}
+                height={150}
+                className={styles.profileImage}
+                loading="lazy"
+                sizes="(max-width: 768px) 100vw, 150px"
+                quality={75}
+                placeholder="blur"
+                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
+              />
+              {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+            </div>
+            <div className={styles.profileInfo}>
+              <h3>{p.name}</h3>
+              {p.membership && p.membership !== 'Regular' && (
+                <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
+              )}
+            </div>
+            <p className={styles.location}>{locationDisplay}</p>
+            {p.services && p.services.length > 0 && (
+              <div className={styles.services}>
+                {p.services.slice(0, 3).map((s, idx) => (
+                  <span key={idx} className={styles.serviceTag}>{s}</span>
+                ))}
+              </div>
+            )}
+            {p.phone && (
+              <p><a href={`tel:${p.phone}`} className={styles.phoneLink}>{p.phone}</a></p>
+            )}
           </div>
-        )}
-        {phone && (
-          <p><a href={`tel:${phone}`} className={styles.phoneLink}>{phone}</a></p>
-        )}
-      </div>
+        </a>
+      </Link>
     );
   });
   ProfileCard.displayName = 'ProfileCard';
@@ -737,7 +706,6 @@ export default function Home({ initialProfiles = [] }) {
             </div>
           )}
         </div>
-
         <div className={styles.filters}>
           <select
             value={selectedCounty}
@@ -754,7 +722,6 @@ export default function Home({ initialProfiles = [] }) {
               <option key={county} value={county}>{county}</option>
             ))}
           </select>
-
           <select
             value={selectedWard}
             onChange={(e) => {
@@ -770,7 +737,6 @@ export default function Home({ initialProfiles = [] }) {
               <option key={ward} value={ward}>{ward}</option>
             ))}
           </select>
-
           <select
             value={selectedArea}
             onChange={(e) => setSelectedArea(e.target.value)}
@@ -784,7 +750,6 @@ export default function Home({ initialProfiles = [] }) {
             ))}
           </select>
         </div>
-
         <div className={styles.profiles} role="list">
           {filteredProfiles.map((p) => <ProfileCard key={p.id} p={p} />)}
           {error && <p className={styles.noProfiles} style={{ color: 'red' }}>{error}</p>}
@@ -810,7 +775,6 @@ export default function Home({ initialProfiles = [] }) {
           {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
         </div>
       </main>
-
       {showLogin && (
         <Modal title="Login" onClose={() => setShowLogin(false)} ref={loginModalRef}>
           <form onSubmit={handleLogin}>
@@ -843,7 +807,6 @@ export default function Home({ initialProfiles = [] }) {
           </form>
         </Modal>
       )}
-
       {showRegister && (
         <Modal title="Register" onClose={() => setShowRegister(false)} ref={registerModalRef}>
           <form onSubmit={handleRegister}>
@@ -883,7 +846,6 @@ export default function Home({ initialProfiles = [] }) {
           </form>
         </Modal>
       )}
-
       <footer className={styles.footer}>
         <div className={styles.footerLinks}>
           <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
@@ -901,7 +863,7 @@ export async function getStaticProps() {
     const q = query(
       collection(firestore, 'profiles'),
       orderBy('createdAt', 'desc'),
-      limit(40) // Reduced to avoid large page data warning
+      limit(40)
     );
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
