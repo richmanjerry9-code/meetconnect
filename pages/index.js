@@ -1,3 +1,4 @@
+// pages/index.js
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -500,47 +501,79 @@ export default function Home({ initialProfiles = [] }) {
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
   // FINAL PROFILE CARD — PERFECT SCROLLING USING <Link> (no touch handlers needed)
   const ProfileCard = memo(({ p }) => {
+    const router = useRouter();
+    const cardRef = useRef(null);
+    const touchStartRef = useRef({ x: 0, y: 0 });
+    const isScrollingRef = useRef(false);
+    useEffect(() => {
+      const card = cardRef.current;
+      if (!card) return;
+      const handleTouchStart = (e) => {
+        touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        isScrollingRef.current = false;
+      };
+      const handleTouchMove = (e) => {
+        const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
+        const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
+        if (dx > 10 || dy > 10) {
+          isScrollingRef.current = true;
+        }
+      };
+      const handleTouchEnd = () => {
+        if (!isScrollingRef.current) {
+          router.push(`/view-profile/${encodeURIComponent(p.username)}`);
+        }
+      };
+      card.addEventListener('touchstart', handleTouchStart);
+      card.addEventListener('touchmove', handleTouchMove);
+      card.addEventListener('touchend', handleTouchEnd);
+      return () => {
+        card.removeEventListener('touchstart', handleTouchStart);
+        card.removeEventListener('touchmove', handleTouchMove);
+        card.removeEventListener('touchend', handleTouchEnd);
+      };
+    }, [p.username, router]);
+    const handleClick = (e) => {
+      e.preventDefault();
+      router.push(`/view-profile/${encodeURIComponent(p.username)}`);
+    };
     if (!p?.username?.trim()) return null;
     const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
     return (
-      <Link href={`/view-profile/${encodeURIComponent(p.username)}`} passHref legacyBehavior>
-        <a className={styles.profileLink}>
-          <div className={styles.profileCard} role="listitem">
-            <div className={styles.imageContainer}>
-              <Image
-                src={p.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgYT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='}
-                alt={`${p.name} Profile`}
-                width={150}
-                height={150}
-                className={styles.profileImage}
-                loading="lazy"
-                sizes="(max-width: 768px) 100vw, 150px"
-                quality={75}
-                placeholder="blur"
-                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
-              />
-              {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
-            </div>
-            <div className={styles.profileInfo}>
-              <h3>{p.name}</h3>
-              {p.membership && p.membership !== 'Regular' && (
-                <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
-              )}
-            </div>
-            <p className={styles.location}>{locationDisplay}</p>
-            {p.services && p.services.length > 0 && (
-              <div className={styles.services}>
-                {p.services.slice(0, 3).map((s, idx) => (
-                  <span key={idx} className={styles.serviceTag}>{s}</span>
-                ))}
-              </div>
-            )}
-            {p.phone && (
-              <p><a href={`tel:${p.phone}`} className={styles.phoneLink}>{p.phone}</a></p>
-            )}
+      <div ref={cardRef} className={styles.profileCard} role="listitem" onClick={handleClick}>
+        <div className={styles.imageContainer}>
+          <Image
+            src={p.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVlZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgYT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='}
+            alt={`${p.name} Profile`}
+            width={150}
+            height={150}
+            className={styles.profileImage}
+            loading="lazy"
+            sizes="(max-width: 768px) 100vw, 150px"
+            quality={75}
+            placeholder="blur"
+            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
+          />
+          {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+        </div>
+        <div className={styles.profileInfo}>
+          <h3>{p.name}</h3>
+          {p.membership && p.membership !== 'Regular' && (
+            <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
+          )}
+        </div>
+        <p className={styles.location}>{locationDisplay}</p>
+        {p.services && p.services.length > 0 && (
+          <div className={styles.services}>
+            {p.services.slice(0, 3).map((s, idx) => (
+              <span key={idx} className={styles.serviceTag}>{s}</span>
+            ))}
           </div>
-        </a>
-      </Link>
+        )}
+        {p.phone && (
+          <p><a href={`tel:${p.phone}`} className={styles.phoneLink}>{p.phone}</a></p>
+        )}
+      </div>
     );
   });
   ProfileCard.displayName = 'ProfileCard';
