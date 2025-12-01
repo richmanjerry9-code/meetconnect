@@ -1,4 +1,4 @@
-.container {
+ .container {
   padding: 20px;
   font-family: Arial, sans-serif;
   max-width: 1200px;
@@ -279,52 +279,43 @@
   50% { opacity: 1; }
   100% { opacity: 0.6; }
 }
-
 /* Force scrollbar always visible on mobile */
 @media (max-width: 768px) { /* Adjust breakpoint as needed for phones */
-  body {
+  :global(body) {
     overflow-y: scroll; /* Always show vertical scrollbar */
     -webkit-overflow-scrolling: touch; /* Enable smooth momentum scrolling on iOS */
   }
-
   /* Customize scrollbar for better visibility on mobile */
-  body::-webkit-scrollbar {
+  :global(body::-webkit-scrollbar) {
     width: 12px; /* Thicker for easy touch */
     -webkit-appearance: none; /* Override default hidden style */
   }
-
-  body::-webkit-scrollbar-track {
+  :global(body::-webkit-scrollbar-track) {
     background: #f1f1f1; /* Light track color */
     border-radius: 10px;
   }
-
-  body::-webkit-scrollbar-thumb {
+  :global(body::-webkit-scrollbar-thumb) {
     background: #888; /* Thumb color */
     border-radius: 10px;
     border: 2px solid #f1f1f1; /* Padding around thumb */
   }
-
-  body::-webkit-scrollbar-thumb:hover {
+  :global(body::-webkit-scrollbar-thumb:hover) {
     background: #555; /* Darker on hover/touch */
   }
 }
-
 /* Optional: If you want the profiles container to have its own scrollbar (instead of page-level) */
 .profiles {
   max-height: calc(100vh - 150px); /* Adjust based on header/footer height to fit screen */
   overflow-y: scroll; /* Make this div scrollable */
   -webkit-overflow-scrolling: touch;
 }
-
 /* Customize scrollbar for .profiles if using the optional approach */
 .profiles::-webkit-scrollbar {
   width: 12px;
 }
-
 .profiles::-webkit-scrollbar-track {
   background: #f1f1f1;
 }
-
 .profiles::-webkit-scrollbar-thumb {
   background: #888;
   border-radius: 10px;
