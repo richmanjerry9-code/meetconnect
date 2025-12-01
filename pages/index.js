@@ -1,3 +1,4 @@
+
 // pages/index.js
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
@@ -102,6 +103,7 @@ export default function Home({ initialProfiles = [] }) {
   const sentinelRef = useRef(null);
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
+  const [shuffleKey, setShuffleKey] = useState(0);
   // GOD MODE: FULL PAGE CACHE + INSTANT BACK BUTTON + NO SKELETON FLASH
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -306,6 +308,13 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}, ${area}`);
     setFilteredLocations([]);
   };
+  // Periodic shuffling every 40 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setShuffleKey(prev => prev + 1);
+    }, 40000);
+    return () => clearInterval(interval);
+  }, []);
   const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
@@ -330,13 +339,16 @@ export default function Home({ initialProfiles = [] }) {
         groups.Regular.push(p);
       }
     });
+    Object.keys(groups).forEach(key => {
+      groups[key].sort(() => Math.random() - 0.5);
+    });
     let ordered = [];
     if (groups.VVIP.length > 0) ordered = ordered.concat(groups.VVIP);
     ordered = ordered.concat(groups.VIP);
     ordered = ordered.concat(groups.Prime);
     ordered = ordered.concat(groups.Regular);
     return ordered;
-  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]);
+  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority, shuffleKey]);
   // Form validation
   const validateForm = (form, isRegister = false) => {
     if (isRegister) {
