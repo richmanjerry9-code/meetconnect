@@ -279,3 +279,20 @@
   50% { opacity: 1; }
   100% { opacity: 0.6; }
 }
+/* Optional: If you want the profiles container to have its own scrollbar (instead of page-level) */
+.profiles {
+  max-height: calc(100vh - 150px); /* Adjust based on header/footer height to fit screen */
+  overflow-y: scroll; /* Make this div scrollable */
+  -webkit-overflow-scrolling: touch;
+}
+/* Customize scrollbar for .profiles if using the optional approach */
+.profiles::-webkit-scrollbar {
+  width: 12px;
+}
+.profiles::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+.profiles::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 10px;
+}
