@@ -1,4 +1,3 @@
-// pages/index.js
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -28,7 +27,6 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
-
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -41,7 +39,6 @@ function useDebounce(value, delay) {
   }, [value, delay]);
   return debouncedValue;
 }
-
 // Helper to check profile completeness
 const isProfileComplete = (p) => {
   return (
@@ -60,7 +57,6 @@ const isProfileComplete = (p) => {
     p.area.trim() !== ''
   );
 };
-
 // BULLETPROOF TIMESTAMP CONVERTER — handles every possible Timestamp
 const convertTimestamps = (obj) => {
   if (!obj) return obj;
@@ -79,7 +75,6 @@ const convertTimestamps = (obj) => {
   }
   return obj;
 };
-
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
@@ -106,8 +101,6 @@ export default function Home({ initialProfiles = [] }) {
   const sentinelRef = useRef(null);
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
-  const [shuffleKey, setShuffleKey] = useState(0);
-
   // GOD MODE: FULL PAGE CACHE + INSTANT BACK BUTTON + NO SKELETON FLASH
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -117,7 +110,6 @@ export default function Home({ initialProfiles = [] }) {
       setAllProfiles(profiles);
       setTimeout(() => window.scrollTo(0, scroll), 10);
     }
-
     const saveState = () => {
       sessionStorage.setItem(KEY, JSON.stringify({
         profiles: allProfiles,
@@ -125,11 +117,9 @@ export default function Home({ initialProfiles = [] }) {
         timestamp: Date.now()
       }));
     };
-
     router.events.on('routeChangeStart', saveState);
     return () => router.events.off('routeChangeStart', saveState);
   }, [allProfiles, router]);
-
   // Auth state listener with auto-fix for missing profiles and localStorage cache
   useEffect(() => {
     setUserLoading(true);
@@ -170,7 +160,6 @@ export default function Home({ initialProfiles = [] }) {
     });
     return unsubscribe;
   }, []);
-
   // Real-time listener for profiles with onSnapshot (filter complete profiles), delayed for initial load
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -201,7 +190,6 @@ export default function Home({ initialProfiles = [] }) {
       }
     };
   }, []);
-
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
     const cacheKey = `profiles_loadmore_${lastDoc.id}`;
@@ -243,7 +231,6 @@ export default function Home({ initialProfiles = [] }) {
       setIsLoadingMore(false);
     }
   }, [isLoadingMore, hasMore, lastDoc]);
-
   // IntersectionObserver for infinite scroll
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -264,7 +251,6 @@ export default function Home({ initialProfiles = [] }) {
       }
     };
   }, [hasMore, isLoadingMore, loadMoreProfiles]);
-
   // Filter locations for search
   useEffect(() => {
     if (!debouncedSearchLocation || !Counties) return setFilteredLocations([]);
@@ -284,7 +270,6 @@ export default function Home({ initialProfiles = [] }) {
     });
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
-
   // Auto-detect and set filters if search term exactly matches a known ward
   useEffect(() => {
     if (!debouncedSearchLocation) {
@@ -313,7 +298,6 @@ export default function Home({ initialProfiles = [] }) {
       setFilteredLocations([]);
     }
   }, [debouncedSearchLocation]);
-
   const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
@@ -321,17 +305,7 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}, ${area}`);
     setFilteredLocations([]);
   };
-
-  // Periodic shuffling every 40 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setShuffleKey(prev => prev + 1);
-    }, 40000);
-    return () => clearInterval(interval);
-  }, []);
-
   const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
-
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter((p) => {
@@ -355,17 +329,13 @@ export default function Home({ initialProfiles = [] }) {
         groups.Regular.push(p);
       }
     });
-    Object.keys(groups).forEach(key => {
-      groups[key].sort(() => Math.random() - 0.5);
-    });
     let ordered = [];
     if (groups.VVIP.length > 0) ordered = ordered.concat(groups.VVIP);
     ordered = ordered.concat(groups.VIP);
     ordered = ordered.concat(groups.Prime);
     ordered = ordered.concat(groups.Regular);
     return ordered;
-  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority, shuffleKey]);
-
+  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]);
   // Form validation
   const validateForm = (form, isRegister = false) => {
     if (isRegister) {
@@ -382,7 +352,6 @@ export default function Home({ initialProfiles = [] }) {
     }
     return null;
   };
-
   // Registration
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -416,7 +385,6 @@ export default function Home({ initialProfiles = [] }) {
       setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Error during registration. Try again.');
     }
   };
-
   // Login
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -497,12 +465,10 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
     }
   };
-
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
   };
-
   // ESC key for modals
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -514,7 +480,6 @@ export default function Home({ initialProfiles = [] }) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
-
   // Click outside to close modals
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -530,17 +495,13 @@ export default function Home({ initialProfiles = [] }) {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLogin, showRegister]);
-
   const countyOptions = Object.keys(Counties);
   const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
-
   // FINAL PROFILE CARD — PERFECT SCROLLING USING <Link> (no touch handlers needed)
   const ProfileCard = memo(({ p }) => {
     if (!p?.username?.trim()) return null;
-
     const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
-
     return (
       <Link href={`/view-profile/${encodeURIComponent(p.username)}`} passHref legacyBehavior>
         <a className={styles.profileLink}>
@@ -583,7 +544,6 @@ export default function Home({ initialProfiles = [] }) {
     );
   });
   ProfileCard.displayName = 'ProfileCard';
-
   const Modal = forwardRef(({ children, title, onClose }, ref) => (
     <div className={styles.modal} ref={ref}>
       <div className={styles.modalContent}>
@@ -594,7 +554,6 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   ));
   Modal.displayName = 'Modal';
-
   if (userLoading) {
     return (
       <div className={styles.container}>
@@ -645,7 +604,6 @@ export default function Home({ initialProfiles = [] }) {
       </div>
     );
   }
-
   return (
     <div className={styles.container}>
       <Head>
@@ -690,21 +648,6 @@ export default function Home({ initialProfiles = [] }) {
             className={styles.searchInput}
             aria-label="Search by location"
           />
-          {filteredLocations.length > 0 && (
-            <div className={styles.dropdown} role="listbox">
-              {filteredLocations.map((loc, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => handleLocationSelect(loc.ward, loc.area, loc.county)}
-                  className={styles.dropdownItem}
-                  role="option"
-                  aria-selected="false"
-                >
-                  {loc.county}, {loc.ward}, {loc.area}
-                </div>
-              ))}
-            </div>
-          )}
         </div>
         <div className={styles.filters}>
           <select
@@ -855,7 +798,6 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   );
 }
-
 // FINAL BULLETPROOF getStaticProps
 export async function getStaticProps() {
   let initialProfiles = [];
@@ -875,7 +817,6 @@ export async function getStaticProps() {
   } catch (err) {
     console.error('Error fetching homepage profiles:', err);
   }
-
   return {
     props: { initialProfiles },
     revalidate: 60,
