@@ -1,4 +1,5 @@
 // pages/index.js
+'use client'; // For client-side components like Virtuoso
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -28,6 +29,10 @@ import {
   signOut,
   onAuthStateChanged
 } from 'firebase/auth';
+import { motion } from 'framer-motion';
+import { Virtuoso } from 'react-virtuoso';
+import { Suspense } from 'react';
+
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -40,6 +45,7 @@ function useDebounce(value, delay) {
   }, [value, delay]);
   return debouncedValue;
 }
+
 // Helper to check profile completeness
 const isProfileComplete = (p) => {
   return (
@@ -58,6 +64,7 @@ const isProfileComplete = (p) => {
     p.area.trim() !== ''
   );
 };
+
 // BULLETPROOF TIMESTAMP CONVERTER — handles every possible Timestamp
 const convertTimestamps = (obj) => {
   if (!obj) return obj;
@@ -76,6 +83,7 @@ const convertTimestamps = (obj) => {
   }
   return obj;
 };
+
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
@@ -99,9 +107,9 @@ export default function Home({ initialProfiles = [] }) {
   const [loginLoading, setLoginLoading] = useState(false);
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
-  const sentinelRef = useRef(null);
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
+
   // GOD MODE: FULL PAGE CACHE + INSTANT BACK BUTTON + NO SKELETON FLASH
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -121,6 +129,7 @@ export default function Home({ initialProfiles = [] }) {
     router.events.on('routeChangeStart', saveState);
     return () => router.events.off('routeChangeStart', saveState);
   }, [allProfiles, router]);
+
   // Auth state listener with auto-fix for missing profiles and localStorage cache
   useEffect(() => {
     setUserLoading(true);
@@ -161,39 +170,40 @@ export default function Home({ initialProfiles = [] }) {
     });
     return unsubscribe;
   }, []);
-  // Real-time listener for profiles with onSnapshot (filter complete profiles), delayed for initial load
+
+  // Real-time listener for profiles with onSnapshot (filter complete profiles)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const q = query(
-        collection(firestore, 'profiles'),
-        orderBy('createdAt', 'desc'),
-        limit(30)
-      );
-      unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map((doc) => {
-          const profileData = convertTimestamps(doc.data());
-          return { id: doc.id, ...profileData };
-        });
-        const validProfiles = data.filter(isProfileComplete);
-        setAllProfiles(validProfiles);
-        setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-        setHasMore(snapshot.size === 30);
-        setError(null);
-      }, (err) => {
-        console.error('Snapshot error:', err);
-        setError('Failed to load profiles in real-time. Please refresh.');
+    const clauses = [orderBy('createdAt', 'desc'), limit(30)];
+    if (selectedCounty) clauses.push(where('county', '==', selectedCounty));
+    if (selectedWard) clauses.push(where('ward', '==', selectedWard));
+    if (selectedArea) clauses.push(where('area', '==', selectedArea));
+    const q = query(collection(firestore, 'profiles'), ...clauses);
+
+    unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => {
+        const profileData = convertTimestamps(doc.data());
+        return { id: doc.id, ...profileData };
       });
-    }, 1000);
+      const validProfiles = data.filter(isProfileComplete);
+      setAllProfiles(validProfiles);
+      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
+      setHasMore(snapshot.size === 30);
+      setError(null);
+    }, (err) => {
+      console.error('Snapshot error:', err);
+      setError('Failed to load profiles in real-time. Please refresh.');
+    });
+
     return () => {
-      clearTimeout(timer);
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
       }
     };
-  }, []);
+  }, [selectedCounty, selectedWard, selectedArea]);
+
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
-    const cacheKey = `profiles_loadmore_${lastDoc.id}`;
+    const cacheKey = `profiles_loadmore_${lastDoc.id}_${selectedCounty}_${selectedWard}_${selectedArea}`;
     if (cacheRef.current.has(cacheKey)) {
       const cachedData = cacheRef.current.get(cacheKey);
       setAllProfiles(prev => [...prev, ...cachedData.profiles]);
@@ -205,12 +215,11 @@ export default function Home({ initialProfiles = [] }) {
     setError(null);
     setIsLoadingMore(true);
     try {
-      const q = query(
-        collection(firestore, 'profiles'),
-        orderBy('createdAt', 'desc'),
-        startAfter(lastDoc),
-        limit(20)
-      );
+      const clauses = [orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(20)];
+      if (selectedCounty) clauses.push(where('county', '==', selectedCounty));
+      if (selectedWard) clauses.push(where('ward', '==', selectedWard));
+      if (selectedArea) clauses.push(where('area', '==', selectedArea));
+      const q = query(collection(firestore, 'profiles'), ...clauses);
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map((doc) => {
         const profileData = convertTimestamps(doc.data());
@@ -231,27 +240,8 @@ export default function Home({ initialProfiles = [] }) {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, hasMore, lastDoc]);
-  // IntersectionObserver for infinite scroll
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasMore && !isLoadingMore) {
-          loadMoreProfiles();
-        }
-      },
-      { threshold: 0 }
-    );
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-      observer.observe(currentSentinel);
-    }
-    return () => {
-      if (currentSentinel) {
-        observer.unobserve(currentSentinel);
-      }
-    };
-  }, [hasMore, isLoadingMore, loadMoreProfiles]);
+  }, [isLoadingMore, hasMore, lastDoc, selectedCounty, selectedWard, selectedArea]);
+
   // Filter locations for search
   useEffect(() => {
     if (!debouncedSearchLocation || !Counties) return setFilteredLocations([]);
@@ -271,6 +261,7 @@ export default function Home({ initialProfiles = [] }) {
     });
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
+
   // Auto-detect and set filters if search term exactly matches a known ward
   useEffect(() => {
     if (!debouncedSearchLocation) {
@@ -299,6 +290,7 @@ export default function Home({ initialProfiles = [] }) {
       setFilteredLocations([]);
     }
   }, [debouncedSearchLocation]);
+
   const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
@@ -306,20 +298,20 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}, ${area}`);
     setFilteredLocations([]);
   };
+
   const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
+
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter((p) => {
-      const countyMatch = selectedCounty ? p.county === selectedCounty : true;
-      const wardMatch = selectedWard ? p.ward === selectedWard : true;
-      const areaMatch = selectedArea ? p.area === selectedArea : true;
+      // Since server filters for selected, only apply search here
       const searchMatch = debouncedSearchLocation
         ? [p.county || '', p.ward || '', p.area || '', ...(p.nearby || [])]
             .map(s => s.toLowerCase())
             .join(' ')
             .includes(searchTerm)
         : true;
-      return countyMatch && wardMatch && areaMatch && searchMatch;
+      return searchMatch;
     });
     const groups = { VIP: [], Prime: [], Regular: [], VVIP: [] };
     filtered.forEach(p => {
@@ -336,7 +328,8 @@ export default function Home({ initialProfiles = [] }) {
     ordered = ordered.concat(groups.Prime);
     ordered = ordered.concat(groups.Regular);
     return ordered;
-  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty, membershipPriority]);
+  }, [allProfiles, debouncedSearchLocation, membershipPriority]);
+
   // Form validation
   const validateForm = (form, isRegister = false) => {
     if (isRegister) {
@@ -353,6 +346,7 @@ export default function Home({ initialProfiles = [] }) {
     }
     return null;
   };
+
   // Registration
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -386,6 +380,7 @@ export default function Home({ initialProfiles = [] }) {
       setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Error during registration. Try again.');
     }
   };
+
   // Login
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -466,10 +461,12 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
     }
   };
+
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
   };
+
   // ESC key for modals
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -481,6 +478,7 @@ export default function Home({ initialProfiles = [] }) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
+
   // Click outside to close modals
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -496,11 +494,13 @@ export default function Home({ initialProfiles = [] }) {
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showLogin, showRegister]);
+
   const countyOptions = Object.keys(Counties);
   const wardOptions = selectedCounty && Counties[selectedCounty] ? Object.keys(Counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && Counties[selectedCounty][selectedWard] ? Counties[selectedCounty][selectedWard] : [];
+
   // FINAL PROFILE CARD — PERFECT SCROLLING USING <Link> (no touch handlers needed)
-  const ProfileCard = memo(({ p }) => {
+  const ProfileCard = memo(({ p, index }) => {
     const router = useRouter();
     const cardRef = useRef(null);
     const touchStartRef = useRef({ x: 0, y: 0 });
@@ -553,6 +553,7 @@ export default function Home({ initialProfiles = [] }) {
             quality={75}
             placeholder="blur"
             blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
+            priority={index < 3}
           />
           {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
         </div>
@@ -577,16 +578,39 @@ export default function Home({ initialProfiles = [] }) {
     );
   });
   ProfileCard.displayName = 'ProfileCard';
+
   const Modal = forwardRef(({ children, title, onClose }, ref) => (
-    <div className={styles.modal} ref={ref}>
+    <motion.div
+      className={styles.modal}
+      ref={ref}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className={styles.modalContent}>
         <h2>{title}</h2>
         <span onClick={onClose} className={styles.close} role="button" aria-label="Close modal">×</span>
         {children}
       </div>
-    </div>
+    </motion.div>
   ));
   Modal.displayName = 'Modal';
+
+  const SkeletonProfiles = ({ count }) => (
+    <div className={styles.profiles}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className={styles.skeletonCard}>
+          <div className={styles.skeletonImage}></div>
+          <div className={styles.skeletonInfo}>
+            <div className={styles.skeletonText}></div>
+            <div className={styles.skeletonTextSmall}></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   if (userLoading) {
     return (
       <div className={styles.container}>
@@ -616,17 +640,7 @@ export default function Home({ initialProfiles = [] }) {
             <select className={styles.select} disabled><option>All Wards</option></select>
             <select className={styles.select} disabled><option>All Areas</option></select>
           </div>
-          <div className={styles.profiles} role="list">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className={styles.skeletonCard}>
-                <div className={styles.skeletonImage}></div>
-                <div className={styles.skeletonInfo}>
-                  <div className={styles.skeletonText}></div>
-                  <div className={styles.skeletonTextSmall}></div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <SkeletonProfiles count={5} />
         </main>
         <footer className={styles.footer}>
           <div className={styles.footerLinks}>
@@ -637,6 +651,7 @@ export default function Home({ initialProfiles = [] }) {
       </div>
     );
   }
+
   return (
     <div className={styles.container}>
       <Head>
@@ -726,30 +741,22 @@ export default function Home({ initialProfiles = [] }) {
             ))}
           </select>
         </div>
-        <div className={styles.profiles} role="list">
-          {filteredProfiles.map((p) => <ProfileCard key={p.id} p={p} />)}
-          {error && <p className={styles.noProfiles} style={{ color: 'red' }}>{error}</p>}
-          {isLoadingMore && (
-            <>
-              <p className={styles.noProfiles}>Loading more profiles...</p>
-              {[1,2,3].map((i) => (
-                <div key={i} className={styles.skeletonCard}>
-                  <div className={styles.skeletonImage}></div>
-                  <div className={styles.skeletonInfo}>
-                    <div className={styles.skeletonText}></div>
-                    <div className={styles.skeletonTextSmall}></div>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-          {filteredProfiles.length === 0 && !isLoadingMore && !error && (
-            <p className={styles.noProfiles}>
-              No ladies found. Complete your profile with a photo to appear here.
-            </p>
-          )}
-          {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
-        </div>
+        <Suspense fallback={<SkeletonProfiles count={5} />}>
+          <Virtuoso
+            style={{ height: 'calc(100vh - 200px)' }} // Adjust based on header/footer
+            totalCount={filteredProfiles.length}
+            endReached={loadMoreProfiles}
+            itemContent={(index) => <ProfileCard key={filteredProfiles[index].id} p={filteredProfiles[index]} index={index} />}
+            increaseViewportBy={200}
+            footer={() => isLoadingMore ? <p className={styles.noProfiles}>Loading more profiles...</p> : null}
+          />
+        </Suspense>
+        {error && <p className={styles.noProfiles} style={{ color: 'red' }}>{error}</p>}
+        {filteredProfiles.length === 0 && !isLoadingMore && !error && (
+          <p className={styles.noProfiles}>
+            No ladies found. Complete your profile with a photo to appear here.
+          </p>
+        )}
       </main>
       {showLogin && (
         <Modal title="Login" onClose={() => setShowLogin(false)} ref={loginModalRef}>
@@ -831,6 +838,7 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   );
 }
+
 // FINAL BULLETPROOF getStaticProps
 export async function getStaticProps() {
   let initialProfiles = [];
