@@ -1,4 +1,3 @@
-
 // /pages/inbox/[chatId].js
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
@@ -41,7 +40,7 @@ export default function PrivateChat() {
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
 
-  // ✅ LOAD CHAT + USER
+  // Load chat + other user
   useEffect(() => {
     if (!chatId || !user) return;
 
@@ -73,7 +72,7 @@ export default function PrivateChat() {
         const otherUserDoc = await getDoc(doc(db, "profiles", otherId));
         setOtherUser(otherUserDoc.exists() ? otherUserDoc.data() : null);
 
-        // ✅ RESET MY UNREAD
+        // Reset my unread count
         await setDoc(
           chatRef,
           {
@@ -84,13 +83,13 @@ export default function PrivateChat() {
           { merge: true }
         );
 
-        // ✅ MESSAGE LISTENER
+        // Message listener
         unsubscribeMessages = listenMessages(
           `privateChats/${chatId}/messages`,
           (msgs) => setMessages(Array.isArray(msgs) ? msgs : [])
         );
 
-        // ✅ PIN LISTENER
+        // Pin listener
         unsubscribeChat = onSnapshot(chatRef, (snap) => {
           setPinnedMessages(snap.data()?.pinnedMessages || []);
         });
@@ -105,12 +104,12 @@ export default function PrivateChat() {
     fetchChatDetails();
 
     return () => {
-      if (unsubscribeMessages) unsubscribeMessages();
-      if (unsubscribeChat) unsubscribeChat();
+      unsubscribeMessages?.();
+      unsubscribeChat?.();
     };
   }, [chatId, user]);
 
-  // ✅ MARK AS SEEN
+  // Mark messages as seen
   useEffect(() => {
     if (!messages.length || !user || !chatId) return;
 
@@ -125,7 +124,7 @@ export default function PrivateChat() {
     });
   }, [messages, user, chatId]);
 
-  // ✅ SEND MESSAGE
+  // Send message
   const handleSend = async (text, imageFile) => {
     if (!text && !imageFile) return;
     if (!user || !chatId) return;
@@ -166,7 +165,7 @@ export default function PrivateChat() {
     setReplyingTo(messageId);
   };
 
-  // ✅ ✅ ✅ FULLY FIXED DELETE (UPDATES INBOX PREVIEW)
+  // Delete message (with proper inbox preview update)
   const handleDelete = async (messageId, forEveryone) => {
     if (!user || !chatId) return;
 
@@ -182,7 +181,7 @@ export default function PrivateChat() {
       });
     }
 
-    // ✅ UPDATE LAST MESSAGE FOR INBOX
+    // Update last message preview in inbox
     const q = query(
       collection(db, "privateChats", chatId, "messages"),
       orderBy("timestamp", "desc"),
@@ -205,9 +204,10 @@ export default function PrivateChat() {
     }
   };
 
-  // ✅ PIN MESSAGE
+  // Pin/unpin message
   const handlePin = async (messageId) => {
     if (!user || !chatId) return;
+
     const db = getFirestore();
     const chatRef = doc(db, "privateChats", chatId);
 
@@ -227,15 +227,15 @@ export default function PrivateChat() {
 
   return (
     <div className={styles.chatContainer}>
-      <ChatHeader
-        otherUser={otherUser || {}}
-        onBack={() => router.back()}
-        onProfileClick={() => {
-          if (otherUser?.username) {
-            router.push(`/view-profile/${otherUser.username}`);
-          }
-        }}
-      />
+<ChatHeader
+  otherUser={otherUser || { name: "User" }}   // fallback name if no profile
+  onBack={() => router.back()}
+  onProfileClick={
+    otherUser 
+      ? () => router.push(`/view-profile/${otherUserId}`)
+      : undefined   // ← important: no click if no profile exists
+  }
+/>
 
       <MessageList
         messages={messages}
@@ -248,15 +248,12 @@ export default function PrivateChat() {
 
       {replyingTo && (
         <div className={styles.replyPreview}>
-          Replying to:{" "}
-          {messages.find((m) => m.id === replyingTo)?.text || "(Message)"}
+          Replying to: {messages.find((m) => m.id === replyingTo)?.text || "(Message)"}
           <button onClick={() => setReplyingTo(null)}>Cancel</button>
         </div>
       )}
 
-      <ChatInput onSend={handleSend} />
+      <ChatInput onSend={handleSend} replyingTo={replyingTo} />
     </div>
   );
 }
-
-

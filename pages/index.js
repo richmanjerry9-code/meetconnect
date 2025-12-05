@@ -12,9 +12,6 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, on
 
 /**
  * Custom hook for debouncing values.
- * @param {*} value - Value to debounce
- * @param {number} delay - Debounce delay in ms
- * @returns {*} Debounced value
  */
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -22,18 +19,11 @@ function useDebounce(value, delay) {
     const handler = setTimeout(() => {
       setDebouncedValue(value);
     }, delay);
-    return () => {
-      clearTimeout(handler);
-    };
+    return () => clearTimeout(handler);
   }, [value, delay]);
   return debouncedValue;
 }
 
-/**
- * Checks if a profile is complete based on required fields.
- * @param {Object} p - Profile data
- * @returns {boolean} True if complete
- */
 const isProfileComplete = (p) => {
   return (
     p &&
@@ -46,34 +36,18 @@ const isProfileComplete = (p) => {
   );
 };
 
-/**
- * Recursively converts Firestore timestamps to ISO strings.
- * @param {*} obj - Object to convert
- * @returns {*} Converted object
- */
 const convertTimestamps = (obj) => {
   if (!obj) return obj;
-  if (typeof obj.toDate === 'function') {
-    return obj.toDate().toISOString();
-  }
-  if (Array.isArray(obj)) {
-    return obj.map(convertTimestamps);
-  }
+  if (typeof obj.toDate === 'function') return obj.toDate().toISOString();
+  if (Array.isArray(obj)) return obj.map(convertTimestamps);
   if (typeof obj === 'object') {
     const result = {};
-    for (const key in obj) {
-      result[key] = convertTimestamps(obj[key]);
-    }
+    for (const key in obj) result[key] = convertTimestamps(obj[key]);
     return result;
   }
   return obj;
 };
 
-/**
- * Home page component displaying profiles with search, filters, and auth modals.
- * @param {Object} props - Component props
- * @param {Array} props.initialProfiles - Initial profiles for SSR
- */
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
@@ -92,9 +66,12 @@ export default function Home({ initialProfiles = [] }) {
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [protectedFeature, setProtectedFeature] = useState('');
+  const [pendingPath, setPendingPath] = useState(null); // ← remembers where user wanted to go
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
   const [loginLoading, setLoginLoading] = useState(false);
+
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
   const sentinelRef = useRef(null);
@@ -102,18 +79,16 @@ export default function Home({ initialProfiles = [] }) {
   const unsubscribeRef = useRef(null);
   const allProfilesRef = useRef(allProfiles);
 
-  useEffect(() => {
-    allProfilesRef.current = allProfiles;
-  }, [allProfiles]);
+  useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);
 
-  // Load from session ONCE on mount
+  // Session storage restore
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
     const saved = sessionStorage.getItem(KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Date.now() - parsed.timestamp < 300000) { // 5 minutes
+        if (Date.now() - parsed.timestamp < 300000) {
           setAllProfiles(parsed.profiles);
           setTimeout(() => window.scrollTo(0, parsed.scroll), 10);
         } else {
@@ -124,32 +99,28 @@ export default function Home({ initialProfiles = [] }) {
         sessionStorage.removeItem(KEY);
       }
     }
-  }, []); // Run only once
+  }, []);
 
-  // Bind save on navigation (with fresh ref)
+  // Save scroll + profiles on navigation
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
     const saveState = () => {
-      sessionStorage.setItem(
-        KEY,
-        JSON.stringify({
-          profiles: allProfilesRef.current,
-          scroll: window.scrollY,
-          timestamp: Date.now(),
-        })
-      );
+      sessionStorage.setItem(KEY, JSON.stringify({
+        profiles: allProfilesRef.current,
+        scroll: window.scrollY,
+        timestamp: Date.now(),
+      }));
     };
     router.events.on('routeChangeStart', saveState);
     return () => router.events.off('routeChangeStart', saveState);
-  }, [router]); // No allProfiles dep needed
+  }, [router]);
 
-  // Authentication state management
+  // Auth state
   useEffect(() => {
     setUserLoading(true);
     const storedUser = localStorage.getItem('loggedInUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    if (storedUser) setUser(JSON.parse(storedUser));
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
@@ -184,19 +155,12 @@ export default function Home({ initialProfiles = [] }) {
     return unsubscribe;
   }, []);
 
-  // Real-time profile listener
+  // Real-time profiles
   useEffect(() => {
     const timer = setTimeout(() => {
-      const q = query(
-        collection(firestore, 'profiles'),
-        orderBy('createdAt', 'desc'),
-        limit(30)
-      );
+      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(30));
       unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map((doc) => {
-          const profileData = convertTimestamps(doc.data());
-          return { id: doc.id, ...profileData };
-        });
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
         const validProfiles = data.filter(isProfileComplete);
         setAllProfiles(validProfiles);
         setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
@@ -209,19 +173,17 @@ export default function Home({ initialProfiles = [] }) {
     }, 1000);
     return () => {
       clearTimeout(timer);
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-      }
+      if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
 
-  // Load more profiles on scroll
+  // Load more profiles
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
     const cacheKey = `profiles_loadmore_${lastDoc.id}`;
     if (cacheRef.current.has(cacheKey)) {
       const cachedData = cacheRef.current.get(cacheKey);
-      setAllProfiles((prev) => [...prev, ...cachedData.profiles]);
+      setAllProfiles(prev => [...prev, ...cachedData.profiles]);
       setLastDoc(cachedData.lastDoc);
       setHasMore(cachedData.hasMore);
       setIsLoadingMore(false);
@@ -230,25 +192,17 @@ export default function Home({ initialProfiles = [] }) {
     setError(null);
     setIsLoadingMore(true);
     try {
-      const q = query(
-        collection(firestore, 'profiles'),
-        orderBy('createdAt', 'desc'),
-        startAfter(lastDoc),
-        limit(20)
-      );
+      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(20));
       const snapshot = await getDocs(q);
-      const data = snapshot.docs.map((doc) => {
-        const profileData = convertTimestamps(doc.data());
-        return { id: doc.id, ...profileData };
-      });
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
       const validProfiles = data.filter(isProfileComplete);
-      setAllProfiles((prev) => [...prev, ...validProfiles]);
+      setAllProfiles(prev => [...prev, ...validProfiles]);
       setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
       setHasMore(snapshot.size === 20);
       cacheRef.current.set(cacheKey, {
         profiles: validProfiles,
         lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null,
-        hasMore: snapshot.size === 20
+        hasMore: snapshot.size === 20,
       });
     } catch (err) {
       console.error('Error fetching more profiles:', err);
@@ -260,37 +214,23 @@ export default function Home({ initialProfiles = [] }) {
 
   // Infinite scroll observer
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting && hasMore && !isLoadingMore) {
-          loadMoreProfiles();
-        }
-      },
-      { threshold: 0 }
-    );
-    const currentSentinel = sentinelRef.current;
-    if (currentSentinel) {
-      observer.observe(currentSentinel);
-    }
-    return () => {
-      if (currentSentinel) {
-        observer.unobserve(currentSentinel);
-      }
-    };
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && hasMore && !isLoadingMore) loadMoreProfiles();
+    }, { threshold: 0 });
+    if (sentinelRef.current) observer.observe(sentinelRef.current);
+    return () => { if (sentinelRef.current) observer.unobserve(sentinelRef.current); };
   }, [hasMore, isLoadingMore, loadMoreProfiles]);
 
   // Location search filtering
   useEffect(() => {
-    if (!debouncedSearchLocation || !counties) return setFilteredLocations([]);
+    if (!debouncedSearchLocation) return setFilteredLocations([]);
     const matches = [];
-    Object.keys(counties).forEach((county) => {
-      Object.keys(counties[county]).forEach((ward) => {
-        counties[county][ward].forEach((area) => {
-          if (
-            area.toLowerCase().includes(debouncedSearchLocation.toLowerCase()) ||
-            ward.toLowerCase().includes(debouncedSearchLocation.toLowerCase()) ||
-            county.toLowerCase().includes(debouncedSearchLocation.toLowerCase())
-          ) {
+    Object.keys(counties).forEach(county => {
+      Object.keys(counties[county]).forEach(ward => {
+        counties[county][ward].forEach(area => {
+          if (area.toLowerCase().includes(debouncedSearchLocation.toLowerCase()) ||
+              ward.toLowerCase().includes(debouncedSearchLocation.toLowerCase()) ||
+              county.toLowerCase().includes(debouncedSearchLocation.toLowerCase())) {
             matches.push({ county, ward, area });
           }
         });
@@ -299,34 +239,29 @@ export default function Home({ initialProfiles = [] }) {
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
 
-  // Auto-set filters for exact ward matches
+  // Auto-set ward if exact match
   useEffect(() => {
     if (!debouncedSearchLocation) {
       setSelectedWard('');
       setSelectedCounty('');
       return;
     }
-    const lowerSearch = debouncedSearchLocation.trim().toLowerCase();
-    let foundWard = null;
-    let foundCounty = null;
-    Object.keys(counties).some((county) =>
-      Object.keys(counties[county]).some((ward) => {
-        if (ward.toLowerCase() === lowerSearch) {
-          foundWard = ward;
-          foundCounty = county;
-          return true;
-        }
-        return false;
-      })
-    );
+    const lower = debouncedSearchLocation.trim().toLowerCase();
+    let foundWard = null, foundCounty = null;
+    Object.keys(counties).some(county => Object.keys(counties[county]).some(ward => {
+      if (ward.toLowerCase() === lower) {
+        foundWard = ward;
+        foundCounty = county;
+        return true;
+      }
+      return false;
+    }));
     if (foundWard && foundCounty) {
       setSelectedCounty(foundCounty);
       setSelectedWard(foundWard);
       setSelectedArea('');
       const formatted = `${foundCounty}, ${foundWard}`;
-      if (searchLocation !== formatted) {
-        setSearchLocation(formatted);
-      }
+      if (searchLocation !== formatted) setSearchLocation(formatted);
       setFilteredLocations([]);
     }
   }, [debouncedSearchLocation, searchLocation]);
@@ -335,24 +270,20 @@ export default function Home({ initialProfiles = [] }) {
     setSelectedCounty(county);
     setSelectedWard(ward);
     setSelectedArea(area);
-    setSearchLocation(`${county}, ${ward}, ${area}`);
+    setSearchLocation(`${county}, ${ward}${area ? `, ${area}` : ''}`);
     setFilteredLocations([]);
   };
 
   const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
 
-  // Filtered and sorted profiles
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
-    let filtered = allProfiles.filter((p) => {
+    let filtered = allProfiles.filter(p => {
       const countyMatch = selectedCounty ? p.county === selectedCounty : true;
       const wardMatch = selectedWard ? p.ward === selectedWard : true;
       const areaMatch = selectedArea ? p.area === selectedArea : true;
       const searchMatch = debouncedSearchLocation
-        ? [p.county || '', p.ward || '', p.area || '', ...(p.nearby || [])]
-            .map(s => s.toLowerCase())
-            .join(' ')
-            .includes(searchTerm)
+        ? [p.county || '', p.ward || '', p.area || '', ...(p.nearby || [])].map(s => s.toLowerCase()).join(' ').includes(searchTerm)
         : true;
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
@@ -364,234 +295,215 @@ export default function Home({ initialProfiles = [] }) {
     return [...groups.VVIP, ...groups.VIP, ...groups.Prime, ...groups.Regular];
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
 
-  // Form validation
-  const validateForm = (form, isRegister = false) => {
-    if (isRegister) {
-      if (!form.name?.trim()) return 'Please enter your full name.';
-      if (!form.email?.trim()) return 'Please enter your email.';
-      if (form.email && !/\S+@\S+\.\S+/.test(form.email)) return 'Please enter a valid email.';
-      if (!form.password?.trim()) return 'Please enter a password.';
-      if (form.password.length < 8) return 'Password must be at least 8 characters.';
+  // Protected navigation — remembers intended destination
+  const handleAccessProtected = (path, featureName) => {
+    if (user) {
+      router.push(path);
     } else {
-      if (!form.email?.trim()) return 'Please enter your email.';
-      if (form.email && !/\S+@\S+\.\S+/.test(form.email)) return 'Please enter a valid email.';
-      if (!form.password?.trim()) return 'Please enter your password.';
-      if (form.password.length < 6) return 'Password must be at least 6 characters.';
+      setPendingPath(path);
+      setProtectedFeature(featureName);
+      setShowLogin(true);
     }
-    return null;
   };
 
-  // Handle user registration
+  // Login handler — redirects to pendingPath after success
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setLoginLoading(true);
+
+    const trimmedEmail = loginForm.email.trim().toLowerCase();
+    const trimmedPassword = loginForm.password.trim();
+
+    if (!trimmedEmail || !trimmedPassword) {
+      setAuthError('Please enter email and password.');
+      setLoginLoading(false);
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setAuthError('Please enter a valid email address.');
+      setLoginLoading(false);
+      return;
+    }
+
+    try {
+      const { user: firebaseUser } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+      const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
+      let profileData;
+      let isNewUser = false;
+
+      if (profileDoc.exists()) {
+        profileData = { id: profileDoc.id, ...profileDoc.data() };
+      } else {
+        const basicProfile = {
+          uid: firebaseUser.uid,
+          name: firebaseUser.email.split('@')[0],
+          email: firebaseUser.email,
+          username: firebaseUser.email.split('@')[0],
+          membership: 'Regular',
+          createdAt: serverTimestamp(),
+        };
+        await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
+        profileData = { id: firebaseUser.uid, ...basicProfile };
+        isNewUser = true;
+      }
+
+      localStorage.setItem('loggedInUser', JSON.stringify(profileData));
+      setUser(profileData);
+      setAuthError('Login successful!');
+
+      setTimeout(() => {
+        setShowLogin(false);
+        const target = pendingPath || '/'; // if they clicked Group Chat → go there, else stay on home
+        router.push(target);
+        setPendingPath(null);
+        setProtectedFeature('');
+        if (isNewUser) {
+          setTimeout(() => alert('Welcome! Please complete your profile to appear in searches.'), 800);
+        }
+      }, 1500);
+    } catch (err) {
+      console.error('Login error:', err);
+      let msg = 'Login failed. Please try again.';
+      switch (err.code) {
+        case 'auth/invalid-credential': msg = 'Wrong email or password.'; break;
+        case 'auth/user-not-found': msg = 'No account found. Register first!'; break;
+        case 'auth/wrong-password': msg = 'Incorrect password.'; break;
+        case 'auth/too-many-requests': msg = 'Too many attempts. Try again later.'; break;
+        default: msg = 'Something went wrong. Try again.';
+      }
+      setAuthError(msg);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  // Register handler — respects pendingPath
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthError('');
-    const validationError = validateForm(registerForm, true);
-    if (validationError) {
-      setAuthError(validationError);
+    if (!registerForm.name.trim() || !registerForm.email.trim() || registerForm.password.length < 8) {
+      setAuthError('Please fill all fields correctly.');
       return;
     }
+
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, registerForm.email, registerForm.password);
-      const newUserProfile = {
-        uid: user.uid,
+      const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, registerForm.email, registerForm.password);
+      const newProfile = {
+        uid: firebaseUser.uid,
         name: registerForm.name,
         email: registerForm.email,
         username: registerForm.email.split('@')[0],
         membership: 'Regular',
         createdAt: serverTimestamp(),
       };
-      await setDoc(doc(firestore, 'profiles', user.uid), newUserProfile);
-      const fullUser = { id: user.uid, ...newUserProfile };
+      await setDoc(doc(firestore, 'profiles', firebaseUser.uid), newProfile);
+      const fullUser = { id: firebaseUser.uid, ...newProfile };
       localStorage.setItem('loggedInUser', JSON.stringify(fullUser));
       setUser(fullUser);
       setAuthError('Registration successful!');
+
       setTimeout(() => {
-        router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
         setShowRegister(false);
+        const target = pendingPath || '/profile-setup?t=' + Date.now(); // new users go to setup unless they came from protected page
+        router.push(target);
+        setPendingPath(null);
+        setProtectedFeature('');
       }, 1500);
     } catch (err) {
-      console.error('Registration error:', err);
-      setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Error during registration. Try again.');
+      setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Registration failed. Try again.');
     }
   };
 
-  // Handle user login
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    setLoginLoading(true);
-    const { email, password } = loginForm;
-    if (!email || !password) {
-      setAuthError('Please enter email and password.');
-      setLoginLoading(false);
-      return;
-    }
-    const trimmedEmail = email.trim().toLowerCase();
-    const trimmedPassword = password.trim();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(trimmedEmail)) {
-      setAuthError('Please enter a valid email address.');
-      setLoginLoading(false);
-      return;
-    }
-    if (trimmedPassword.length < 6) {
-      setAuthError('Password must be at least 6 characters.');
-      setLoginLoading(false);
-      return;
-    }
-    try {
-      const { user } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-      const profileDoc = await getDoc(doc(firestore, 'profiles', user.uid));
-      let profileData;
-      if (profileDoc.exists()) {
-        profileData = { id: profileDoc.id, ...profileDoc.data() };
-      } else {
-        const basicProfile = {
-          uid: user.uid,
-          name: user.email.split('@')[0],
-          email: user.email,
-          username: user.email.split('@')[0],
-          membership: 'Regular',
-          createdAt: serverTimestamp(),
-        };
-        await setDoc(doc(firestore, 'profiles', user.uid), basicProfile);
-        profileData = { id: user.uid, ...basicProfile };
-        alert('Welcome back! Quick setup needed—let\'s add your details.');
-      }
-      localStorage.setItem('loggedInUser', JSON.stringify(profileData));
-      setUser(profileData);
-      setAuthError('Login successful!');
-      setTimeout(() => {
-        router.push({ pathname: '/profile-setup', query: { t: Date.now() } });
-        setShowLogin(false);
-      }, 1500);
-    } catch (err) {
-      console.error('Login error details:', err.code, err.message);
-      let userMessage = 'Login failed. Please try again.';
-      switch (err.code) {
-        case 'auth/invalid-credential':
-          userMessage = 'Oops! Wrong email or password. Double-check and try again.';
-          break;
-        case 'auth/user-not-found':
-          userMessage = 'No account here yet. Hit Register to join the fun!';
-          break;
-        case 'auth/wrong-password':
-          userMessage = 'Password doesn\'t match. Forgot it? We can add reset later.';
-          break;
-        case 'auth/invalid-email':
-          userMessage = 'That email looks funny—try again?';
-          break;
-        case 'auth/too-many-requests':
-          userMessage = 'Whoa, too many tries! Wait a bit or use a different email.';
-          break;
-        case 'auth/network-request-failed':
-          userMessage = 'Spotty connection? Check WiFi and retry.';
-          break;
-        default:
-          userMessage = 'Something wiggly—try refresh or email support@yourapp.com.';
-      }
-      setAuthError(userMessage);
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  // Handle user logout
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
   };
 
-  // ESC key handler for modals
+  // Close login modal & clear pending path
+  const closeLoginModal = () => {
+    setShowLogin(false);
+    setPendingPath(null);
+    setProtectedFeature('');
+  };
+
+  // ESC & click outside
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handler = (e) => {
       if (e.key === 'Escape') {
         setShowLogin(false);
         setShowRegister(false);
+        setPendingPath(null);
+        setProtectedFeature('');
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  // Click outside handler for modals
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) {
-        setShowLogin(false);
-      }
-      if (showRegister && registerModalRef.current && !registerModalRef.current.contains(e.target)) {
-        setShowRegister(false);
-      }
+    const handler = (e) => {
+      if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) closeLoginModal();
+      if (showRegister && registerModalRef.current && !registerModalRef.current.contains(e.target)) setShowRegister(false);
     };
-    if (showLogin || showRegister) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    if (showLogin || showRegister) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [showLogin, showRegister]);
 
   const countyOptions = Object.keys(counties);
   const wardOptions = selectedCounty && counties[selectedCounty] ? Object.keys(counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];
 
-  // Profile card component
-// ... (rest of the file remains the same, only replace the ProfileCard definition with this)
+  const ProfileCard = memo(({ p }) => {
+    if (!p?.username?.trim()) return null;
+    const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
+    const handlePhoneClick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.location.href = `tel:${p.phone}`;
+    };
 
-const ProfileCard = memo(({ p }) => {
-  if (!p?.username?.trim()) return null;
-  const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
-  const handlePhoneClick = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    window.location.href = `tel:${p.phone}`;
-  };
-  return (
-    <Link href={`/view-profile/${encodeURIComponent(p.username)}`} className={styles.profileLink}>
-      <div className={styles.profileCard} role="listitem">
-        <div className={styles.imageContainer}>
-          <Image
-            src={p.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZGRkIiBzdHJva2U9IiNjY2MiIHN0cm9rZS13aWR0aD0iMSIvPjxjaXJjbGUgY3g9Ijc1IiBjeT0iNTAiIHI9IjMwIiBmaWxsPSIjZWRlZGUiLz48dGV4dCB4PSI3NSIgYT0iMTAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiPk5vIFBpYzwvdGV4dD48L3N2Zz4='}
-            alt={`${p.name} Profile`}
-            width={150}
-            height={150}
-            className={styles.profileImage}
-            loading="lazy"
-            sizes="(max-width: 768px) 100vw, 150px"
-            quality={75}
-            placeholder="blur"
-            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
-          />
-          {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
-        </div>
-        <div className={styles.profileInfo}>
-          <h3>{p.name}</h3>
-          {p.membership && p.membership !== 'Regular' && (
-            <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
+    return (
+      <Link href={`/view-profile/${p.id}`} className={styles.profileLink}>
+        <div className={styles.profileCard} role="listitem">
+          <div className={styles.imageContainer}>
+            <Image
+              src={p.profilePic || '/no-photo-placeholder.svg'}
+              alt={`${p.name} Profile`}
+              width={150}
+              height={150}
+              className={styles.profileImage}
+              loading="lazy"
+              sizes="(max-width: 768px) 100vw, 150px"
+              quality={75}
+              placeholder="blur"
+              blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q=="
+            />
+            {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+          </div>
+          <div className={styles.profileInfo}>
+            <h3>{p.name}</h3>
+            {p.membership && p.membership !== 'Regular' && (
+              <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
+            )}
+          </div>
+          <p className={styles.location}>{locationDisplay}</p>
+          {p.services?.length > 0 && (
+            <div className={styles.services}>
+              {p.services.slice(0, 3).map((s, i) => <span key={i} className={styles.serviceTag}>{s}</span>)}
+            </div>
+          )}
+          {p.phone && (
+            <p>
+              <span className={styles.phoneLink} onClick={handlePhoneClick}>{p.phone}</span>
+            </p>
           )}
         </div>
-        <p className={styles.location}>{locationDisplay}</p>
-        {p.services && p.services.length > 0 && (
-          <div className={styles.services}>
-            {p.services.slice(0, 3).map((s, idx) => (
-              <span key={idx} className={styles.serviceTag}>{s}</span>
-            ))}
-          </div>
-        )}
-        {p.phone && (
-          <p>
-            <span className={styles.phoneLink} onClick={handlePhoneClick}>
-              {p.phone}
-            </span>
-          </p>
-        )}
-      </div>
-    </Link>
-  );
-});
-ProfileCard.displayName = 'ProfileCard';
+      </Link>
+    );
+  });
+  ProfileCard.displayName = 'ProfileCard';
 
-// ... (rest of the file remains the same)
-  // Modal component for login/register
   const Modal = forwardRef(({ children, title, onClose }, ref) => (
     <div className={styles.modal} ref={ref}>
       <div className={styles.modalContent}>
@@ -608,9 +520,7 @@ ProfileCard.displayName = 'ProfileCard';
       <div className={styles.container}>
         <header className={styles.header}>
           <div className={styles.logoContainer}>
-            <h1 onClick={() => router.push('/')} className={styles.title}>
-              Meet Connect
-            </h1>
+            <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
           </div>
           <div className={styles.authButtons}>
             <button className={styles.button}>Register</button>
@@ -619,13 +529,7 @@ ProfileCard.displayName = 'ProfileCard';
         </header>
         <main className={styles.main}>
           <div className={styles.searchContainer}>
-            <input
-              type="text"
-              placeholder="Search ladies by location (e.g., 'Kilimani', 'Busia')..."
-              className={styles.searchInput}
-              aria-label="Search by location"
-              disabled
-            />
+            <input type="text" placeholder="Search ladies by location..." className={styles.searchInput} disabled />
           </div>
           <div className={styles.filters}>
             <select className={styles.select} disabled><option>All Counties</option></select>
@@ -633,7 +537,7 @@ ProfileCard.displayName = 'ProfileCard';
             <select className={styles.select} disabled><option>All Areas</option></select>
           </div>
           <div className={styles.profiles} role="list">
-            {[1, 2, 3, 4, 5].map((i) => (
+            {[1,2,3,4,5].map(i => (
               <div key={i} className={styles.skeletonCard}>
                 <div className={styles.skeletonImage}></div>
                 <div className={styles.skeletonInfo}>
@@ -667,97 +571,75 @@ ProfileCard.displayName = 'ProfileCard';
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href="https://yourdomain.com" />
       </Head>
+
       <header className={styles.header}>
         <div className={styles.logoContainer}>
-          <h1 onClick={() => router.push('/')} className={styles.title}>
-            Meet Connect
-          </h1>
+          <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
         </div>
         <div className={styles.authButtons}>
-          {!user && (
+          <button onClick={() => handleAccessProtected('/group-chat', 'Group Chat')} className={styles.button}>
+            Group Chat
+          </button>
+          <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
+            Inbox
+          </button>
+
+          {user ? (
             <>
-              <button onClick={() => setShowRegister(true)} className={styles.button}>Register</button>
-              <button onClick={() => setShowLogin(true)} className={`${styles.button} ${styles.login}`}>Login</button>
-            </>
-          )}
-          {user && (
-            <>
-              <Link href="/group-chat">
-                <button className={styles.button}>Group Chat</button>
-              </Link>
-              <Link href="/inbox">
-                <button className={styles.button}>Inbox</button>
-              </Link>
-              <Link href={{ pathname: '/profile-setup', query: { t: Date.now() } }}>
+              <Link href="/profile-setup">
                 <button className={styles.button}>My Profile</button>
               </Link>
-              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>Logout</button>
+              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setShowRegister(true)} className={styles.button}>
+                Register
+              </button>
+              <button onClick={() => { setPendingPath(null); setShowLogin(true); }} className={`${styles.button} ${styles.login}`}>
+                Login
+              </button>
             </>
           )}
         </div>
       </header>
+
       <main className={styles.main}>
         <div className={styles.searchContainer}>
           <input
             type="text"
             placeholder="Search ladies by location (e.g., 'Kilimani', 'Busia')..."
             value={searchLocation}
-            onChange={(e) => setSearchLocation(e.target.value)}
+            onChange={e => setSearchLocation(e.target.value)}
             className={styles.searchInput}
             aria-label="Search by location"
           />
         </div>
+
         <div className={styles.filters}>
-          <select
-            value={selectedCounty}
-            onChange={(e) => {
-              setSelectedCounty(e.target.value);
-              setSelectedWard('');
-              setSelectedArea('');
-            }}
-            className={styles.select}
-            aria-label="Select County"
-          >
+          <select value={selectedCounty} onChange={e => { setSelectedCounty(e.target.value); setSelectedWard(''); setSelectedArea(''); }} className={styles.select}>
             <option value="">All Counties</option>
-            {countyOptions.map((county) => (
-              <option key={county} value={county}>{county}</option>
-            ))}
+            {countyOptions.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-          <select
-            value={selectedWard}
-            onChange={(e) => {
-              setSelectedWard(e.target.value);
-              setSelectedArea('');
-            }}
-            className={styles.select}
-            disabled={!selectedCounty}
-            aria-label="Select Ward"
-          >
+          <select value={selectedWard} onChange={e => { setSelectedWard(e.target.value); setSelectedArea(''); }} className={styles.select} disabled={!selectedCounty}>
             <option value="">All Wards</option>
-            {wardOptions.map((ward) => (
-              <option key={ward} value={ward}>{ward}</option>
-            ))}
+            {wardOptions.map(w => <option key={w} value={w}>{w}</option>)}
           </select>
-          <select
-            value={selectedArea}
-            onChange={(e) => setSelectedArea(e.target.value)}
-            className={styles.select}
-            disabled={!selectedWard}
-            aria-label="Select Area"
-          >
+          <select value={selectedArea} onChange={e => setSelectedArea(e.target.value)} className={styles.select} disabled={!selectedWard}>
             <option value="">All Areas</option>
-            {areaOptions.map((area) => (
-              <option key={area} value={area}>{area}</option>
-            ))}
+            {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
+
         <div className={styles.profiles} role="list">
-          {filteredProfiles.map((p) => <ProfileCard key={p.id} p={p} />)}
-          {error && <p className={styles.noProfiles} style={{ color: 'red' }}>{error}</p>}
+          {filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)}
+          {error && <p className={styles.noProfiles} style={{color:'red'}}>{error}</p>}
           {isLoadingMore && (
             <>
               <p className={styles.noProfiles}>Loading more profiles...</p>
-              {[1, 2, 3].map((i) => (
+              {[1,2,3].map(i => (
                 <div key={i} className={styles.skeletonCard}>
                   <div className={styles.skeletonImage}></div>
                   <div className={styles.skeletonInfo}>
@@ -769,84 +651,51 @@ ProfileCard.displayName = 'ProfileCard';
             </>
           )}
           {filteredProfiles.length === 0 && !isLoadingMore && !error && (
-            <p className={styles.noProfiles}>
-              No ladies found. Complete your profile with a photo to appear here.
-            </p>
+            <p className={styles.noProfiles}>No ladies found. Complete your profile with a photo to appear here.</p>
           )}
-          {hasMore && <div ref={sentinelRef} style={{ height: '1px' }} />}
+          {hasMore && <div ref={sentinelRef} style={{height:'1px'}} />}
         </div>
       </main>
+
       {showLogin && (
-        <Modal title="Login" onClose={() => setShowLogin(false)} ref={loginModalRef}>
+        <Modal title="Login" onClose={closeLoginModal} ref={loginModalRef}>
+          {protectedFeature && (
+            <p style={{color:'#e91e63',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
+              Please login to access {protectedFeature}
+            </p>
+          )}
           <form onSubmit={handleLogin}>
             <label htmlFor="login-email">Email</label>
-            <input
-              id="login-email"
-              type="email"
-              placeholder="Email"
-              value={loginForm.email}
-              onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-              className={styles.input}
-              required
-              disabled={loginLoading}
-            />
+            <input id="login-email" type="email" placeholder="Email" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} className={styles.input} required disabled={loginLoading} />
             <label htmlFor="login-password">Password</label>
-            <input
-              type="password"
-              id="login-password"
-              placeholder="Password"
-              value={loginForm.password}
-              onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-              className={styles.input}
-              required
-              disabled={loginLoading}
-            />
+            <input id="login-password" type="password" placeholder="Password" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} className={styles.input} required disabled={loginLoading} />
             {authError && <p className={styles.error}>{authError}</p>}
             <button type="submit" className={styles.button} disabled={loginLoading}>
               {loginLoading ? 'Logging in...' : 'Login'}
             </button>
+            <button type="button" className={styles.button} style={{marginTop:'10px',background:'transparent',color:'#e91e63',border:'1px solid #e91e63'}}
+              onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>
+              Create New Account
+            </button>
           </form>
         </Modal>
       )}
+
       {showRegister && (
         <Modal title="Register" onClose={() => setShowRegister(false)} ref={registerModalRef}>
           <form onSubmit={handleRegister}>
             <label htmlFor="reg-name">Full Name</label>
-            <input
-              id="reg-name"
-              type="text"
-              placeholder="Full Name"
-              value={registerForm.name}
-              onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
-              className={styles.input}
-              required
-            />
+            <input id="reg-name" type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({...registerForm, name: e.target.value})} className={styles.input} required />
             <label htmlFor="reg-email">Email</label>
-            <input
-              id="reg-email"
-              type="email"
-              placeholder="Email"
-              value={registerForm.email}
-              onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
-              className={styles.input}
-              required
-            />
-            <label htmlFor="reg-password">Password</label>
-            <input
-              type="password"
-              id="reg-password"
-              placeholder="Password"
-              value={registerForm.password}
-              onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
-              className={styles.input}
-              required
-              minLength={8}
-            />
+            <input id="reg-email" type="email" placeholder="Email" value={registerForm.email} onChange={e => setRegisterForm({...registerForm, email: e.target.value})} className={styles.input} required />
+            <label htmlFor="reg-password">Password (min 8 chars)</label>
+            <input id="reg-password" type="password" placeholder="Password" value={registerForm.password} onChange={e => setRegisterForm({...registerForm, password: e.target.value})} className={styles.input} required minLength={8} />
             {authError && <p className={styles.error}>{authError}</p>}
             <button type="submit" className={styles.button}>Register</button>
           </form>
         </Modal>
       )}
+
       <footer className={styles.footer}>
         <div className={styles.footerLinks}>
           <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
@@ -857,23 +706,13 @@ ProfileCard.displayName = 'ProfileCard';
   );
 }
 
-/**
- * getStaticProps for initial profiles.
- */
 export async function getStaticProps() {
   let initialProfiles = [];
   try {
-    const q = query(
-      collection(firestore, 'profiles'),
-      orderBy('createdAt', 'desc'),
-      limit(30)
-    );
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(30));
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
-      .map((doc) => {
-        const data = convertTimestamps(doc.data());
-        return { id: doc.id, ...data };
-      })
+      .map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }))
       .filter(isProfileComplete);
   } catch (err) {
     console.error('Error fetching homepage profiles:', err);
