@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Firebase Login Tester</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-auth.js";
+
+    // 🔑 Replace these with your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDT7G125cf8awQeCgojWcdixzOkubgLwmE",
+      authDomain: "meetconnect-bb820.firebaseapp.com",
+      projectId: "meetconnect-bb820",
+      storageBucket: "meetconnect-bb820.firebasestorage.app",
+      messagingSenderId: "967540022685",
+      appId: "1:967540022685:web:6cdf7249b32bd2149ee374"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    window.testLogin = async () => {
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        alert("✅ Login successful! UID: " + userCredential.user.uid);
+      } catch (err) {
+        alert("❌ Login failed: " + err.message);
+      }
+    };
+  </script>
+</head>
+<body>
+  <h1>Firebase Login Tester</h1>
+  <input type="email" id="email" placeholder="Email" style="width:300px; padding:5px"><br><br>
+  <input type="password" id="password" placeholder="Password" style="width:300px; padding:5px"><br><br>
+  <button onclick="testLogin()" style="padding:10px 20px;">Test Login</button>
+</body>
+</html>

@@ -1,0 +1,442 @@
+/* /styles/chat.module.css - Redesigned for Premium, Elegant Vibe: Glassmorphism, Soft Pink Palette, Smooth Animations, Mobile-First */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+.chatContainer {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font-family: 'Poppins', sans-serif;
+  background: linear-gradient(to bottom, #F8BBD0, #F48FB1);
+  color: #333333;
+  box-sizing: border-box;
+}
+
+.chatHeader {
+  padding: 1rem 1.5rem;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  text-align: center;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: #D81B60;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  transition: box-shadow 0.3s ease;
+}
+
+.chatHeader:hover {
+  box-shadow: 0 4px 12px rgba(216, 27, 96, 0.1);
+}
+
+.messageList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px);
+}
+
+.messageItem {
+  margin-bottom: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  max-width: 80%;
+}
+
+.messageItem:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(216, 27, 96, 0.15);
+}
+
+.messageItem.own {
+  background: rgba(240, 128, 128, 0.4); /* Soft pink for own messages */
+  align-self: flex-end;
+  color: #333333;
+}
+
+.chatImage {
+  max-width: 200px;
+  border-radius: 16px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.chatImage:hover {
+  transform: scale(1.05);
+}
+
+.chatInput {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 1.2rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  bottom: 0;
+  z-index: 1000;
+}
+
+/* ✅ ICON BUTTONS (emoji, attach, camera, mic) */
+.chatInput .iconBtn {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.chatInput .iconBtn:hover {
+  transform: scale(1.15);
+}
+
+/* ✅ TEXT INPUT */
+.chatInput input[type="text"] {
+  flex: 1;
+  padding: 0.9rem 1.25rem;
+  border: none;
+  border-radius: 30px;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.3s ease, transform 0.1s ease;
+}
+
+.chatInput input[type="text"]:focus {
+  box-shadow: 0 2px 8px rgba(216, 27, 96, 0.3);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+/* ✅ SEND BUTTON */
+.chatInput .sendBtn {
+  padding: 0.75rem 1.3rem;
+  border: none;
+  border-radius: 30px;
+  background: linear-gradient(135deg, #D81B60, #F06292);
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: transform 0.2s ease, box-shadow 0.3s ease;
+}
+
+.chatInput .sendBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(216, 27, 96, 0.3);
+}
+
+/* ✅ EMOJI PANEL */
+.emojiPanel {
+  position: absolute;
+  bottom: 70px;
+  left: 1rem;
+  background: white;
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.2);
+  display: flex;
+  gap: 8px;
+  z-index: 9999;
+}
+
+.emojiPanel button {
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  cursor: pointer;
+}
+
+.inboxContainer {
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px);
+  border-radius: 20px;
+  margin: 1rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.chatRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.3s ease;
+  border-radius: 12px;
+}
+
+.chatRow:hover {
+  background: rgba(255, 192, 203, 0.2);
+  transform: translateY(-2px);
+}
+
+.username {
+  cursor: pointer;
+  font-weight: 600;
+  color: #D81B60;
+  transition: color 0.3s ease;
+}
+
+.username:hover {
+  color: #F06292;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .chatContainer {
+    font-size: 14px;
+  }
+
+  .chatHeader {
+    font-size: 1.2rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .messageItem {
+    max-width: 90%;
+    padding: 0.75rem 1rem;
+  }
+
+  .chatInput {
+    padding: 0.75rem 1rem;
+  }
+
+  .chatInput input[type="text"] {
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+  }
+
+  .chatInput button {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.95rem;
+  }
+}
+
+/* Tablet & Desktop Overrides */
+@media (min-width: 769px) {
+  .chatContainer {
+    padding: 0 2rem;
+  }
+
+  .messageList {
+    padding: 2rem;
+  }
+
+  .inboxContainer {
+    max-width: 800px;
+    margin: 2rem auto;
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  .chatInput input[type="text"] {
+    font-size: 16px;
+  }
+}
+
+/* ✅ INBOX AVATAR */
+.avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 14px;
+  border: 2px solid rgba(216, 27, 96, 0.4);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* ✅ NAME + MESSAGE WRAPPER */
+.chatInfo {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ✅ USER NAME */
+.chatName {
+  font-size: 15px;
+  font-weight: 600;
+  color: #D81B60;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ✅ LAST MESSAGE TEXT */
+.chatLastMessage {
+  font-size: 13px;
+  color: #555;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ✅ MESSAGE TIME */
+.chatTime {
+  font-size: 12px;
+  color: #999;
+  margin-left: 10px;
+  white-space: nowrap;
+}
+
+/* ✅ INBOX HEADER WITH LOGO */
+.inboxHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 1.2rem 1.5rem;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+/* ✅ MEETCONNECT LOGO */
+.logo {
+  width: 42px;
+  height: auto;
+  object-fit: contain;
+}
+
+/* ✅ INBOX TITLE */
+.inboxTitle {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #D81B60;
+  letter-spacing: 0.5px;
+}
+
+/* ✅ MESSAGE ACTION BUTTONS */
+.reactButton,
+.replyButton,
+.deleteButton {
+  background: transparent;
+  border: none;
+  color: #D81B60;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: transform 0.2s ease, color 0.3s ease;
+}
+
+.reactButton:hover,
+.replyButton:hover,
+.deleteButton:hover {
+  color: #F06292;
+  transform: scale(1.05);
+}
+
+/* ✅ REACTIONS ROW */
+.reactions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 1.1rem;
+}
+
+/* ✅ MESSAGE TIMESTAMP */
+.timestamp {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  color: #777;
+}
+
+/* ✅ CHAT HEADER USER (from ChatHeader.js) */
+.chatHeaderUser {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+/* ✅ BACK BUTTON */
+.backButton {
+  background: transparent;
+  border: none;
+  color: #D81B60;
+  font-size: 0.95rem;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.messageRow {
+  width: 100%;
+  display: flex;
+  margin-bottom: 10px;
+}
+
+.ownRow {
+  justify-content: flex-end;
+}
+
+.otherRow {
+  justify-content: flex-start;
+}
+
+.avatar {
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.bubble {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  position: relative;
+  word-wrap: break-word;
+}
+
+.ownBubble {
+  background: #dcf8c6; /* WhatsApp green */
+  border-bottom-right-radius: 4px;
+  text-align: right;
+}
+
+.otherBubble {
+  background: #ffffff;
+  border-bottom-left-radius: 4px;
+}
+
+.messageText {
+  margin: 0;
+}
+
+.tick {
+  font-size: 11px;
+  color: gray;
+  margin-left: 6px;
+  display: inline-block;
+}
+
+.messageLeft {
+  align-self: flex-start;
+  background: #222;
+  border-radius: 10px 10px 10px 0;
+  margin-right: auto;
+}
+
+.messageRight {
+  align-self: flex-end;
+  background: #005c4b;
+  border-radius: 10px 10px 0 10px;
+  margin-left: auto;
+}
