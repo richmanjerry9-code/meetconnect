@@ -762,7 +762,7 @@ export default function ProfileSetup() {
           {/* Profile form is now ALWAYS visible */}
           <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
             <h1 className={styles.setupTitle}>My Profile Setup</h1>
-            <p className={styles.tip}>Complete one step at a time. We'll guide you!</p>
+            <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
             <div className={styles.stepper}>
               {steps.map((s, idx) => (
                 <button
@@ -1089,7 +1089,7 @@ export default function ProfileSetup() {
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>Delete Profile?</h3>
-              <p>Please tell us why you're leaving:</p>
+              <p>Please tell us why you&apos;re leaving:</p>
               <div className={styles.checkboxGroup}>
                 {reasons.map((reason) => (
                   <div key={reason}>
