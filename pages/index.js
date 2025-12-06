@@ -523,7 +523,6 @@ export default function Home({ initialProfiles = [] }) {
             <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
           </div>
           <div className={styles.authButtons}>
-            <button className={styles.button}>Register</button>
             <button className={`${styles.button} ${styles.login}`}>Login</button>
           </div>
         </header>
@@ -589,15 +588,9 @@ export default function Home({ initialProfiles = [] }) {
               <Link href="/profile-setup">
                 <button className={styles.button}>My Profile</button>
               </Link>
-              <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
-                Logout
-              </button>
             </>
           ) : (
             <>
-              <button onClick={() => setShowRegister(true)} className={styles.button}>
-                Register
-              </button>
               <button onClick={() => { setPendingPath(null); setShowLogin(true); }} className={`${styles.button} ${styles.login}`}>
                 Login
               </button>

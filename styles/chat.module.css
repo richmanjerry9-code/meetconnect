@@ -57,7 +57,7 @@
 }
 
 .messageItem.own {
-  background: rgba(240, 128, 128, 0.4); /* Soft pink for own messages */
+  background: rgba(220, 248, 198, 0.6); /* Soft green for own messages */
   align-self: flex-end;
   color: #333333;
 }
@@ -91,6 +91,7 @@
 .chatInput .iconBtn {
   background: transparent;
   border: none;
+  color: #D81B60;
   font-size: 1.4rem;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -210,16 +211,17 @@
   }
 
   .chatInput {
-    padding: 0.75rem 1rem;
+    padding: 0.5rem;
+    gap: 0.5rem;
   }
 
   .chatInput input[type="text"] {
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 1rem;
     font-size: 0.95rem;
   }
 
   .chatInput button {
-    padding: 0.75rem 1.25rem;
+    padding: 0.5rem 1rem;
     font-size: 0.95rem;
   }
 }
@@ -403,16 +405,15 @@
   line-height: 1.4;
   position: relative;
   word-wrap: break-word;
+  background: #dcf8c6;
 }
 
 .ownBubble {
-  background: #dcf8c6; /* WhatsApp green */
   border-bottom-right-radius: 4px;
   text-align: right;
 }
 
 .otherBubble {
-  background: #ffffff;
   border-bottom-left-radius: 4px;
 }
 
@@ -429,14 +430,12 @@
 
 .messageLeft {
   align-self: flex-start;
-  background: #222;
   border-radius: 10px 10px 10px 0;
   margin-right: auto;
 }
 
 .messageRight {
   align-self: flex-end;
-  background: #005c4b;
   border-radius: 10px 10px 0 10px;
   margin-left: auto;
 }
