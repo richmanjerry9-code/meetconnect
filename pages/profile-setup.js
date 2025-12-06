@@ -1,3 +1,4 @@
+// pages/profile-setup.js
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -95,6 +96,7 @@ export default function ProfileSetup() {
   const steps = ['Profile', 'Location', 'Services', 'Media', 'Membership & Wallets'];
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
+  const profilePicInputRef = useRef(null);
 
   // New states for menu and delete profile
   const [showMenu, setShowMenu] = useState(false);
@@ -490,8 +492,13 @@ export default function ProfileSetup() {
   const validateStep = (step) => {
     switch (step) {
       case 0:
-        if (!formData.name || !formData.phone || !formData.age) {
-          setError('Please fill name, phone, and age.');
+        const errors = [];
+        if (!formData.name) errors.push('Name');
+        if (!formData.phone) errors.push('Phone');
+        if (!formData.age) errors.push('Age');
+        if (!formData.profilePic && !profilePicFile) errors.push('Profile Picture');
+        if (errors.length > 0) {
+          setError(`Please add: ${errors.join(', ')}`);
           return false;
         }
         const numericAge = parseInt(formData.age, 10);
@@ -507,8 +514,12 @@ export default function ProfileSetup() {
         }
         return true;
       case 1:
-        if (!formData.county || !formData.ward || !formData.area) {
-          setError('Please select county, city/town, and area.');
+        const locErrors = [];
+        if (!formData.county) locErrors.push('County');
+        if (!formData.ward) locErrors.push('City/Town');
+        if (!formData.area) locErrors.push('Area');
+        if (locErrors.length > 0) {
+          setError(`Please add: ${locErrors.join(', ')}`);
           return false;
         }
         if ((formData.nearby || []).length > 4) {
@@ -551,7 +562,6 @@ export default function ProfileSetup() {
     setSaveLoading(true);
 
     if (!validateAll()) {
-      setError('Please complete all required fields in previous steps.');
       setSaveLoading(false);
       return;
     }
@@ -559,9 +569,20 @@ export default function ProfileSetup() {
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
-        const fd = new FormData();
-        fd.append('image', profilePicFile);
-        const res = await fetch('/api/uploadProfilePic', { method: 'POST', body: fd });
+        // Convert file to base64
+        const reader = new FileReader();
+        const base64Promise = new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(profilePicFile);
+        });
+        const imageBase64 = await base64Promise;
+
+        const res = await fetch('/api/uploadProfilePic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64 }),
+        });
         const data = await res.json();
         if (!res.ok || !data.url) {
           setError(data.error || 'Failed to upload image.');
@@ -596,7 +617,7 @@ export default function ProfileSetup() {
         { merge: true }
       );
       localStorage.setItem('profileSaved', 'true');
-      alert('Profile updated!');
+      alert('Successful! Your profile is now live!');
       router.push('/');
     } catch (err) {
       console.error('save profile failed', err);
@@ -629,7 +650,13 @@ export default function ProfileSetup() {
     setShowModal(true);
   };
 
-  const handleDurationSelect = (d) => setSelectedDuration(d);
+  const handleDurationSelect = (d) => {
+    setSelectedDuration(d);
+    const price = plans[selectedLevel][d];
+    if (price === 100) {
+      handleProceedToPayment();
+    }
+  };
 
   const handleProceedToPayment = () => {
     if (!selectedDuration) {
@@ -888,7 +915,17 @@ export default function ProfileSetup() {
                   <h2>Basics</h2>
                   <label className={styles.label}>
                     Profile Picture
-                    <input type="file" accept="image/*" onChange={handleImageUpload} className={styles.profilePicInput} />
+                    <button type="button" onClick={() => profilePicInputRef.current.click()} className={styles.button}>
+                      Upload Profile Picture
+                    </button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className={styles.profilePicInput}
+                      ref={profilePicInputRef}
+                      style={{ display: 'none' }}
+                    />
                     {(profilePicPreview || formData.profilePic) && (
                       profilePicPreview ? (
                         <Image src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />

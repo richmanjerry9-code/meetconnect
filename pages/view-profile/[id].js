@@ -457,20 +457,29 @@ export default function ViewProfile() {
 
       {/* Login Modal */}
       {showLogin && (
-        <div className={styles.modalOverlay} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>Login Required</h3>
-            {loginPrompt && <p style={{ color: '#e91e63', fontWeight: 'bold', textAlign: 'center' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+            <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>×</span>
+            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Welcome Back</h2>
+            {loginPrompt && <p style={{color:'#ff69b4',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
               Please login to {loginPrompt}
             </p>}
             <form onSubmit={handleLogin}>
-              <input type="email" placeholder="Email" value={loginForm.email} onChange={e => setLoginForm({ ...loginForm, email: e.target.value })} required />
-              <input type="password" placeholder="Password" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required />
-              {authError && <p className={styles.error}>{authError}</p>}
-              <button type="submit" disabled={loginLoading}>{loginLoading ? 'Logging in...' : 'Login'}</button>
-              <button type="button" onClick={() => { setShowLogin(false); setShowRegister(true); }}>
-                Create New Account
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({ ...loginForm, email: e.target.value })} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
+                <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+              <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                {loginLoading ? 'Logging in...' : 'Login'}
               </button>
+              <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+                Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setShowRegister(true); }}>Create New Account</span>
+              </div>
             </form>
           </div>
         </div>
@@ -478,15 +487,27 @@ export default function ViewProfile() {
 
       {/* Register Modal */}
       {showRegister && (
-        <div className={styles.modalOverlay} onClick={() => setShowRegister(false)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>Create Account</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+            <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
+            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
             <form onSubmit={handleRegister}>
-              <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({ ...registerForm, name: e.target.value })} required />
-              <input type="email" placeholder="Email" value={registerForm.email} onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })} required />
-              <input type="password" placeholder="Password (8+ chars)" value={registerForm.password} onChange={e => setRegisterForm({ ...registerForm, password: e.target.value })} required minLength={8} />
-              {authError && <p className={styles.error}>{authError}</p>}
-              <button type="submit">Register</button>
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
+                <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({ ...registerForm, name: e.target.value })} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                <input type="email" placeholder="you@example.com" value={registerForm.email} onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password (min 8 chars)</label>
+                <input type="password" placeholder="••••••••" value={registerForm.password} onChange={e => setRegisterForm({ ...registerForm, password: e.target.value })} required minLength={8} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+              <button type="submit" style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)'; }} onMouseOut={(e) => { e.target.style.transform = ''; e.target.style.boxShadow = ''; }} >
+                Register
+              </button>
             </form>
           </div>
         </div>
