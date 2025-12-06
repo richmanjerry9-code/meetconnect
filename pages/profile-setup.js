@@ -788,7 +788,7 @@ export default function ProfileSetup() {
       <header className={`${styles.header} ${styles.premiumHeader}`}>
         {/* ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← */}
         {/* BACK BUTTON ADDED HERE (uses same style as modal back buttons) */}
-        <button onClick={() => router.back()} className={styles.modalBack}>←</button>
+        <button onClick={() => router.push('/')} className={styles.modalBack}>←</button>
         {/* ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← */}
 
         <div className={styles.logoContainer}>

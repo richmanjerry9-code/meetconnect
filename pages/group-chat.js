@@ -14,7 +14,6 @@ import {
   serverTimestamp,
   updateDoc,
   arrayUnion,
-  arrayRemove,
   getDoc,
   setDoc,
 } from "firebase/firestore";
@@ -30,22 +29,16 @@ export default function GroupChatPage() {
   const [messages, setMessages] = useState([]);
   const [profilesMap, setProfilesMap] = useState({});
   const [loading, setLoading] = useState(true);
-  const [pinnedMessages, setPinnedMessages] = useState([]);
 
   useEffect(() => {
     const chatRef = doc(db, "groupChats", "main");
-    const unsub = onSnapshot(chatRef, (snap) => {
-      if (snap.exists()) setPinnedMessages(snap.data().pinnedMessages || []);
-    });
 
     (async () => {
       const snap = await getDoc(chatRef);
       if (!snap.exists()) {
-        await setDoc(chatRef, { pinnedMessages: [], createdAt: serverTimestamp() });
+        await setDoc(chatRef, { createdAt: serverTimestamp() });
       }
     })();
-
-    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -132,14 +125,6 @@ export default function GroupChatPage() {
     }
   };
 
-  const pinMessage = async (messageId) => {
-    const chatRef = doc(db, "groupChats", "main");
-    const isPinned = pinnedMessages.includes(messageId);
-    await updateDoc(chatRef, {
-      pinnedMessages: isPinned ? arrayRemove(messageId) : arrayUnion(messageId),
-    });
-  };
-
   if (!user) {
     return <div style={{ padding: "2rem", textAlign: "center" }}>Please log in</div>;
   }
@@ -158,8 +143,6 @@ export default function GroupChatPage() {
           currentUserId={user.uid}
           onProfileClick={(uid) => router.push(`/view-profile/${uid}`)}
           onDelete={deleteMessage}
-          onPin={pinMessage}
-          pinnedMessages={pinnedMessages}
           onReply={(msg) => {
             const ev = new CustomEvent("groupchat:reply", { detail: msg });
             window.dispatchEvent(ev);
@@ -173,7 +156,7 @@ export default function GroupChatPage() {
 }
 
 /* ==================== MESSAGE LIST ==================== */
-function GroupMessageList({ messages = [], profilesMap = {}, currentUserId, onProfileClick, onDelete, onPin, pinnedMessages = [], onReply }) {
+function GroupMessageList({ messages = [], profilesMap = {}, currentUserId, onProfileClick, onDelete, onReply }) {
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -191,10 +174,8 @@ function GroupMessageList({ messages = [], profilesMap = {}, currentUserId, onPr
             message={m}
             profile={profile}
             isOwn={m.senderId === currentUserId}
-            isPinned={pinnedMessages.includes(m.id)}
             onProfileClick={() => onProfileClick(m.senderId)}
             onDelete={(forEveryone) => onDelete(m.id, forEveryone)}
-            onPin={() => onPin(m.id)}
             onReply={() => onReply(m)}
           />
         );
@@ -204,12 +185,32 @@ function GroupMessageList({ messages = [], profilesMap = {}, currentUserId, onPr
 }
 
 /* ==================== SINGLE MESSAGE ==================== */
-function GroupMessageItem({ message, profile = {}, isOwn, isPinned, onProfileClick, onDelete, onPin, onReply }) {
+function GroupMessageItem({ message, profile = {}, isOwn, onProfileClick, onDelete, onReply }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [touchStartX, setTouchStartX] = useState(null);
+  const longPressTimer = useRef(null);
 
-  const handleTouchStart = (e) => setTouchStartX(e.touches[0].clientX);
+  const handleTouchStart = (e) => {
+    setTouchStartX(e.touches[0].clientX);
+    // Start long press timer
+    longPressTimer.current = setTimeout(() => {
+      setMenuOpen(true);
+    }, 500); // 500ms for long press
+  };
+
+  const handleTouchMove = () => {
+    // Cancel long press if moving
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   const handleTouchEnd = (e) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
     if (touchStartX === null) return;
     const diff = touchStartX - e.changedTouches[0].clientX;
     if (diff > 70) onReply();
@@ -225,6 +226,7 @@ function GroupMessageItem({ message, profile = {}, isOwn, isPinned, onProfileCli
       className={`${styles.messageRow} ${isOwn ? styles.ownRow : styles.otherRow}`}
       onContextMenu={(e) => { e.preventDefault(); setMenuOpen(true); }}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
       {!isOwn && (
@@ -244,7 +246,6 @@ function GroupMessageItem({ message, profile = {}, isOwn, isPinned, onProfileCli
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: "#D81B60" }}>{senderName}</div>
-            {isPinned && <span style={{ fontSize: 12, color: "#999" }}>Pinned</span>}
           </div>
         </div>
 
@@ -276,17 +277,14 @@ function GroupMessageItem({ message, profile = {}, isOwn, isPinned, onProfileCli
         </button>
       )}
 
-      <div className={styles.threeDots} onClick={() => setMenuOpen(true)}>More</div>
-
       {menuOpen && (
         <div className={styles.messageMenu} onMouseLeave={() => setMenuOpen(false)}>
           <button onClick={() => { onReply(); setMenuOpen(false); }}>Reply</button>
           <button onClick={() => { onDelete(false); setMenuOpen(false); }}>Delete for me</button>
-          <button onClick={() => { onDelete(true); setMenuOpen(false); }}>Delete for everyone</button>
+          {isOwn && (
+            <button onClick={() => { onDelete(true); setMenuOpen(false); }}>Delete for everyone</button>
+          )}
           <button onClick={() => { navigator.clipboard.writeText(message.text || ""); setMenuOpen(false); }}>Copy</button>
-          <button onClick={() => { onPin(); setMenuOpen(false); }}>
-            {isPinned ? "Unpin" : "Pin"}
-          </button>
           <button onClick={() => setMenuOpen(false)}>Cancel</button>
         </div>
       )}
