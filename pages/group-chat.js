@@ -18,8 +18,9 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
-import styles from "../styles/groupchat.module.css";
+import styles from "styles/groupchat.module.css";
 import GroupChatHeader from "../lib/groupchat/GroupChatHeader";
+import GroupChatInput from "../lib/groupchat/GroupChatInput";
 
 const db = getFirestore();
 
@@ -288,49 +289,6 @@ function GroupMessageItem({ message, profile = {}, isOwn, onProfileClick, onDele
           <button onClick={() => setMenuOpen(false)}>Cancel</button>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ==================== ULTIMATE INPUT (EMOJI + CAMERA + AUDIO) ==================== */
-function GroupChatInput({ onSend }) {
-  const [text, setText] = useState("");
-  const [replyTo, setReplyTo] = useState(null);
-
-  useEffect(() => {
-    const handler = (e) => setReplyTo(e.detail);
-    window.addEventListener("groupchat:reply", handler);
-    return () => window.removeEventListener("groupchat:reply", handler);
-  }, []);
-
-  const handleSend = async () => {
-    if (!text.trim()) return;
-    await onSend(text.trim(), null, null, replyTo);
-    setText("");
-    setReplyTo(null);
-  };
-
-  return (
-    <div className={styles.chatInputBar}>
-      {replyTo && (
-        <div className={styles.replyPreview}>
-          Replying to {replyTo.senderName}: {replyTo.text?.slice(0, 40)}...
-          <button onClick={() => setReplyTo(null)}>X</button>
-        </div>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Type a message..."
-          className={styles.chatInputText}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), handleSend())}
-          style={{ flex: 1 }}
-        />
-
-        <button onClick={handleSend} className={styles.chatSendBtn}>Send</button>
-      </div>
     </div>
   );
 }

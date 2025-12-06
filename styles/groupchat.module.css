@@ -374,3 +374,23 @@
   color: #666;
   font-size: 0.9rem;
 }
+
+.emojiBtn {
+  background: linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%);
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(216, 27, 96, 0.3);
+  transition: all 0.3s ease;
+}
+
+.emojiBtn:hover {
+  transform: scale(1.1) rotate(15deg);
+  box-shadow: 0 6px 18px rgba(216, 27, 96, 0.5);
+}
