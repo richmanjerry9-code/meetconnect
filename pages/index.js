@@ -29,7 +29,6 @@ const isProfileComplete = (p) => {
     p &&
     p.username?.trim() &&
     p.name?.trim() &&
-    p.profilePic?.trim() &&
     p.county?.trim() &&
     p.ward?.trim() &&
     p.area?.trim()
@@ -71,16 +70,13 @@ export default function Home({ initialProfiles = [] }) {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
   const [loginLoading, setLoginLoading] = useState(false);
-
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
   const sentinelRef = useRef(null);
   const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
   const allProfilesRef = useRef(allProfiles);
-
   useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);
-
   // Session storage restore
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -100,7 +96,6 @@ export default function Home({ initialProfiles = [] }) {
       }
     }
   }, []);
-
   // Save scroll + profiles on navigation
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -114,13 +109,11 @@ export default function Home({ initialProfiles = [] }) {
     router.events.on('routeChangeStart', saveState);
     return () => router.events.off('routeChangeStart', saveState);
   }, [router]);
-
   // Auth state
   useEffect(() => {
     setUserLoading(true);
     const storedUser = localStorage.getItem('loggedInUser');
     if (storedUser) setUser(JSON.parse(storedUser));
-
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
@@ -154,7 +147,6 @@ export default function Home({ initialProfiles = [] }) {
     });
     return unsubscribe;
   }, []);
-
   // Real-time profiles
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -176,7 +168,6 @@ export default function Home({ initialProfiles = [] }) {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
-
   // Load more profiles
   const loadMoreProfiles = useCallback(async () => {
     if (isLoadingMore || !hasMore || !lastDoc) return;
@@ -211,7 +202,6 @@ export default function Home({ initialProfiles = [] }) {
       setIsLoadingMore(false);
     }
   }, [isLoadingMore, hasMore, lastDoc]);
-
   // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => {
@@ -220,7 +210,6 @@ export default function Home({ initialProfiles = [] }) {
     if (sentinelRef.current) observer.observe(sentinelRef.current);
     return () => { if (sentinelRef.current) observer.unobserve(sentinelRef.current); };
   }, [hasMore, isLoadingMore, loadMoreProfiles]);
-
   // Location search filtering
   useEffect(() => {
     if (!debouncedSearchLocation) return setFilteredLocations([]);
@@ -238,7 +227,6 @@ export default function Home({ initialProfiles = [] }) {
     });
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
-
   // Auto-set ward if exact match
   useEffect(() => {
     if (!debouncedSearchLocation) {
@@ -265,7 +253,6 @@ export default function Home({ initialProfiles = [] }) {
       setFilteredLocations([]);
     }
   }, [debouncedSearchLocation, searchLocation]);
-
   const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
@@ -273,9 +260,7 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}${area ? `, ${area}` : ''}`);
     setFilteredLocations([]);
   };
-
   const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
-
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter(p => {
@@ -294,7 +279,6 @@ export default function Home({ initialProfiles = [] }) {
     });
     return [...groups.VVIP, ...groups.VIP, ...groups.Prime, ...groups.Regular];
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
-
   // Protected navigation — remembers intended destination
   const handleAccessProtected = (path, featureName) => {
     if (user) {
@@ -305,16 +289,13 @@ export default function Home({ initialProfiles = [] }) {
       setShowLogin(true);
     }
   };
-
   // Login handler — redirects to pendingPath after success
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
     setLoginLoading(true);
-
     const trimmedEmail = loginForm.email.trim().toLowerCase();
     const trimmedPassword = loginForm.password.trim();
-
     if (!trimmedEmail || !trimmedPassword) {
       setAuthError('Please enter email and password.');
       setLoginLoading(false);
@@ -325,13 +306,11 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
       return;
     }
-
     try {
       const { user: firebaseUser } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
       const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
       let profileData;
       let isNewUser = false;
-
       if (profileDoc.exists()) {
         profileData = { id: profileDoc.id, ...profileDoc.data() };
       } else {
@@ -347,11 +326,9 @@ export default function Home({ initialProfiles = [] }) {
         profileData = { id: firebaseUser.uid, ...basicProfile };
         isNewUser = true;
       }
-
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
       setAuthError('Login successful!');
-
       setTimeout(() => {
         setShowLogin(false);
         const target = pendingPath || '/'; // if they clicked Group Chat → go there, else stay on home
@@ -377,7 +354,6 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
     }
   };
-
   // Register handler — respects pendingPath
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -386,7 +362,6 @@ export default function Home({ initialProfiles = [] }) {
       setAuthError('Please fill all fields correctly.');
       return;
     }
-
     try {
       const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, registerForm.email, registerForm.password);
       const newProfile = {
@@ -402,7 +377,6 @@ export default function Home({ initialProfiles = [] }) {
       localStorage.setItem('loggedInUser', JSON.stringify(fullUser));
       setUser(fullUser);
       setAuthError('Registration successful!');
-
       setTimeout(() => {
         setShowRegister(false);
         const target = pendingPath || '/profile-setup?t=' + Date.now(); // new users go to setup unless they came from protected page
@@ -414,19 +388,16 @@ export default function Home({ initialProfiles = [] }) {
       setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Registration failed. Try again.');
     }
   };
-
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
   };
-
   // Close login modal & clear pending path
   const closeLoginModal = () => {
     setShowLogin(false);
     setPendingPath(null);
     setProtectedFeature('');
   };
-
   // ESC & click outside
   useEffect(() => {
     const handler = (e) => {
@@ -440,7 +411,6 @@ export default function Home({ initialProfiles = [] }) {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
-
   useEffect(() => {
     const handler = (e) => {
       if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) closeLoginModal();
@@ -449,11 +419,9 @@ export default function Home({ initialProfiles = [] }) {
     if (showLogin || showRegister) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showLogin, showRegister]);
-
   const countyOptions = Object.keys(counties);
   const wardOptions = selectedCounty && counties[selectedCounty] ? Object.keys(counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];
-
   const ProfileCard = memo(({ p }) => {
     if (!p?.username?.trim()) return null;
     const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
@@ -462,13 +430,12 @@ export default function Home({ initialProfiles = [] }) {
       e.stopPropagation();
       window.location.href = `tel:${p.phone}`;
     };
-
     return (
       <Link href={`/view-profile/${p.id}`} className={styles.profileLink}>
         <div className={styles.profileCard} role="listitem">
           <div className={styles.imageContainer}>
             <Image
-              src={p.profilePic || '/no-photo-placeholder.svg'}
+              src={p.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg=='}
               alt={`${p.name} Profile`}
               width={150}
               height={150}
@@ -503,7 +470,6 @@ export default function Home({ initialProfiles = [] }) {
     );
   });
   ProfileCard.displayName = 'ProfileCard';
-
   const Modal = forwardRef(({ children, title, onClose }, ref) => (
     <div className={styles.modal} ref={ref}>
       <div className={styles.modalContent}>
@@ -514,7 +480,6 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   ));
   Modal.displayName = 'Modal';
-
   if (userLoading) {
     return (
       <div className={styles.container}>
@@ -556,7 +521,6 @@ export default function Home({ initialProfiles = [] }) {
       </div>
     );
   }
-
   return (
     <div className={styles.container}>
       <Head>
@@ -570,7 +534,6 @@ export default function Home({ initialProfiles = [] }) {
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href="https://yourdomain.com" />
       </Head>
-
       <header className={styles.header}>
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
@@ -582,7 +545,6 @@ export default function Home({ initialProfiles = [] }) {
           <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
             Inbox
           </button>
-
           {user ? (
             <>
               <Link href="/profile-setup">
@@ -598,7 +560,6 @@ export default function Home({ initialProfiles = [] }) {
           )}
         </div>
       </header>
-
       <main className={styles.main}>
         <div className={styles.searchContainer}>
           <input
@@ -610,7 +571,6 @@ export default function Home({ initialProfiles = [] }) {
             aria-label="Search by location"
           />
         </div>
-
         <div className={styles.filters}>
           <select value={selectedCounty} onChange={e => { setSelectedCounty(e.target.value); setSelectedWard(''); setSelectedArea(''); }} className={styles.select}>
             <option value="">All Counties</option>
@@ -625,7 +585,6 @@ export default function Home({ initialProfiles = [] }) {
             {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-
         <div className={styles.profiles} role="list">
           {filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)}
           {error && <p className={styles.noProfiles} style={{color:'red'}}>{error}</p>}
@@ -649,7 +608,6 @@ export default function Home({ initialProfiles = [] }) {
           {hasMore && <div ref={sentinelRef} style={{height:'1px'}} />}
         </div>
       </main>
-
       {showLogin && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={closeLoginModal}>
           <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
@@ -680,7 +638,6 @@ export default function Home({ initialProfiles = [] }) {
           </div>
         </div>
       )}
-
       {showRegister && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
           <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
@@ -707,7 +664,6 @@ export default function Home({ initialProfiles = [] }) {
           </div>
         </div>
       )}
-
       <footer className={styles.footer}>
         <div className={styles.footerLinks}>
           <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
@@ -717,7 +673,6 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   );
 }
-
 export async function getStaticProps() {
   let initialProfiles = [];
   try {
