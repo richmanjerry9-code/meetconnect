@@ -653,24 +653,6 @@ export default function ProfileSetup() {
   const handleDurationSelect = (d) => {
     setSelectedDuration(d);
     const price = plans[selectedLevel][d];
-    if (price === 100) {
-      handleProceedToPayment();
-    }
-  };
-
-  const handleProceedToPayment = () => {
-    if (!selectedDuration) {
-      alert('Select duration.');
-      return;
-    }
-    try {
-      if (!formData.phone) throw new Error('Add phone to profile first.');
-      formatPhoneForMpesa(formData.phone);
-    } catch (err) {
-      alert(err.message);
-      return;
-    }
-    const price = plans[selectedLevel][selectedDuration];
     setSelectedPaymentMethod(fundingBalance >= price ? 'wallet' : 'mpesa');
     setShowPaymentChoice(true);
     setShowModal(false);
@@ -704,13 +686,7 @@ export default function ProfileSetup() {
   };
 
   const handleAddFund = () => {
-    try {
-      if (!formData.phone) throw new Error('Add phone first.');
-      formatPhoneForMpesa(formData.phone);
-      setShowAddFundModal(true);
-    } catch (err) {
-      setError(err.message);
-    }
+    setShowAddFundModal(true);
   };
 
   const handleWithdraw = async () => {
@@ -792,7 +768,7 @@ export default function ProfileSetup() {
 
   const plans = useMemo(
     () => ({
-      Prime: { '3 Days': 100, '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
+      Prime: { '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
       VIP: { '3 Days': 300, '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },
       VVIP: { '3 Days': 400, '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
     }),
@@ -1151,9 +1127,6 @@ export default function ProfileSetup() {
                   </button>
                 ))}
               </div>
-              <button onClick={handleProceedToPayment} disabled={!selectedDuration} className={styles.upgradeButton}>
-                Proceed
-              </button>
               <button onClick={() => setShowModal(false)} className={styles.closeButton}>
                 Close
               </button>
