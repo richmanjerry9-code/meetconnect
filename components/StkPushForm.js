@@ -16,6 +16,7 @@ const StkPushForm = ({
   const [error, setError] = useState('');
   const [checkoutRequestID, setCheckoutRequestID] = useState(null);
   const [pollingInterval, setPollingInterval] = useState(null);
+  const [initiated, setInitiated] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,6 +40,7 @@ const StkPushForm = ({
       if (res.ok) {
         setMessage('STK Push initiated. Please check your phone and enter your PIN to complete the payment.');
         setCheckoutRequestID(data.checkoutRequestID); // Assume server returns it in response
+        setInitiated(true);
       } else {
         setError(data.error || 'Failed to initiate payment.');
       }
@@ -64,6 +66,7 @@ const StkPushForm = ({
             } else if (data.status === 'failed') {
               setError('Payment failed: ' + data.resultDesc);
               clearInterval(interval);
+              setCheckoutRequestID(null);
             }
             // else pending, continue polling
           }
@@ -77,6 +80,7 @@ const StkPushForm = ({
       const timeout = setTimeout(() => {
         clearInterval(interval);
         setError('Payment timeout. Please try again.');
+        setCheckoutRequestID(null);
       }, 60000);
 
       return () => {
@@ -98,6 +102,7 @@ const StkPushForm = ({
           placeholder="0712345678"
           maxLength={12}
           required
+          disabled={loading || !!checkoutRequestID}
         />
       </label>
       <label className={styles.label}>
@@ -107,15 +112,16 @@ const StkPushForm = ({
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           className={styles.input}
-          disabled={readOnlyAmount}
+          disabled={readOnlyAmount || loading || !!checkoutRequestID}
           min="1"
           required
         />
       </label>
       {error && <p className={styles.error}>{error}</p>}
       {message && <p className={styles.message}>{message}</p>}
+      {initiated && !checkoutRequestID && !loading && <p className={styles.message}>If you cancelled the prompt on your phone by mistake, click the button above to resend.</p>}
       <button type="submit" className={styles.button} disabled={loading || !!checkoutRequestID}>
-        {loading ? 'Processing...' : 'Pay with M-Pesa'}
+        {loading ? 'Processing...' : initiated ? 'Resend STK Push' : 'Pay with M-Pesa'}
       </button>
     </form>
   );
