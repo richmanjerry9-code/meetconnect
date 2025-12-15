@@ -368,7 +368,7 @@ export default function ViewProfile() {
 
         {services.length > 0 && (
           <>
-            <p className={styles.pinkLabel}>Services offered</p>
+            <p className={styles.pinkLabel}>Looking for</p>
             <div className={styles.tags}>
               {services.map((s, i) => <span key={i} className={styles.tag}>{s}</span>)}
             </div>
