@@ -781,7 +781,7 @@ export default function ProfileSetup() {
   // Render
   // ---------------------------- 
   return (
-    <div className={`${styles.container} ${styles.premiumTheme}`}>
+    <div className={`${styles.container} ${styles.premiumTheme}`} style={{ backgroundColor: '#FFC0CB' }}>
       <Head>
         <title>Meet Connect Ladies - Profile Setup</title>
         <meta name="description" content="Set up your profile" />
@@ -913,17 +913,17 @@ export default function ProfileSetup() {
 
                   <label className={styles.label}>
                     Name
-                    <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required />
+                    <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
 
                   <label className={styles.label}>
                     Phone (e.g., 0712345678)
-                    <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required />
+                    <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
 
                   <label className={styles.label}>
                     Gender
-                    <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select}>
+                    <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
                       <option value="Female">Female</option>
                       <option value="Male">Male</option>
                     </select>
@@ -931,7 +931,7 @@ export default function ProfileSetup() {
 
                   <label className={styles.label}>
                     Sexual Orientation
-                    <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select}>
+                    <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
                       <option value="Straight">Straight</option>
                       <option value="Gay">Gay</option>
                       <option value="Bisexual">Bisexual</option>
@@ -941,12 +941,12 @@ export default function ProfileSetup() {
 
                   <label className={styles.label}>
                     Age (18+)
-                    <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required />
+                    <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
 
                   <label className={styles.label}>
                     Nationality
-                    <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} />
+                    <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
                 </div>
               )}
@@ -956,7 +956,7 @@ export default function ProfileSetup() {
                   <h2>Location</h2>
                   <label className={styles.label}>
                     County
-                    <select name="county" value={formData.county} onChange={handleChange} className={styles.select}>
+                    <select name="county" value={formData.county} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
                       <option value="">Select County</option>
                       {countyList.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -966,7 +966,7 @@ export default function ProfileSetup() {
 
                   <label className={styles.label}>
                     City/Town
-                    <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county}>
+                    <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
                       <option value="">Select City/Town</option>
                       {wards.map((w) => (
                         <option key={w} value={w}>{w}</option>
@@ -976,7 +976,7 @@ export default function ProfileSetup() {
 
                   <label className={styles.label}>
                     Area
-                    <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard}>
+                    <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
                       <option value="">Select Area</option>
                       {areas.map((a) => (
                         <option key={a} value={a}>{a}</option>
@@ -1214,6 +1214,7 @@ export default function ProfileSetup() {
                 min="1"
                 max={earningsBalance}
                 className={styles.input}
+                style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
               />
               <button onClick={handleWithdraw} className={styles.withdrawButton}>
                 {withdrawLoading ? 'Processing...' : 'Withdraw'}
@@ -1318,6 +1319,7 @@ export default function ProfileSetup() {
                         onChange={(e) => setOtherReason(e.target.value)}
                         placeholder="Please specify"
                         className={styles.input}
+                        style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
                       />
                     )}
                   </div>
@@ -1372,6 +1374,7 @@ export default function ProfileSetup() {
                 onChange={(e) => setPostCaption(e.target.value.slice(0, 500))}
                 placeholder="Caption..."
                 rows={4}
+                style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
               />
               <div>{postCaption.length}/500</div>
               <label>
