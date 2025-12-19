@@ -53,12 +53,11 @@ export default function ViewProfile() {
     { label: '30 Days', amount: 4999, duration: 30 }
   ];
 
-  // Auth listener - automatically closes login modal when real login happens
+  // Auth listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
 
-      // Auto-close login modal & clear pending when real user logs in
       if (currentUser && !currentUser.isAnonymous) {
         setShowLogin(false);
         setShowRegister(false);
@@ -74,7 +73,7 @@ export default function ViewProfile() {
     return () => unsubscribe();
   }, []);
 
-  // Fetch profile + subscription status (re-runs on user change)
+  // Fetch profile + subscription status
   useEffect(() => {
     if (!id) return;
 
@@ -90,7 +89,6 @@ export default function ViewProfile() {
         const profileData = { id: profileSnap.id, ...profileSnap.data() };
         setProfile(profileData);
 
-        // Re-check subscription when user changes (including after login)
         if (user && !user.isAnonymous) {
           const subSnap = await getDoc(doc(db, 'subscriptions', `${user.uid}_${id}`));
           const active = subSnap.exists() && subSnap.data()?.expiresAt?.toDate() > new Date();
@@ -224,7 +222,6 @@ export default function ViewProfile() {
       if (data.success) {
         alert('STK push sent! Check your phone.');
         setShowPaymentModal(false);
-        // Force refresh subscription status
         const subSnap = await getDoc(doc(db, 'subscriptions', `${user.uid}_${id}`));
         if (subSnap.exists()) setIsSubscribed(true);
       } else {
@@ -253,7 +250,6 @@ export default function ViewProfile() {
     }
   };
 
-  // Login success → close modal + execute pending
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -282,7 +278,6 @@ export default function ViewProfile() {
     }
   };
 
-  // Register success
   const handleRegister = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -318,6 +313,9 @@ export default function ViewProfile() {
   const nearby = profile.nearby || [];
   const cleanPhone = profile.phone?.replace(/\D/g, '') || '';
   const phoneLink = cleanPhone.startsWith('254') ? cleanPhone : '254' + cleanPhone.replace(/^0/, '');
+
+  // Check if this is the user's own profile (only for authenticated non-anonymous users)
+  const isOwnProfile = user && !user.isAnonymous && user.uid === id;
 
   return (
     <div className={styles.container}>
@@ -375,6 +373,7 @@ export default function ViewProfile() {
           </>
         )}
 
+        {/* Phone number and copy button - visible even on own profile */}
         {cleanPhone && (
           <div className={styles.callButtonContainer}>
             <div style={{ display: 'flex', gap: 15, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -386,9 +385,12 @@ export default function ViewProfile() {
           </div>
         )}
 
-        <div className={styles.callButtonContainer}>
-          <button onClick={handleMessage} className={styles.callButton}>💬 Send Message</button>
-        </div>
+        {/* Send Message button - hidden only on own profile */}
+        {!isOwnProfile && (
+          <div className={styles.callButtonContainer}>
+            <button onClick={handleMessage} className={styles.callButton}>💬 Send Message</button>
+          </div>
+        )}
 
         <div className={styles.tabButtons}>
           <button onClick={() => setCurrentTab('posts')} className={currentTab === 'posts' ? styles.activeTab : ''}>
@@ -427,7 +429,7 @@ export default function ViewProfile() {
         </div>
       </main>
 
-      {/* Payment Modal */}
+      {/* Modals remain unchanged */}
       {showPaymentModal && (
         <div className={styles.modalOverlay} onClick={() => setShowPaymentModal(false)}>
           <div className={styles.modal} onClick={e => e.stopPropagation()}>
