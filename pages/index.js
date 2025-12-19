@@ -569,6 +569,12 @@ export default function Home({ initialProfiles = [] }) {
             onChange={e => setSearchLocation(e.target.value)}
             className={styles.searchInput}
             aria-label="Search by location"
+            style={{
+              backgroundColor: "#ffffff",
+              color: "#000000",
+              WebkitTextFillColor: "#000000",
+              colorScheme: "light"
+            }}
           />
         </div>
         <div className={styles.filters}>
