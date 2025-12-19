@@ -9,7 +9,6 @@ import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, deleteDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
-
 const servicesList = [
   'Dinner Date',
   'Just Vibes',
@@ -18,7 +17,6 @@ const servicesList = [
   'Friendship',
   'Companionship / Meetup',
 ];
-
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -49,28 +47,23 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [verificationRequested, setVerificationRequested] = useState(false);
-
   // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('');
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet');
-
   // Add funds / withdraw
   const [showAddFundModal, setShowAddFundModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawLoading, setWithdrawLoading] = useState(false);
-
   // Transactions
   const [showEarningsHistory, setShowEarningsHistory] = useState(false);
   const [transactions, setTransactions] = useState([]);
-
   // My Subscriptions (as subscriber)
   const [showMySubscriptions, setShowMySubscriptions] = useState(false);
   const [mySubscriptions, setMySubscriptions] = useState([]);
-
   // Create post states
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [postFiles, setPostFiles] = useState([]); // File objects
@@ -79,7 +72,6 @@ export default function ProfileSetup() {
   const [postIsExclusive, setPostIsExclusive] = useState(false);
   const [postUploading, setPostUploading] = useState(false);
   const [showInappropriateBanner, setShowInappropriateBanner] = useState(false);
-
   // Gallery & viewer
   const [showPostsModal, setShowPostsModal] = useState(false);
   const [showExclusiveModal, setShowExclusiveModal] = useState(false);
@@ -88,26 +80,22 @@ export default function ProfileSetup() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const touchStartX = useRef(0);
   const [mpesaPhone, setMpesaPhone] = useState('');
-
   // Profile pic file and preview
   const [profilePicFile, setProfilePicFile] = useState(null);
   const [profilePicPreview, setProfilePicPreview] = useState('');
-
   const steps = ['Profile', 'Location', 'Services', 'Media', 'Membership & Wallets'];
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
   const profilePicInputRef = useRef(null);
-
   // New states for menu and delete profile
   const [showMenu, setShowMenu] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteReasons, setDeleteReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
   const reasons = ['Not interested anymore', 'Too expensive', 'Found alternative', 'Privacy concerns', 'Technical issues', 'Other'];
-
-  // ---------------------------- 
+  // ----------------------------
   // Lifecycle: load profile & subscriptions
-  // ---------------------------- 
+  // ----------------------------
   useEffect(() => {
     const raw = localStorage.getItem('loggedInUser');
     if (!raw) {
@@ -116,7 +104,6 @@ export default function ProfileSetup() {
     }
     const user = JSON.parse(raw);
     setLoggedInUser(user);
-
     const profileRef = doc(db, 'profiles', user.id);
     const unsub = onSnapshot(
       profileRef,
@@ -124,7 +111,6 @@ export default function ProfileSetup() {
         if (snap.exists()) {
           const data = snap.data();
           const loadedPhone = (data.phone || '').replace(/[^\d]/g, '');
-
           // membership expiry handling
           let effectiveMembership = data.membership || 'Regular';
           if (data.membershipExpiresAt && data.membershipExpiresAt.seconds) {
@@ -135,7 +121,6 @@ export default function ProfileSetup() {
               setDoc(profileRef, { membership: 'Regular', membershipExpiresAt: null }, { merge: true }).catch(() => {});
             }
           }
-
           setFormData((prev) => ({
             ...prev,
             ...data,
@@ -168,7 +153,6 @@ export default function ProfileSetup() {
         setLoading(false);
       }
     );
-
     // fetch transactions (creator subscriptions)
     (async function fetchTxs() {
       try {
@@ -200,7 +184,6 @@ export default function ProfileSetup() {
         console.error('Failed to fetch transactions', e);
       }
     })();
-
     // fetch my subscriptions (as subscriber)
     (async function fetchMySubs() {
       try {
@@ -224,7 +207,6 @@ export default function ProfileSetup() {
             }
             const expiresAtDate = data.expiresAt ? data.expiresAt.toDate() : null;
             const isActive = expiresAtDate && expiresAtDate > new Date();
-
             return {
               id: d.id,
               creatorId: data.creatorId,
@@ -243,7 +225,6 @@ export default function ProfileSetup() {
         console.error('Failed to fetch my subscriptions', e);
       }
     })();
-
     return () => {
       unsub();
       // revoke previews
@@ -252,10 +233,9 @@ export default function ProfileSetup() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
-
-  // ---------------------------- 
+  // ----------------------------
   // Helpers
-  // ---------------------------- 
+  // ----------------------------
   const formatPhoneForMpesa = (phone) => {
     if (!phone) throw new Error('Phone number is required');
     let formatted = phone.replace(/[^\d]/g, '');
@@ -266,15 +246,12 @@ export default function ProfileSetup() {
     }
     return formatted;
   };
-
   const shortenUserId = (id) => (id ? id.slice(-10) : '');
-
   const isVideo = (urlOrFile) => {
     if (!urlOrFile) return false;
     if (typeof urlOrFile === 'object' && urlOrFile.type) return urlOrFile.type.startsWith('video/');
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(urlOrFile));
   };
-
   const getThumbnail = (url) => {
     if (!url) return '';
     try {
@@ -286,13 +263,11 @@ export default function ProfileSetup() {
     }
     return url;
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Form handlers
-  // ---------------------------- 
+  // ----------------------------
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-
     if (type === 'checkbox' && name === 'nearby') {
       setFormData((prev) => {
         const current = prev.nearby || [];
@@ -309,7 +284,6 @@ export default function ProfileSetup() {
       });
       return;
     }
-
     if (type === 'checkbox') {
       setFormData((prev) => ({
         ...prev,
@@ -317,7 +291,6 @@ export default function ProfileSetup() {
       }));
       return;
     }
-
     let v = value;
     if (name === 'phone') {
       v = value.replace(/[^\d]/g, '');
@@ -325,24 +298,19 @@ export default function ProfileSetup() {
       if (v.length === 10 && v.startsWith('07')) setError('');
       else if (v.length > 0) setError('Phone should be in the format 07XXXXXXXX');
     }
-
     if (name === 'county') {
       setFormData((prev) => ({ ...prev, county: v, ward: '', area: '', nearby: [] }));
       setSelectedWard('');
       return;
     }
-
     setFormData((prev) => ({ ...prev, [name]: v }));
   };
-
   const handleWardChange = (e) => {
     const ward = e.target.value;
     setSelectedWard(ward);
     setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
   };
-
   const handleAreaChange = (e) => setFormData((prev) => ({ ...prev, area: e.target.value }));
-
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -350,33 +318,28 @@ export default function ProfileSetup() {
     setProfilePicFile(file);
     setProfilePicPreview(URL.createObjectURL(file));
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Post file selection & previews
-  // ---------------------------- 
+  // ----------------------------
   const handlePostFileSelect = (e) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
-
     const allowed = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
     const oversize = allowed.find((f) => f.size > 50 * 1024 * 1024);
     if (oversize) {
       setError('One of the files exceeds 50MB limit.');
       return;
     }
-
     const total = postFiles.length + allowed.length;
     if (total > 10) {
       setError('Maximum 10 files per post.');
       return;
     }
-
     const newPreviews = allowed.map((f) => URL.createObjectURL(f));
     setPostFiles((prev) => [...prev, ...allowed]);
     setPostPreviews((prev) => [...prev, ...newPreviews]);
     setError('');
   };
-
   const handleRemovePostPreview = (index) => {
     setPostPreviews((prev) => {
       const url = prev[index];
@@ -385,18 +348,15 @@ export default function ProfileSetup() {
     });
     setPostFiles((prev) => prev.filter((_, i) => i !== index));
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Create post (upload)
-  // ---------------------------- 
+  // ----------------------------
   const handleCreatePost = async () => {
     if (!loggedInUser) return;
     if (postFiles.length === 0) return;
-
     setPostUploading(true);
     setError('');
     setShowInappropriateBanner(false);
-
     try {
       const uploadedUrls = [];
       for (let i = 0; i < postFiles.length; i++) {
@@ -406,10 +366,8 @@ export default function ProfileSetup() {
         fd.append('userId', loggedInUser.id);
         fd.append('isExclusive', postIsExclusive ? 'true' : 'false');
         fd.append('caption', postCaption || '');
-
         const res = await fetch('/api/uploadPost', { method: 'POST', body: fd });
         const data = await res.json();
-
         if (!res.ok || !data.url) {
           if (data && data.error === 'Inappropriate content detected') {
             setShowInappropriateBanner(true);
@@ -420,19 +378,16 @@ export default function ProfileSetup() {
         }
         uploadedUrls.push(data.url);
       }
-
       const fieldToUpdate = postIsExclusive ? 'exclusivePics' : 'normalPics';
       await setDoc(
         doc(db, 'profiles', loggedInUser.id),
         { [fieldToUpdate]: arrayUnion(...uploadedUrls) },
         { merge: true }
       );
-
       setFormData((prev) => ({
         ...prev,
         [fieldToUpdate]: [...(postIsExclusive ? (prev.exclusivePics || []) : (prev.normalPics || [])), ...uploadedUrls],
       }));
-
       postPreviews.forEach((u) => URL.revokeObjectURL(u));
       setPostPreviews([]);
       setPostFiles([]);
@@ -447,36 +402,31 @@ export default function ProfileSetup() {
       setPostUploading(false);
     }
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Remove media from profile
-  // ---------------------------- 
+  // ----------------------------
   const handleRemoveNormalPic = async (index) => {
     const newList = (formData.normalPics || []).filter((_, i) => i !== index);
     setFormData((p) => ({ ...p, normalPics: newList }));
     await setDoc(doc(db, 'profiles', loggedInUser.id), { normalPics: newList }, { merge: true });
   };
-
   const handleRemoveExclusivePic = async (index) => {
     const newList = (formData.exclusivePics || []).filter((_, i) => i !== index);
     setFormData((p) => ({ ...p, exclusivePics: newList }));
     await setDoc(doc(db, 'profiles', loggedInUser.id), { exclusivePics: newList }, { merge: true });
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Media viewer controls
-  // ---------------------------- 
+  // ----------------------------
   const handleMediaClick = (gallery, index) => {
     if (!Array.isArray(gallery) || gallery.length === 0) return;
     setSelectedGallery(gallery);
     setSelectedIndex(index || 0);
     setShowMediaViewer(true);
   };
-
   const handleTouchStart = (e) => {
     touchStartX.current = e.touches[0].clientX;
   };
-
   const handleTouchEnd = (e) => {
     const touchEndX = e.changedTouches[0].clientX;
     if (touchStartX.current - touchEndX > 50) {
@@ -485,10 +435,9 @@ export default function ProfileSetup() {
       setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1));
     }
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Validation / stepper
-  // ---------------------------- 
+  // ----------------------------
   const validateStep = (step) => {
     switch (step) {
       case 0:
@@ -537,35 +486,35 @@ export default function ProfileSetup() {
         return true;
     }
   };
-
-  const validateAll = () => {
+  const findInvalidStep = () => {
     for (let i = 0; i < 3; i++) {
-      if (!validateStep(i)) return false;
+      if (!validateStep(i)) {
+        return i;
+      }
     }
-    return true;
+    return -1;
   };
-
   const handleNextStep = () => {
     if (validateStep(activeStep)) {
       setError('');
       setActiveStep((s) => Math.min(s + 1, steps.length - 1));
     }
   };
-
   const handlePrevStep = () => setActiveStep((s) => Math.max(s - 1, 0));
-
-  // ---------------------------- 
+  // ----------------------------
   // Save profile
-  // ---------------------------- 
+  // ----------------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
-
-    if (!validateAll()) {
+    setError('');
+    const invalidStep = findInvalidStep();
+    if (invalidStep !== -1) {
+      setActiveStep(invalidStep);
+      validateStep(invalidStep); // Sets the error message for the invalid step
       setSaveLoading(false);
       return;
     }
-
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
@@ -577,7 +526,6 @@ export default function ProfileSetup() {
           reader.readAsDataURL(profilePicFile);
         });
         const imageBase64 = await base64Promise;
-
         const res = await fetch('/api/uploadProfilePic', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -590,7 +538,6 @@ export default function ProfileSetup() {
           return;
         }
         profilePicUrl = data.url;
-
         const modRes = await fetch('/api/moderateImage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -609,7 +556,6 @@ export default function ProfileSetup() {
         return;
       }
     }
-
     try {
       await setDoc(
         doc(db, 'profiles', loggedInUser.id),
@@ -626,10 +572,9 @@ export default function ProfileSetup() {
       setSaveLoading(false);
     }
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // Verification, membership, payments
-  // ---------------------------- 
+  // ----------------------------
   const handleRequestVerification = async () => {
     if (verificationRequested || formData.verified) {
       alert('Verification already requested or verified.');
@@ -643,13 +588,11 @@ export default function ProfileSetup() {
       setError('Failed to request verification.');
     }
   };
-
   const handleUpgrade = (level) => {
     setSelectedLevel(level);
     setSelectedDuration('');
     setShowModal(true);
   };
-
   const handleDurationSelect = (d) => {
     setSelectedDuration(d);
     const price = plans[selectedLevel][d];
@@ -657,9 +600,7 @@ export default function ProfileSetup() {
     setShowPaymentChoice(true);
     setShowModal(false);
   };
-
   const handlePaymentMethodChange = (m) => setSelectedPaymentMethod(m);
-
   const handleConfirmWalletUpgrade = async () => {
     const price = plans[selectedLevel][selectedDuration];
     if (fundingBalance < price) {
@@ -669,9 +610,7 @@ export default function ProfileSetup() {
     const daysMap = { '3 Days': 3, '7 Days': 7, '15 Days': 15, '30 Days': 30 };
     const days = daysMap[selectedDuration] || 0;
     const clientExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-
     if (!confirm(`Upgrade to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet?`)) return;
-
     const newBalance = fundingBalance - price;
     setFundingBalance(newBalance);
     await setDoc(
@@ -684,11 +623,9 @@ export default function ProfileSetup() {
     setSelectedDuration('');
     alert('Upgrade successful!');
   };
-
   const handleAddFund = () => {
     setShowAddFundModal(true);
   };
-
   const handleWithdraw = async () => {
     try {
       if (!formData.phone) throw new Error('Add phone first.');
@@ -696,7 +633,6 @@ export default function ProfileSetup() {
       if (isNaN(amount) || amount <= 0 || amount > earningsBalance) throw new Error('Invalid amount.');
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       if (!confirm(`Withdraw KSh ${amount} to ${formattedPhone}?`)) return;
-
       setWithdrawLoading(true);
       const res = await fetch('/api/withdraw', {
         method: 'POST',
@@ -717,31 +653,26 @@ export default function ProfileSetup() {
       setWithdrawLoading(false);
     }
   };
-
   const handleViewCreatorProfile = (creatorId) => {
     router.push(`/profiles/${creatorId}`);
   };
-
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     setLoggedInUser(null);
     await signOut(auth);
     router.push('/');
   };
-
   // New: Delete profile handlers
   const handleReasonChange = (e, reason) => {
     const checked = e.target.checked;
     setDeleteReasons((prev) => (checked ? [...prev, reason] : prev.filter((r) => r !== reason)));
   };
-
   const handleDeleteProfile = async () => {
     if (deleteReasons.length === 0) {
       alert('Please select at least one reason.');
       return;
     }
     if (!confirm('Are you sure you want to delete your profile? This action cannot be undone.')) return;
-
     try {
       await deleteDoc(doc(db, 'profiles', loggedInUser.id));
       handleLogout();
@@ -750,22 +681,18 @@ export default function ProfileSetup() {
       alert('Failed to delete profile. Please try again.');
     }
   };
-
-  // ---------------------------- 
+  // ----------------------------
   // UI derived values
-  // ---------------------------- 
+  // ----------------------------
   const countyList = useMemo(() => Object.keys(locations).sort(), []);
-
   const wards = useMemo(
     () => (formData.county && locations[formData.county] ? Object.keys(locations[formData.county]) : []),
     [formData.county]
   );
-
   const areas = useMemo(
     () => (selectedWard && locations[formData.county] ? locations[formData.county][selectedWard] : []),
     [formData.county, selectedWard]
   );
-
   const plans = useMemo(
     () => ({
       Prime: { '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
@@ -774,12 +701,10 @@ export default function ProfileSetup() {
     }),
     []
   );
-
   if (loading) return <div className={styles.container}>Loading...</div>;
-
-  // ---------------------------- 
+  // ----------------------------
   // Render
-  // ---------------------------- 
+  // ----------------------------
   return (
     <div className={`${styles.container} ${styles.premiumTheme}`} style={{ backgroundColor: '#FFC0CB' }}>
       <Head>
@@ -787,19 +712,16 @@ export default function ProfileSetup() {
         <meta name="description" content="Set up your profile" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-
       <header className={`${styles.header} ${styles.premiumHeader}`}>
         {/* ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← */}
         {/* BACK BUTTON ADDED HERE (uses same style as modal back buttons) */}
         <button onClick={() => router.push('/')} className={styles.modalBack}>←</button>
         {/* ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← */}
-
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
             Meet Connect
           </h1>
         </div>
-
         <div className={styles.authButtons}>
           <button onClick={handleLogout} className={`${styles.button} ${styles.logout}`}>
             Logout
@@ -818,7 +740,6 @@ export default function ProfileSetup() {
           )}
         </div>
       </header>
-
       <main className={`${styles.main} ${styles.premiumMain}`}>
         <div className={styles.profileSetupContainer}>
           <aside className={`${styles.membershipSection} ${styles.premiumSidebar}`}>
@@ -830,7 +751,6 @@ export default function ProfileSetup() {
                 Add Fund
               </button>
             </div>
-
             <div className={`${styles.walletSection} ${styles.earningsWallet}`}>
               <div className={styles.walletStripe} />
               <p className={styles.walletLabel}>Earnings Wallet</p>
@@ -842,7 +762,6 @@ export default function ProfileSetup() {
                 View Purchases
               </button>
             </div>
-
             <h2 className={styles.sectionTitle}>My Membership</h2>
             <p>Current: {membership}</p>
             <p>Regular: Free</p>
@@ -855,19 +774,16 @@ export default function ProfileSetup() {
             <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
               Upgrade to VVIP
             </button>
-
             <div className={styles.walletSection}>
               <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>
                 My Exclusive Subscriptions
               </button>
             </div>
           </aside>
-
           {/* Profile form is now ALWAYS visible */}
           <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
             <h1 className={styles.setupTitle}>My Profile Setup</h1>
             <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
-
             <div className={styles.stepper}>
               {steps.map((s, idx) => (
                 <button
@@ -881,9 +797,7 @@ export default function ProfileSetup() {
                 </button>
               ))}
             </div>
-
             {error && <p className={styles.error}>{error}</p>}
-
             <form onSubmit={handleSubmit} className={styles.profileForm}>
               {/* === All steps exactly unchanged === */}
               {activeStep === 0 && (
@@ -910,17 +824,14 @@ export default function ProfileSetup() {
                       )
                     )}
                   </label>
-
                   <label className={styles.label}>
                     Name
                     <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
-
                   <label className={styles.label}>
                     Phone (e.g., 0712345678)
                     <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
-
                   <label className={styles.label}>
                     Gender
                     <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
@@ -928,7 +839,6 @@ export default function ProfileSetup() {
                       <option value="Male">Male</option>
                     </select>
                   </label>
-
                   <label className={styles.label}>
                     Sexual Orientation
                     <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
@@ -938,19 +848,16 @@ export default function ProfileSetup() {
                       <option value="Other">Other</option>
                     </select>
                   </label>
-
                   <label className={styles.label}>
                     Age (18+)
                     <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
-
                   <label className={styles.label}>
                     Nationality
                     <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
                 </div>
               )}
-
               {activeStep === 1 && (
                 <div className={styles.stepContent}>
                   <h2>Location</h2>
@@ -963,7 +870,6 @@ export default function ProfileSetup() {
                       ))}
                     </select>
                   </label>
-
                   <label className={styles.label}>
                     City/Town
                     <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
@@ -973,7 +879,6 @@ export default function ProfileSetup() {
                       ))}
                     </select>
                   </label>
-
                   <label className={styles.label}>
                     Area
                     <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
@@ -983,7 +888,6 @@ export default function ProfileSetup() {
                       ))}
                     </select>
                   </label>
-
                   {formData.area && (
                     <label className={styles.label}>
                       Nearby Places (up to 4)
@@ -1005,7 +909,6 @@ export default function ProfileSetup() {
                   )}
                 </div>
               )}
-
               {activeStep === 2 && (
                 <div className={styles.stepContent}>
                   <h2>Services</h2>
@@ -1028,14 +931,12 @@ export default function ProfileSetup() {
                   </label>
                 </div>
               )}
-
               {activeStep === 3 && (
                 <div className={styles.stepContent}>
                   <h2>Media</h2>
                   <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>
                     + Create Post
                   </button>
-
                   <div className={styles.viewButtonsContainer}>
                     <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>
                       View Posts
@@ -1044,11 +945,9 @@ export default function ProfileSetup() {
                       View Exclusive
                     </button>
                   </div>
-
                   <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
                 </div>
               )}
-
               {activeStep === 4 && (
                 <div className={styles.stepContent}>
                   <h2>Membership & Wallets</h2>
@@ -1058,7 +957,6 @@ export default function ProfileSetup() {
                   </button>
                 </div>
               )}
-
               <div className={styles.stepButtons}>
                 {activeStep > 0 && (
                   <button type="button" onClick={handlePrevStep} className={styles.button}>
@@ -1077,7 +975,6 @@ export default function ProfileSetup() {
             </form>
           </div>
         </div>
-
         {/* ======================== FULL SCREEN MEDIA VIEWER OVERLAY ======================== */}
         {showMediaViewer && (
           <div className={styles.mediaViewerOverlay}>
@@ -1110,7 +1007,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {/* ========== ALL MODALS (unchanged except gallery thumbs upgraded) ========== */}
         {showModal && (
           <div className={styles.modal}>
@@ -1133,7 +1029,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showPaymentChoice && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1149,7 +1044,6 @@ export default function ProfileSetup() {
                   M-Pesa
                 </label>
               </div>
-
               {selectedPaymentMethod === 'mpesa' && (
                 <StkPushForm
                   initialPhone={mpesaPhone}
@@ -1166,20 +1060,17 @@ export default function ProfileSetup() {
                   }}
                 />
               )}
-
               {selectedPaymentMethod === 'wallet' && (
                 <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton}>
                   Confirm
                 </button>
               )}
-
               <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton}>
                 Close
               </button>
             </div>
           </div>
         )}
-
         {showAddFundModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1201,7 +1092,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showWithdrawModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1225,7 +1115,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showEarningsHistory && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1262,7 +1151,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showMySubscriptions && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1297,7 +1185,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showDeleteModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1334,7 +1221,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showCreatePostModal && (
           <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
             <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
@@ -1400,7 +1286,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {/* Posts Modal - upgraded square lazy thumbnails with play icon */}
         {showPostsModal && (
           <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
@@ -1429,7 +1314,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {/* Exclusive Modal - same upgraded thumbnails */}
         {showExclusiveModal && (
           <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
@@ -1458,7 +1342,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-
         {showInappropriateBanner && (
           <div className={styles.inappropriateBanner}>
             <p>Inappropriate content detected. Use exclusive or change image.</p>
