@@ -8,7 +8,7 @@ import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
 import { collection, query, orderBy, limit, getDocs, startAfter, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 
 /**
  * Custom hook for debouncing values.
@@ -68,8 +68,12 @@ export default function Home({ initialProfiles = [] }) {
   const [protectedFeature, setProtectedFeature] = useState('');
   const [pendingPath, setPendingPath] = useState(null); // ← remembers where user wanted to go
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
-  const [registerForm, setRegisterForm] = useState({ name: '', email: '', password: '' });
+  const [registerForm, setRegisterForm] = useState({ name: '' });
   const [loginLoading, setLoginLoading] = useState(false);
+  const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotMessage, setForgotMessage] = useState('');
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
   const sentinelRef = useRef(null);
@@ -124,7 +128,7 @@ export default function Home({ initialProfiles = [] }) {
           } else {
             const basicProfile = {
               uid: currentUser.uid,
-              name: currentUser.email.split('@')[0],
+              name: currentUser.displayName || currentUser.email.split('@')[0],
               email: currentUser.email,
               username: currentUser.email.split('@')[0],
               membership: 'Regular',
@@ -289,6 +293,63 @@ export default function Home({ initialProfiles = [] }) {
       setShowLogin(true);
     }
   };
+  // Google Login/Signup handler
+  const handleGoogleAuth = async (customName = '') => {
+    setAuthError('');
+    setLoginLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const firebaseUser = result.user;
+      const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
+      let profileData;
+      let isNewUser = false;
+      if (profileDoc.exists()) {
+        profileData = { id: profileDoc.id, ...profileDoc.data() };
+      } else {
+        const basicProfile = {
+          uid: firebaseUser.uid,
+          name: customName || firebaseUser.displayName || firebaseUser.email.split('@')[0],
+          email: firebaseUser.email,
+          username: firebaseUser.email.split('@')[0],
+          membership: 'Regular',
+          createdAt: serverTimestamp(),
+        };
+        await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
+        profileData = { id: firebaseUser.uid, ...basicProfile };
+        isNewUser = true;
+        // Send verification email if not verified (though Google accounts are usually verified)
+        if (!firebaseUser.emailVerified) {
+          await sendEmailVerification(firebaseUser);
+        }
+      }
+      localStorage.setItem('loggedInUser', JSON.stringify(profileData));
+      setUser(profileData);
+      setAuthError('Success!');
+      setTimeout(() => {
+        setShowLogin(false);
+        setShowRegister(false);
+        const target = pendingPath || (isNewUser ? '/profile-setup?t=' + Date.now() : '/');
+        router.push(target);
+        setPendingPath(null);
+        setProtectedFeature('');
+        if (isNewUser) {
+          setTimeout(() => alert('Welcome! Please complete your profile to appear in searches.'), 800);
+        }
+      }, 1500);
+    } catch (err) {
+      console.error('Google auth error:', err);
+      let msg = 'Authentication failed. Please try again.';
+      switch (err.code) {
+        case 'auth/popup-closed-by-user': msg = 'Popup closed. Try again.'; break;
+        case 'auth/account-exists-with-different-credential': msg = 'Account exists with different credential.'; break;
+        default: msg = 'Something went wrong.';
+      }
+      setAuthError(msg);
+    } finally {
+      setLoginLoading(false);
+    }
+  };
   // Login handler — redirects to pendingPath after success
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -308,6 +369,7 @@ export default function Home({ initialProfiles = [] }) {
     }
     try {
       const { user: firebaseUser } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
+      // Allow login even if not verified, as per request
       const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
       let profileData;
       let isNewUser = false;
@@ -354,38 +416,32 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
     }
   };
-  // Register handler — respects pendingPath
-  const handleRegister = async (e) => {
+  // Forgot password handler
+  const handleForgotPassword = async (e) => {
     e.preventDefault();
+    setForgotMessage('');
     setAuthError('');
-    if (!registerForm.name.trim() || !registerForm.email.trim() || registerForm.password.length < 8) {
-      setAuthError('Please fill all fields correctly.');
+    setForgotLoading(true);
+    const trimmedEmail = forgotEmail.trim().toLowerCase();
+    if (!trimmedEmail || !/^\S+@\S+\.\S+$/.test(trimmedEmail)) {
+      setAuthError('Please enter a valid email address.');
+      setForgotLoading(false);
       return;
     }
     try {
-      const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, registerForm.email, registerForm.password);
-      const newProfile = {
-        uid: firebaseUser.uid,
-        name: registerForm.name,
-        email: registerForm.email,
-        username: registerForm.email.split('@')[0],
-        membership: 'Regular',
-        createdAt: serverTimestamp(),
-      };
-      await setDoc(doc(firestore, 'profiles', firebaseUser.uid), newProfile);
-      const fullUser = { id: firebaseUser.uid, ...newProfile };
-      localStorage.setItem('loggedInUser', JSON.stringify(fullUser));
-      setUser(fullUser);
-      setAuthError('Registration successful!');
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      setForgotMessage('Password reset link sent! Check your email.');
       setTimeout(() => {
-        setShowRegister(false);
-        const target = pendingPath || '/profile-setup?t=' + Date.now(); // new users go to setup unless they came from protected page
-        router.push(target);
-        setPendingPath(null);
-        setProtectedFeature('');
-      }, 1500);
+        setForgotPasswordMode(false);
+        setForgotEmail('');
+      }, 3000);
     } catch (err) {
-      setAuthError(err.code === 'auth/email-already-in-use' ? 'Email already registered!' : 'Registration failed. Try again.');
+      console.error('Forgot password error:', err);
+      let msg = 'Failed to send reset link. Try again.';
+      if (err.code === 'auth/user-not-found') msg = 'No account found with this email.';
+      setAuthError(msg);
+    } finally {
+      setForgotLoading(false);
     }
   };
   const handleLogout = async () => {
@@ -397,6 +453,9 @@ export default function Home({ initialProfiles = [] }) {
     setShowLogin(false);
     setPendingPath(null);
     setProtectedFeature('');
+    setForgotPasswordMode(false);
+    setForgotEmail('');
+    setForgotMessage('');
   };
   // ESC & click outside
   useEffect(() => {
@@ -406,6 +465,7 @@ export default function Home({ initialProfiles = [] }) {
         setShowRegister(false);
         setPendingPath(null);
         setProtectedFeature('');
+        setForgotPasswordMode(false);
       }
     };
     document.addEventListener('keydown', handler);
@@ -618,29 +678,56 @@ export default function Home({ initialProfiles = [] }) {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={closeLoginModal}>
           <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
             <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={closeLoginModal}>×</span>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Welcome Back</h2>
-            {protectedFeature && (
+            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>{forgotPasswordMode ? 'Reset Password' : 'Welcome Back'}</h2>
+            {protectedFeature && !forgotPasswordMode && (
               <p style={{color:'#ff69b4',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
                 Please login to access {protectedFeature}
               </p>
             )}
-            <form onSubmit={handleLogin}>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
-                <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-              <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                {loginLoading ? 'Logging in...' : 'Login'}
-              </button>
-              <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>Create New Account</span>
-              </div>
-            </form>
+            {!forgotPasswordMode ? (
+              <>
+                <button onClick={handleGoogleAuth} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                  {loginLoading ? 'Authenticating...' : 'Continue with Google'}
+                </button>
+                <p style={{ margin: '10px 0', color: '#666' }}>or</p>
+                <form onSubmit={handleLogin}>
+                  <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                    <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                    <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                  </div>
+                  <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                    <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
+                    <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                    <span style={{ fontSize: '0.8rem', color: '#666', display: 'block', marginTop: '4px' }}>(This is a separate password for our app, not your email provider's password)</span>
+                  </div>
+                  {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+                  <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                    {loginLoading ? 'Logging in...' : 'Login'}
+                  </button>
+                  <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#444' }}>
+                    <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(true)}>Forgot Password?</span>
+                  </div>
+                  <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+                    Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>Create New Account</span>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <form onSubmit={handleForgotPassword}>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                  <input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required disabled={forgotLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+                {forgotMessage && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{forgotMessage}</p>}
+                <button type="submit" disabled={forgotLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: forgotLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !forgotLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !forgotLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+                </button>
+                <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+                  <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(false)}>Back to Login</span>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -649,24 +736,14 @@ export default function Home({ initialProfiles = [] }) {
           <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
             <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
             <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
-            <form onSubmit={handleRegister}>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
-                <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({...registerForm, name: e.target.value})} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                <input type="email" placeholder="you@example.com" value={registerForm.email} onChange={e => setRegisterForm({...registerForm, email: e.target.value})} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password (min 8 chars)</label>
-                <input type="password" placeholder="••••••••" value={registerForm.password} onChange={e => setRegisterForm({...registerForm, password: e.target.value})} required minLength={8} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-              <button type="submit" style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)'; }} onMouseOut={(e) => { e.target.style.transform = ''; e.target.style.boxShadow = ''; }} >
-                Register
-              </button>
-            </form>
+            <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+              <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
+              <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({...registerForm, name: e.target.value})} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+            </div>
+            <button onClick={() => handleGoogleAuth(registerForm.name)} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+              {loginLoading ? 'Authenticating...' : 'Continue with Google'}
+            </button>
+            {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
           </div>
         </div>
       )}
