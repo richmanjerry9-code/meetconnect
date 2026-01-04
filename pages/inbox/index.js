@@ -1,4 +1,3 @@
-// /pages/inbox/index.js
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
@@ -117,7 +116,15 @@ export default function Inbox() {
   if (!user) return <div>Please log in to view your inbox.</div>;
 
   return (
-    <div className={styles.inboxContainer}>
+    <div
+      className={styles.inboxContainer}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        overflow: "hidden",
+      }}
+    >
       {/* ✅ Back Arrow + Title */}
       <div className={styles.inboxHeader}>
         <button
@@ -136,85 +143,128 @@ export default function Inbox() {
         <h2 className={styles.inboxTitle}>Inbox</h2>
       </div>
 
-      {chats.length === 0 && (
-        <p style={{ textAlign: "center", opacity: 0.6, marginTop: "40px" }}>
-          No messages yet
-        </p>
-      )}
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "10px 0", // Optional padding for better spacing
+        }}
+      >
+        {chats.length === 0 && (
+          <p style={{ textAlign: "center", opacity: 0.6, marginTop: "40px" }}>
+            No messages yet
+          </p>
+        )}
 
-      {chats.map((chat) => (
-        <div
-          key={chat.id}
-          className={styles.chatRow}
-          onClick={() => router.push(`/inbox/${chat.id}`)}
-        >
-          {/* Avatar */}
-          <Image
-            src={chat.otherUser?.profilePic || "/default-profile.png"}
-            width={50}
-            height={50}
-            className={styles.avatar}
-            alt="User"
-          />
+        {chats.map((chat) => (
+          <div
+            key={chat.id}
+            className={styles.chatRow}
+            onClick={() => router.push(`/inbox/${chat.id}`)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              padding: "10px",
+              borderBottom: "1px solid #eee", // Optional for separation
+            }}
+          >
+            {/* Avatar */}
+            <Image
+              src={chat.otherUser?.profilePic || "/default-profile.png"}
+              width={50}
+              height={50}
+              className={styles.avatar}
+              alt="User"
+            />
 
-          {/* Name + Last message */}
-          <div className={styles.chatInfo}>
-            <div className={styles.chatName}>
-              {chat.otherUser?.name || "User"}
-            </div>
-
-            <div className={styles.chatLastMessageRow}>
-              <span className={styles.chatLastMessage}>
-                {chat.lastMessage}
-              </span>
-            </div>
-          </div>
-
-          {/* Time */}
-          <div className={styles.chatTime}>
-            {chat.timestamp?.toDate?.().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }) || "--"}
-          </div>
-
-          {/* ✅ 3-Dot Menu */}
-          <div className={styles.chatActions}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenMenuId(openMenuId === chat.id ? null : chat.id);
+            {/* Name + Last message */}
+            <div
+              className={styles.chatInfo}
+              style={{
+                flex: 1,
+                marginLeft: "10px",
+                overflow: "hidden",
               }}
-              className={styles.menuBtn}
-              style={{ fontSize: "22px" }}
             >
-              ⋮
-            </button>
-
-            {openMenuId === chat.id && (
-              <div className={styles.menuDropdown}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePin(chat.id, chat.pinnedBy.includes(user.uid));
-                  }}
-                >
-                  {chat.pinnedBy.includes(user.uid) ? "Unpin" : "Pin"} Chat
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(chat.id);
-                  }}
-                >
-                  Delete Chat
-                </button>
+              <div className={styles.chatName}>
+                {chat.otherUser?.name || "User"}
               </div>
-            )}
+
+              <div className={styles.chatLastMessageRow}>
+                <span
+                  className={styles.chatLastMessage}
+                  style={{
+                    display: "block", // Allow multi-line
+                    whiteSpace: "pre-wrap",
+                    overflowWrap: "break-word",
+                    textOverflow: "ellipsis", // Still truncate if too long, but can adjust
+                    overflow: "hidden",
+                    maxHeight: "3em", // Limit to ~3 lines to prevent rows from being too tall
+                  }}
+                >
+                  {chat.lastMessage}
+                </span>
+              </div>
+            </div>
+
+            {/* Time */}
+            <div
+              className={styles.chatTime}
+              style={{
+                marginLeft: "10px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {chat.timestamp?.toDate?.().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }) || "--"}
+            </div>
+
+            {/* ✅ 3-Dot Menu */}
+            <div className={styles.chatActions}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuId(openMenuId === chat.id ? null : chat.id);
+                }}
+                className={styles.menuBtn}
+                style={{ fontSize: "22px" }}
+              >
+                ⋮
+              </button>
+
+              {openMenuId === chat.id && (
+                <div className={styles.menuDropdown}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePin(chat.id, chat.pinnedBy.includes(user.uid));
+                    }}
+                  >
+                    {chat.pinnedBy.includes(user.uid) ? "Unpin" : "Pin"} Chat
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(chat.id);
+                    }}
+                  >
+                    Delete Chat
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
+
+      {/* Optional: Add a fixed input or footer here if "chat input" refers to a search or new message bar */}
+      {/* For example: */}
+      {/* <div style={{ flex: "0 0 auto", padding: "10px", background: "#f0f0f0" }}> */}
+      {/*   <input type="text" placeholder="Search or start new chat..." style={{ width: "100%" }} /> */}
+      {/* </div> */}
     </div>
   );
 }
