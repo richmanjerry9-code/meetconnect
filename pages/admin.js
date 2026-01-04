@@ -32,7 +32,7 @@ const servicesList = [
   'Friendship',
 ];
 
-const ADMIN_PASSWORD = '447962Pa$$word';
+const ADMIN_PASSWORD = 'GOFUCKYOURSELF';
 const GROUP_CHAT_DOC = "groupChats/main";
 
 export default function AdminPanel() {
