@@ -6,7 +6,7 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
-import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 const servicesList = [
@@ -17,6 +17,7 @@ const servicesList = [
   'Friendship',
   'Companionship / Meetup',
 ];
+const REGULAR_CUTOFF = new Date('2026-01-06T00:00:00Z');
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -38,6 +39,7 @@ export default function ProfileSetup() {
     normalPics: [],
     exclusivePics: [],
     verified: false,
+    createdAt: null,
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
@@ -47,6 +49,8 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [verificationRequested, setVerificationRequested] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [isLegacyUser, setIsLegacyUser] = useState(true);
   // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
@@ -111,6 +115,13 @@ export default function ProfileSetup() {
         if (snap.exists()) {
           const data = snap.data();
           const loadedPhone = (data.phone || '').replace(/[^\d]/g, '');
+          // Backfill createdAt if missing
+          if (!data.createdAt) {
+            setDoc(profileRef, { createdAt: serverTimestamp() }, { merge: true }).catch(console.error);
+          }
+          const createdAtDate = data.createdAt ? data.createdAt.toDate() : new Date();
+          const isLegacy = createdAtDate < REGULAR_CUTOFF;
+          setIsLegacyUser(isLegacy);
           // membership expiry handling
           let effectiveMembership = data.membership || 'Regular';
           if (data.membershipExpiresAt && data.membershipExpiresAt.seconds) {
@@ -120,6 +131,12 @@ export default function ProfileSetup() {
               // server should expire, but we also clear client-side
               setDoc(profileRef, { membership: 'Regular', membershipExpiresAt: null }, { merge: true }).catch(() => {});
             }
+          }
+          if (!isLegacy && effectiveMembership === 'Regular') {
+            effectiveMembership = null;
+            setShowUpgradeModal(true);
+          } else {
+            setShowUpgradeModal(false);
           }
           setFormData((prev) => ({
             ...prev,
@@ -132,6 +149,7 @@ export default function ProfileSetup() {
             exclusivePics: data.exclusivePics || [],
             age: data.age || prev.age,
             verified: data.verified || false,
+            createdAt: createdAtDate,
           }));
           setSelectedWard(data.ward || '');
           setFundingBalance(data.fundingBalance || 0);
@@ -144,6 +162,8 @@ export default function ProfileSetup() {
           setFundingBalance(0);
           setEarningsBalance(0);
           setMembership('Regular');
+          setShowUpgradeModal(false);
+          setIsLegacyUser(true);
         }
         setLoading(false);
       },
@@ -445,7 +465,6 @@ export default function ProfileSetup() {
         if (!formData.name) errors.push('Name');
         if (!formData.phone) errors.push('Phone');
         if (!formData.age) errors.push('Age');
-        if (!formData.profilePic && !profilePicFile) errors.push('Profile Picture');
         if (errors.length > 0) {
           setError(`Please add: ${errors.join(', ')}`);
           return false;
@@ -512,6 +531,12 @@ export default function ProfileSetup() {
     if (invalidStep !== -1) {
       setActiveStep(invalidStep);
       validateStep(invalidStep); // Sets the error message for the invalid step
+      setSaveLoading(false);
+      return;
+    }
+    if (!isLegacyUser && membership === 'Regular') {
+      setError('New profiles require a paid plan to go live.');
+      setShowUpgradeModal(true);
       setSaveLoading(false);
       return;
     }
@@ -764,7 +789,8 @@ export default function ProfileSetup() {
             </div>
             <h2 className={styles.sectionTitle}>My Membership</h2>
             <p>Current: {membership}</p>
-            <p>Regular: Free</p>
+            {isLegacyUser && membership === 'Regular' && <p>Regular: Free (Legacy Access)</p>}
+            {!isLegacyUser && <p>Regular access is for early users only. Upgrade to go live.</p>}
             <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
               Upgrade to Prime
             </button>
@@ -1024,6 +1050,26 @@ export default function ProfileSetup() {
                 ))}
               </div>
               <button onClick={() => setShowModal(false)} className={styles.closeButton}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+        {showUpgradeModal && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Upgrade Required</h3>
+              <p>Early users get Regular free. New profiles start with Prime/VIP/VVIP for better visibility.</p>
+              <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
+                Upgrade to Prime
+              </button>
+              <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
+                Upgrade to VIP
+              </button>
+              <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
+                Upgrade to VVIP
+              </button>
+              <button onClick={() => setShowUpgradeModal(false)} className={styles.closeButton}>
                 Close
               </button>
             </div>
