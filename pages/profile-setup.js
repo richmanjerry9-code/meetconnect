@@ -49,7 +49,6 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [verificationRequested, setVerificationRequested] = useState(false);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [isLegacyUser, setIsLegacyUser] = useState(true);
   // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
@@ -134,9 +133,6 @@ export default function ProfileSetup() {
           }
           if (!isLegacy && effectiveMembership === 'Regular') {
             effectiveMembership = null;
-            setShowUpgradeModal(true);
-          } else {
-            setShowUpgradeModal(false);
           }
           setFormData((prev) => ({
             ...prev,
@@ -162,7 +158,6 @@ export default function ProfileSetup() {
           setFundingBalance(0);
           setEarningsBalance(0);
           setMembership('Regular');
-          setShowUpgradeModal(false);
           setIsLegacyUser(true);
         }
         setLoading(false);
@@ -536,7 +531,6 @@ export default function ProfileSetup() {
     }
     if (!isLegacyUser && membership === 'Regular') {
       setError('New profiles require a paid plan to go live.');
-      setShowUpgradeModal(true);
       setSaveLoading(false);
       return;
     }
@@ -738,10 +732,7 @@ export default function ProfileSetup() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
       <header className={`${styles.header} ${styles.premiumHeader}`}>
-        {/* ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← */}
-        {/* BACK BUTTON ADDED HERE (uses same style as modal back buttons) */}
         <button onClick={() => router.push('/')} className={styles.modalBack}>←</button>
-        {/* ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←← */}
         <div className={styles.logoContainer}>
           <h1 onClick={() => router.push('/')} className={styles.title}>
             Meet Connect
@@ -800,13 +791,7 @@ export default function ProfileSetup() {
             <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
               Upgrade to VVIP
             </button>
-            <div className={styles.walletSection}>
-              <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>
-                My Exclusive Subscriptions
-              </button>
-            </div>
           </aside>
-          {/* Profile form is now ALWAYS visible */}
           <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
             <h1 className={styles.setupTitle}>My Profile Setup</h1>
             <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
@@ -825,7 +810,6 @@ export default function ProfileSetup() {
             </div>
             {error && <p className={styles.error}>{error}</p>}
             <form onSubmit={handleSubmit} className={styles.profileForm}>
-              {/* === All steps exactly unchanged === */}
               {activeStep === 0 && (
                 <div className={styles.stepContent}>
                   <h2>Basics</h2>
@@ -1001,7 +985,6 @@ export default function ProfileSetup() {
             </form>
           </div>
         </div>
-        {/* ======================== FULL SCREEN MEDIA VIEWER OVERLAY ======================== */}
         {showMediaViewer && (
           <div className={styles.mediaViewerOverlay}>
             <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
@@ -1033,7 +1016,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {/* ========== ALL MODALS (unchanged except gallery thumbs upgraded) ========== */}
         {showModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
@@ -1050,26 +1032,6 @@ export default function ProfileSetup() {
                 ))}
               </div>
               <button onClick={() => setShowModal(false)} className={styles.closeButton}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showUpgradeModal && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Upgrade Required</h3>
-              <p>Early users get Regular free. New profiles start with Prime/VIP/VVIP for better visibility.</p>
-              <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
-                Upgrade to Prime
-              </button>
-              <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
-                Upgrade to VIP
-              </button>
-              <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
-                Upgrade to VVIP
-              </button>
-              <button onClick={() => setShowUpgradeModal(false)} className={styles.closeButton}>
                 Close
               </button>
             </div>
@@ -1191,6 +1153,9 @@ export default function ProfileSetup() {
                   </tbody>
                 </table>
               )}
+              <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>
+                My Exclusive Subscriptions
+              </button>
               <button onClick={() => setShowEarningsHistory(false)} className={styles.closeButton}>
                 Close
               </button>
@@ -1332,7 +1297,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {/* Posts Modal - upgraded square lazy thumbnails with play icon */}
         {showPostsModal && (
           <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
             <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
@@ -1360,7 +1324,6 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {/* Exclusive Modal - same upgraded thumbnails */}
         {showExclusiveModal && (
           <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
             <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
