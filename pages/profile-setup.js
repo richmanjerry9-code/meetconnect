@@ -1,4 +1,3 @@
-// pages/profile-setup.js
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -17,7 +16,6 @@ const servicesList = [
   'Friendship',
   'Companionship / Meetup',
 ];
-const REGULAR_CUTOFF = new Date('2026-01-06T00:00:00Z');
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -49,7 +47,6 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [verificationRequested, setVerificationRequested] = useState(false);
-  const [isLegacyUser, setIsLegacyUser] = useState(true);
   // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
@@ -118,9 +115,6 @@ export default function ProfileSetup() {
           if (!data.createdAt) {
             setDoc(profileRef, { createdAt: serverTimestamp() }, { merge: true }).catch(console.error);
           }
-          const createdAtDate = data.createdAt ? data.createdAt.toDate() : new Date();
-          const isLegacy = createdAtDate < REGULAR_CUTOFF;
-          setIsLegacyUser(isLegacy);
           // membership expiry handling
           let effectiveMembership = data.membership || 'Regular';
           if (data.membershipExpiresAt && data.membershipExpiresAt.seconds) {
@@ -130,9 +124,6 @@ export default function ProfileSetup() {
               // server should expire, but we also clear client-side
               setDoc(profileRef, { membership: 'Regular', membershipExpiresAt: null }, { merge: true }).catch(() => {});
             }
-          }
-          if (!isLegacy && effectiveMembership === 'Regular') {
-            effectiveMembership = null;
           }
           setFormData((prev) => ({
             ...prev,
@@ -145,7 +136,6 @@ export default function ProfileSetup() {
             exclusivePics: data.exclusivePics || [],
             age: data.age || prev.age,
             verified: data.verified || false,
-            createdAt: createdAtDate,
           }));
           setSelectedWard(data.ward || '');
           setFundingBalance(data.fundingBalance || 0);
@@ -158,7 +148,6 @@ export default function ProfileSetup() {
           setFundingBalance(0);
           setEarningsBalance(0);
           setMembership('Regular');
-          setIsLegacyUser(true);
         }
         setLoading(false);
       },
@@ -529,11 +518,6 @@ export default function ProfileSetup() {
       setSaveLoading(false);
       return;
     }
-    if (!isLegacyUser && membership === 'Regular') {
-      setError('New profiles require a paid plan to go live.');
-      setSaveLoading(false);
-      return;
-    }
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
@@ -780,8 +764,7 @@ export default function ProfileSetup() {
             </div>
             <h2 className={styles.sectionTitle}>My Membership</h2>
             <p>Current: {membership}</p>
-            {isLegacyUser && membership === 'Regular' && <p>Regular: Free (Legacy Access)</p>}
-            {!isLegacyUser && <p>Regular access is for early users only. Upgrade to go live.</p>}
+            <p>Regular: Free</p>
             <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
               Upgrade to Prime
             </button>
