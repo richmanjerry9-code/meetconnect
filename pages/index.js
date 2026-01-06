@@ -29,6 +29,7 @@ const isProfileComplete = (p) => {
     p &&
     p.username?.trim() &&
     p.name?.trim() &&
+    p.phone?.trim() &&
     p.county?.trim() &&
     p.ward?.trim() &&
     p.area?.trim()
@@ -231,7 +232,7 @@ export default function Home({ initialProfiles = [] }) {
     });
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
-  // Auto-set ward or area-based ward if exact match
+  // Auto-set ward or area-based ward if partial match
   useEffect(() => {
     if (!debouncedSearchLocation) {
       setSelectedWard('');
@@ -242,12 +243,12 @@ export default function Home({ initialProfiles = [] }) {
     let foundWard = null, foundCounty = null, foundArea = null;
     Object.keys(counties).some(county => {
       return Object.keys(counties[county]).some(ward => {
-        if (ward.toLowerCase() === lower) {
+        if (ward.toLowerCase().includes(lower)) {
           foundWard = ward;
           foundCounty = county;
           return true;
         }
-        if (counties[county][ward].some(area => area.toLowerCase() === lower)) {
+        if (counties[county][ward].some(area => area.toLowerCase().includes(lower))) {
           foundArea = lower; // We don't need the exact case for area since we're not using it in formatted
           foundWard = ward;
           foundCounty = county;
@@ -680,7 +681,7 @@ export default function Home({ initialProfiles = [] }) {
             </>
           )}
           {filteredProfiles.length === 0 && !isLoadingMore && !error && (
-            <p className={styles.noProfiles}>No ladies found. Complete your profile with a photo to appear here.</p>
+            <p className={styles.noProfiles}>No ladies found. Complete your profile to appear in searches.</p>
           )}
           {hasMore && <div ref={sentinelRef} style={{height:'1px'}} />}
         </div>

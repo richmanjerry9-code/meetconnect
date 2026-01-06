@@ -53,5 +53,21 @@
   },
   "overrides": {
     "multer": "^2.0.0"
-  }
+  },
+  "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).",
+  "main": "backfill.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/richmanjerry9-code/meetconnect.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/richmanjerry9-code/meetconnect/issues"
+  },
+  "homepage": "https://github.com/richmanjerry9-code/meetconnect#readme"
 }

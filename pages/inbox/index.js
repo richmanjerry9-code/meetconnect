@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -10,114 +10,135 @@ import {
   onSnapshot,
   getDoc,
   doc,
-  deleteDoc,
+  addDoc,
+  serverTimestamp,
+  orderBy,
   updateDoc,
-  arrayUnion,
-  arrayRemove,
 } from "firebase/firestore";
 import Image from "next/image";
-import styles from "../../styles/chat.module.css";
+import EmojiPicker from "emoji-picker-react"; // Assume installed: npm install emoji-picker-react
+import { uploadMedia } from "../../lib/chat/uploadMedia";
+import MediaPreview from "../../lib/chat/MediaPreview";
+import styles from "../../styles/chat.module.css"; // Assume similar styles, adjust as needed
 
-export default function Inbox() {
+export default function Chat() {
   const { user } = useAuth();
   const router = useRouter();
-  const [chats, setChats] = useState([]);
-  const [openMenuId, setOpenMenuId] = useState(null);
+  const { id: chatId } = router.query;
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [otherUser, setOtherUser] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const inputRef = useRef(null);
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !chatId) return;
 
     const db = getFirestore();
 
+    // Get other user
+    const fetchOtherUser = async () => {
+      const chatSnap = await getDoc(doc(db, "privateChats", chatId));
+      if (chatSnap.exists()) {
+        const data = chatSnap.data();
+        const otherId = data.participants.find((uid) => uid !== user.uid);
+        const userSnap = await getDoc(doc(db, "profiles", otherId));
+        if (userSnap.exists()) {
+          setOtherUser({ id: otherId, ...userSnap.data() });
+        }
+      }
+    };
+    fetchOtherUser();
+
+    // Listen to messages
     const q = query(
-      collection(db, "privateChats"),
-      where("participants", "array-contains", user.uid)
+      collection(db, `privateChats/${chatId}/messages`),
+      orderBy("timestamp", "asc")
     );
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const chatList = await Promise.all(
-        snapshot.docs.map(async (docSnap) => {
-          const data = docSnap.data();
-
-          const otherUserId = data.participants.find(
-            (id) => id !== user.uid
-          );
-
-          let otherUser = null;
-          try {
-            const userSnap = await getDoc(doc(db, "profiles", otherUserId));
-            if (userSnap.exists()) {
-              otherUser = { id: userSnap.id, ...userSnap.data() };
-            }
-          } catch (err) {
-            console.error("Profile fetch failed:", err);
-          }
-
-          return {
-            id: docSnap.id,
-            lastMessage: data.lastMessage || "No message",
-            timestamp: data.timestamp || null,
-            pinnedBy: data.pinnedBy || [],
-            otherUserId,
-            otherUser,
-          };
-        })
-      );
-
-      // ✅ Sort: pinned first → newest first
-      setChats(
-        chatList.sort((a, b) => {
-          const aPinned = a.pinnedBy.includes(user.uid) ? 1 : 0;
-          const bPinned = b.pinnedBy.includes(user.uid) ? 1 : 0;
-          if (aPinned !== bPinned) return bPinned - aPinned;
-
-          if (!a.timestamp) return 1;
-          if (!b.timestamp) return -1;
-
-          return b.timestamp.toMillis() - a.timestamp.toMillis();
-        })
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setMessages(
+        snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
       );
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, chatId]);
 
-  // ✅ Pin / Unpin
-  const handlePin = async (chatId, isPinned) => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!newMessage.trim() && !selectedFile) return;
+
     const db = getFirestore();
-    const chatRef = doc(db, "privateChats", chatId);
-    await updateDoc(chatRef, {
-      pinnedBy: isPinned ? arrayRemove(user.uid) : arrayUnion(user.uid),
+    let mediaUrl = null;
+    let mediaType = null;
+
+    if (selectedFile) {
+      const folder = selectedFile.type.startsWith("image/") ? "images" : "videos";
+      mediaUrl = await uploadMedia(selectedFile, folder);
+      mediaType = folder.slice(0, -1); // 'image' or 'video'
+    }
+
+    await addDoc(collection(db, `privateChats/${chatId}/messages`), {
+      text: newMessage.trim() || null,
+      mediaUrl,
+      mediaType,
+      sender: user.uid,
+      timestamp: serverTimestamp(),
     });
-    setOpenMenuId(null);
+
+    // Update last message in chat
+    let lastMsg = newMessage.trim();
+    if (mediaUrl) {
+      const mediaLabel = mediaType === "image" ? "[Image]" : "[Video]";
+      lastMsg = lastMsg ? `${lastMsg} ${mediaLabel}` : mediaLabel;
+    }
+    await updateDoc(doc(db, "privateChats", chatId), {
+      lastMessage: lastMsg || "[Media]",
+      timestamp: serverTimestamp(),
+    });
+
+    setNewMessage("");
+    setSelectedFile(null);
   };
 
-  // ✅ Delete chat
-  const handleDelete = async (chatId) => {
-    if (confirm("Are you sure you want to delete this conversation?")) {
-      const db = getFirestore();
-      const chatRef = doc(db, "privateChats", chatId);
-      const chatSnap = await getDoc(chatRef);
+  const togglePicker = () => {
+    if (!showPicker) {
+      inputRef.current?.blur(); // Close keyboard
+    }
+    setShowPicker(!showPicker);
+  };
 
-      if (chatSnap.exists()) {
-        const data = chatSnap.data();
-        if (data.participants.length > 1) {
-          await updateDoc(chatRef, {
-            participants: arrayRemove(user.uid),
-          });
-        } else {
-          await deleteDoc(chatRef);
-        }
-      }
-      setOpenMenuId(null);
+  const onEmojiClick = (emojiData) => {
+    setNewMessage((prev) => prev + emojiData.emoji);
+    setShowPicker(false);
+    inputRef.current?.focus(); // Reopen keyboard
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && (file.type.startsWith("image/") || file.type.startsWith("video/"))) {
+      setSelectedFile(file);
+    } else {
+      alert("Please select an image or video file.");
     }
   };
 
-  if (!user) return <div>Please log in to view your inbox.</div>;
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+  };
+
+  if (!user) return <div>Please log in.</div>;
 
   return (
     <div
-      className={styles.inboxContainer}
+      className={styles.chatContainer}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -125,10 +146,10 @@ export default function Inbox() {
         overflow: "hidden",
       }}
     >
-      {/* ✅ Back Arrow + Title */}
-      <div className={styles.inboxHeader}>
+      {/* Header */}
+      <div className={styles.chatHeader}>
         <button
-          onClick={() => router.push("/")}
+          onClick={() => router.push("/inbox")}
           className={styles.backBtn}
           style={{
             fontSize: "26px",
@@ -140,131 +161,146 @@ export default function Inbox() {
         >
           ←
         </button>
-        <h2 className={styles.inboxTitle}>Inbox</h2>
+        <h2 className={styles.chatTitle}>{otherUser?.name || "Chat"}</h2>
       </div>
 
+      {/* Messages */}
       <div
         style={{
           flex: 1,
           overflowY: "auto",
-          padding: "10px 0", // Optional padding for better spacing
+          padding: "10px",
         }}
       >
-        {chats.length === 0 && (
-          <p style={{ textAlign: "center", opacity: 0.6, marginTop: "40px" }}>
-            No messages yet
-          </p>
-        )}
-
-        {chats.map((chat) => (
+        {messages.map((msg) => (
           <div
-            key={chat.id}
-            className={styles.chatRow}
-            onClick={() => router.push(`/inbox/${chat.id}`)}
+            key={msg.id}
             style={{
-              display: "flex",
-              alignItems: "center",
-              padding: "10px",
-              borderBottom: "1px solid #eee", // Optional for separation
+              textAlign: msg.sender === user.uid ? "right" : "left",
+              marginBottom: "10px",
             }}
           >
-            {/* Avatar */}
-            <Image
-              src={chat.otherUser?.profilePic || "/default-profile.png"}
-              width={50}
-              height={50}
-              className={styles.avatar}
-              alt="User"
-            />
-
-            {/* Name + Last message */}
             <div
-              className={styles.chatInfo}
               style={{
-                flex: 1,
-                marginLeft: "10px",
-                overflow: "hidden",
+                background: msg.sender === user.uid ? "#dcf8c6" : "#fff",
+                padding: "8px 12px",
+                borderRadius: "18px",
+                display: "inline-block",
+                maxWidth: "80%",
               }}
             >
-              <div className={styles.chatName}>
-                {chat.otherUser?.name || "User"}
-              </div>
-
-              <div className={styles.chatLastMessageRow}>
-                <span
-                  className={styles.chatLastMessage}
-                  style={{
-                    display: "block", // Allow multi-line
-                    whiteSpace: "pre-wrap",
-                    overflowWrap: "break-word",
-                    textOverflow: "ellipsis", // Still truncate if too long, but can adjust
-                    overflow: "hidden",
-                    maxHeight: "3em", // Limit to ~3 lines to prevent rows from being too tall
-                  }}
-                >
-                  {chat.lastMessage}
-                </span>
-              </div>
-            </div>
-
-            {/* Time */}
-            <div
-              className={styles.chatTime}
-              style={{
-                marginLeft: "10px",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {chat.timestamp?.toDate?.().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }) || "--"}
-            </div>
-
-            {/* ✅ 3-Dot Menu */}
-            <div className={styles.chatActions}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setOpenMenuId(openMenuId === chat.id ? null : chat.id);
-                }}
-                className={styles.menuBtn}
-                style={{ fontSize: "22px" }}
-              >
-                ⋮
-              </button>
-
-              {openMenuId === chat.id && (
-                <div className={styles.menuDropdown}>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handlePin(chat.id, chat.pinnedBy.includes(user.uid));
-                    }}
-                  >
-                    {chat.pinnedBy.includes(user.uid) ? "Unpin" : "Pin"} Chat
-                  </button>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDelete(chat.id);
-                    }}
-                  >
-                    Delete Chat
-                  </button>
-                </div>
+              {msg.mediaUrl && (
+                <>
+                  {msg.mediaType === "image" ? (
+                    <Image
+                      src={msg.mediaUrl}
+                      alt="Media"
+                      width={200}
+                      height={200}
+                      style={{
+                        maxWidth: "100%",
+                        borderRadius: "8px",
+                        marginBottom: msg.text ? "8px" : "0",
+                      }}
+                    />
+                  ) : (
+                    <video
+                      src={msg.mediaUrl}
+                      controls
+                      width={200}
+                      style={{
+                        maxWidth: "100%",
+                        borderRadius: "8px",
+                        marginBottom: msg.text ? "8px" : "0",
+                      }}
+                    />
+                  )}
+                </>
               )}
+              {msg.text && <span>{msg.text}</span>}
             </div>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
 
-      {/* Optional: Add a fixed input or footer here if "chat input" refers to a search or new message bar */}
-      {/* For example: */}
-      {/* <div style={{ flex: "0 0 auto", padding: "10px", background: "#f0f0f0" }}> */}
-      {/*   <input type="text" placeholder="Search or start new chat..." style={{ width: "100%" }} /> */}
-      {/* </div> */}
+      {/* Emoji Picker */}
+      {showPicker && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "40vh", // Keyboard-like height
+            zIndex: 1000,
+            background: "white",
+            overflow: "auto",
+          }}
+        >
+          <EmojiPicker onEmojiClick={onEmojiClick} />
+        </div>
+      )}
+
+      {/* Input Bar */}
+      <form
+        onSubmit={handleSend}
+        style={{
+          flex: "0 0 auto",
+          display: "flex",
+          padding: "10px",
+          background: "#f0f0f0",
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
+        <label
+          htmlFor="file-input"
+          style={{
+            cursor: "pointer",
+            marginRight: "10px",
+            fontSize: "20px",
+          }}
+        >
+          📎
+          <input
+            id="file-input"
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={togglePicker}
+          style={{ marginRight: "10px", fontSize: "20px" }}
+        >
+          😊
+        </button>
+        <textarea
+          ref={inputRef}
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+          placeholder="Type a message..."
+          style={{
+            flex: 1,
+            resize: "none",
+            height: "40px",
+            padding: "10px",
+            borderRadius: "20px",
+            border: "1px solid #ccc",
+          }}
+        />
+        <button type="submit" style={{ marginLeft: "10px", fontSize: "20px" }}>
+          Send
+        </button>
+      </form>
+
+      {selectedFile && (
+        <MediaPreview file={selectedFile} onRemove={handleRemoveFile} />
+      )}
     </div>
   );
 }
