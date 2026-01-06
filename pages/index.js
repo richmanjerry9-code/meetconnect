@@ -8,18 +8,15 @@ import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
 import { collection, query, orderBy, limit, getDocs, startAfter, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
-
-/**
- * Custom hook for debouncing values.
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';/**Custom hook for debouncing values.
  */
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => clearTimeout(handler);
+ const handler = setTimeout(() => {
+   setDebouncedValue(value);
+ }, delay);
+ return () => clearTimeout(handler);
   }, [value, delay]);
   return debouncedValue;
 }
@@ -34,9 +31,7 @@ const isProfileComplete = (p) => {
     p.ward?.trim() &&
     p.area?.trim()
   );
-};
-
-const convertTimestamps = (obj) => {
+};const convertTimestamps = (obj) => {
   if (!obj) return obj;
   if (typeof obj.toDate === 'function') return obj.toDate().toISOString();
   if (Array.isArray(obj)) return obj.map(convertTimestamps);
@@ -46,9 +41,7 @@ const convertTimestamps = (obj) => {
     return result;
   }
   return obj;
-};
-
-export default function Home({ initialProfiles = [] }) {
+};export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
   const [lastDoc, setLastDoc] = useState(null);
@@ -135,6 +128,7 @@ export default function Home({ initialProfiles = [] }) {
               membership: 'Regular',
               createdAt: serverTimestamp(),
             };
+            basicProfile.membershipLevel = membershipPriority[basicProfile.membership];
             await setDoc(doc(firestore, 'profiles', currentUser.uid), basicProfile);
             userData = { id: currentUser.uid, ...basicProfile };
           }
@@ -152,12 +146,20 @@ export default function Home({ initialProfiles = [] }) {
     });
     return unsubscribe;
   }, []);
+  const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
   // Real-time profiles
   useEffect(() => {
     const timer = setTimeout(() => {
-      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(30));
+      const q = query(collection(firestore, 'profiles'), orderBy('membershipLevel', 'desc'), orderBy('createdAt', 'asc'), limit(30));
       unsubscribeRef.current = onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
+        data.forEach((p) => {
+          if (p.membershipLevel == null) {
+            const level = membershipPriority[p.membership || 'Regular'] || 1;
+            setDoc(doc(firestore, 'profiles', p.id), { membershipLevel: level }, { merge: true }).catch(console.error);
+            p.membershipLevel = level;
+          }
+        });
         const validProfiles = data.filter(isProfileComplete);
         setAllProfiles(validProfiles);
         setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
@@ -188,9 +190,16 @@ export default function Home({ initialProfiles = [] }) {
     setError(null);
     setIsLoadingMore(true);
     try {
-      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(20));
+      const q = query(collection(firestore, 'profiles'), orderBy('membershipLevel', 'desc'), orderBy('createdAt', 'asc'), startAfter(lastDoc), limit(20));
       const snapshot = await getDocs(q);
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
+      data.forEach((p) => {
+        if (p.membershipLevel == null) {
+          const level = membershipPriority[p.membership || 'Regular'] || 1;
+          setDoc(doc(firestore, 'profiles', p.id), { membershipLevel: level }, { merge: true }).catch(console.error);
+          p.membershipLevel = level;
+        }
+      });
       const validProfiles = data.filter(isProfileComplete);
       setAllProfiles(prev => [...prev, ...validProfiles]);
       setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
@@ -273,7 +282,6 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}${area ? `, ${area}` : ''}`);
     setFilteredLocations([]);
   };
-  const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter(p => {
@@ -285,12 +293,7 @@ export default function Home({ initialProfiles = [] }) {
         : true;
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
-    const groups = { VVIP: [], VIP: [], Prime: [], Regular: [] };
-    filtered.forEach(p => {
-      const mem = p.membership || 'Regular';
-      groups[mem]?.push(p) || groups.Regular.push(p);
-    });
-    return [...groups.VVIP, ...groups.VIP, ...groups.Prime, ...groups.Regular];
+    return filtered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
   // Protected navigation — remembers intended destination
   const handleAccessProtected = (path, featureName) => {
@@ -324,6 +327,7 @@ export default function Home({ initialProfiles = [] }) {
           membership: 'Regular',
           createdAt: serverTimestamp(),
         };
+        basicProfile.membershipLevel = membershipPriority[basicProfile.membership];
         await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
         profileData = { id: firebaseUser.uid, ...basicProfile };
         isNewUser = true;
@@ -393,6 +397,7 @@ export default function Home({ initialProfiles = [] }) {
           membership: 'Regular',
           createdAt: serverTimestamp(),
         };
+        basicProfile.membershipLevel = membershipPriority[basicProfile.membership];
         await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
         profileData = { id: firebaseUser.uid, ...basicProfile };
         isNewUser = true;
@@ -542,16 +547,6 @@ export default function Home({ initialProfiles = [] }) {
     );
   });
   ProfileCard.displayName = 'ProfileCard';
-  const Modal = forwardRef(({ children, title, onClose }, ref) => (
-    <div className={styles.modal} ref={ref}>
-      <div className={styles.modalContent}>
-        <h2>{title}</h2>
-        <span onClick={onClose} className={styles.close} role="button" aria-label="Close modal">×</span>
-        {children}
-      </div>
-    </div>
-  ));
-  Modal.displayName = 'Modal';
   if (userLoading) {
     return (
       <div className={styles.container}>
@@ -688,7 +683,7 @@ export default function Home({ initialProfiles = [] }) {
       </main>
       {showLogin && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={closeLoginModal}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+          <div ref={loginModalRef} style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
             <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={closeLoginModal}>×</span>
             <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>{forgotPasswordMode ? 'Reset Password' : 'Welcome Back'}</h2>
             {protectedFeature && !forgotPasswordMode && (
@@ -744,7 +739,7 @@ export default function Home({ initialProfiles = [] }) {
       )}
       {showRegister && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+          <div ref={registerModalRef} style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
             <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
             <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
             <div style={{ marginBottom: '20px', textAlign: 'left' }}>
@@ -770,7 +765,7 @@ export default function Home({ initialProfiles = [] }) {
 export async function getStaticProps() {
   let initialProfiles = [];
   try {
-    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(30));
+    const q = query(collection(firestore, 'profiles'), orderBy('membershipLevel', 'desc'), orderBy('createdAt', 'asc'), limit(30));
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
       .map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }))
