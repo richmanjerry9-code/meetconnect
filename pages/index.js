@@ -7,7 +7,7 @@ import * as counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, limit, getDocs, startAfter, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 
 /**
@@ -48,12 +48,40 @@ const convertTimestamps = (obj) => {
   return obj;
 };
 
+const sortProfiles = (profiles) => {
+  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
+
+  const premium = [];
+  const regular = [];
+
+  profiles.forEach(p => {
+    const mem = p.membership || 'Regular';
+    if (membershipPriority[mem] > 1) {
+      premium.push(p);
+    } else {
+      regular.push(p);
+    }
+  });
+
+  // Sort premium: highest tier first, then newest first within tier
+  premium.sort((a, b) => {
+    const priA = membershipPriority[a.membership || 'Regular'];
+    const priB = membershipPriority[b.membership || 'Regular'];
+    if (priA !== priB) return priB - priA; // Descending priority
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Newest first
+  });
+
+  // Sort regular: oldest first (first created at top, newest at bottom)
+  regular.sort((a, b) => {
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+
+  return [...premium, ...regular];
+};
+
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
-  const [lastDoc, setLastDoc] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState('');
   const [user, setUser] = useState(null);
@@ -77,8 +105,6 @@ export default function Home({ initialProfiles = [] }) {
   const [forgotMessage, setForgotMessage] = useState('');
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
-  const sentinelRef = useRef(null);
-  const cacheRef = useRef(new Map());
   const unsubscribeRef = useRef(null);
   const allProfilesRef = useRef(allProfiles);
   useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);
@@ -90,7 +116,7 @@ export default function Home({ initialProfiles = [] }) {
       try {
         const parsed = JSON.parse(saved);
         if (Date.now() - parsed.timestamp < 300000) {
-          setAllProfiles(parsed.profiles);
+          setAllProfiles(sortProfiles(parsed.profiles));
           setTimeout(() => window.scrollTo(0, parsed.scroll), 10);
         } else {
           sessionStorage.removeItem(KEY);
@@ -155,13 +181,11 @@ export default function Home({ initialProfiles = [] }) {
   // Real-time profiles
   useEffect(() => {
     const timer = setTimeout(() => {
-      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(30));
+      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
       unsubscribeRef.current = onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
         const validProfiles = data.filter(isProfileComplete);
-        setAllProfiles(validProfiles);
-        setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-        setHasMore(snapshot.size === 30);
+        setAllProfiles(sortProfiles(validProfiles));
         setError(null);
       }, (err) => {
         console.error('Snapshot error:', err);
@@ -173,48 +197,6 @@ export default function Home({ initialProfiles = [] }) {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
-  // Load more profiles
-  const loadMoreProfiles = useCallback(async () => {
-    if (isLoadingMore || !hasMore || !lastDoc) return;
-    const cacheKey = `profiles_loadmore_${lastDoc.id}`;
-    if (cacheRef.current.has(cacheKey)) {
-      const cachedData = cacheRef.current.get(cacheKey);
-      setAllProfiles(prev => [...prev, ...cachedData.profiles]);
-      setLastDoc(cachedData.lastDoc);
-      setHasMore(cachedData.hasMore);
-      setIsLoadingMore(false);
-      return;
-    }
-    setError(null);
-    setIsLoadingMore(true);
-    try {
-      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(20));
-      const snapshot = await getDocs(q);
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
-      const validProfiles = data.filter(isProfileComplete);
-      setAllProfiles(prev => [...prev, ...validProfiles]);
-      setLastDoc(snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null);
-      setHasMore(snapshot.size === 20);
-      cacheRef.current.set(cacheKey, {
-        profiles: validProfiles,
-        lastDoc: snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null,
-        hasMore: snapshot.size === 20,
-      });
-    } catch (err) {
-      console.error('Error fetching more profiles:', err);
-      setError('Failed to load more profiles. Please try scrolling again.');
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [isLoadingMore, hasMore, lastDoc]);
-  // Infinite scroll observer
-  useEffect(() => {
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting && hasMore && !isLoadingMore) loadMoreProfiles();
-    }, { threshold: 0 });
-    if (sentinelRef.current) observer.observe(sentinelRef.current);
-    return () => { if (sentinelRef.current) observer.unobserve(sentinelRef.current); };
-  }, [hasMore, isLoadingMore, loadMoreProfiles]);
   // Location search filtering
   useEffect(() => {
     if (!debouncedSearchLocation) return setFilteredLocations([]);
@@ -273,7 +255,6 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}${area ? `, ${area}` : ''}`);
     setFilteredLocations([]);
   };
-  const membershipPriority = useMemo(() => ({ VVIP: 4, VIP: 3, Prime: 2, Regular: 1 }), []);
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter(p => {
@@ -285,12 +266,7 @@ export default function Home({ initialProfiles = [] }) {
         : true;
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
-    const groups = { VVIP: [], VIP: [], Prime: [], Regular: [] };
-    filtered.forEach(p => {
-      const mem = p.membership || 'Regular';
-      groups[mem]?.push(p) || groups.Regular.push(p);
-    });
-    return [...groups.VVIP, ...groups.VIP, ...groups.Prime, ...groups.Regular];
+    return filtered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
   // Protected navigation — remembers intended destination
   const handleAccessProtected = (path, featureName) => {
@@ -666,24 +642,9 @@ export default function Home({ initialProfiles = [] }) {
         <div className={styles.profiles} role="list">
           {filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)}
           {error && <p className={styles.noProfiles} style={{color:'red'}}>{error}</p>}
-          {isLoadingMore && (
-            <>
-              <p className={styles.noProfiles}>Loading more profiles...</p>
-              {[1,2,3].map(i => (
-                <div key={i} className={styles.skeletonCard}>
-                  <div className={styles.skeletonImage}></div>
-                  <div className={styles.skeletonInfo}>
-                    <div className={styles.skeletonText}></div>
-                    <div className={styles.skeletonTextSmall}></div>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-          {filteredProfiles.length === 0 && !isLoadingMore && !error && (
+          {filteredProfiles.length === 0 && !error && (
             <p className={styles.noProfiles}>No ladies found. Complete your profile to appear in searches.</p>
           )}
-          {hasMore && <div ref={sentinelRef} style={{height:'1px'}} />}
         </div>
       </main>
       {showLogin && (
@@ -770,11 +731,12 @@ export default function Home({ initialProfiles = [] }) {
 export async function getStaticProps() {
   let initialProfiles = [];
   try {
-    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(30));
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
     initialProfiles = snapshot.docs
       .map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }))
       .filter(isProfileComplete);
+    initialProfiles = sortProfiles(initialProfiles);
   } catch (err) {
     console.error('Error fetching homepage profiles:', err);
   }
