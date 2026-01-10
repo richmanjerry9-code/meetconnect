@@ -40,7 +40,7 @@ export default function PrivateChat() {
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
 
-  // Load chat + other user
+  // ✅ LOAD CHAT + USER
   useEffect(() => {
     if (!chatId || !user) return;
 
@@ -72,7 +72,7 @@ export default function PrivateChat() {
         const otherUserDoc = await getDoc(doc(db, "profiles", otherId));
         setOtherUser(otherUserDoc.exists() ? otherUserDoc.data() : null);
 
-        // Reset my unread count
+        // ✅ RESET MY UNREAD
         await setDoc(
           chatRef,
           {
@@ -83,13 +83,13 @@ export default function PrivateChat() {
           { merge: true }
         );
 
-        // Message listener
+        // ✅ MESSAGE LISTENER
         unsubscribeMessages = listenMessages(
           `privateChats/${chatId}/messages`,
           (msgs) => setMessages(Array.isArray(msgs) ? msgs : [])
         );
 
-        // Pin listener
+        // ✅ PIN LISTENER
         unsubscribeChat = onSnapshot(chatRef, (snap) => {
           setPinnedMessages(snap.data()?.pinnedMessages || []);
         });
@@ -104,12 +104,12 @@ export default function PrivateChat() {
     fetchChatDetails();
 
     return () => {
-      unsubscribeMessages?.();
-      unsubscribeChat?.();
+      if (unsubscribeMessages) unsubscribeMessages();
+      if (unsubscribeChat) unsubscribeChat();
     };
   }, [chatId, user]);
 
-  // Mark messages as seen
+  // ✅ MARK AS SEEN
   useEffect(() => {
     if (!messages.length || !user || !chatId) return;
 
@@ -124,7 +124,7 @@ export default function PrivateChat() {
     });
   }, [messages, user, chatId]);
 
-  // Send message
+  // ✅ SEND MESSAGE
   const handleSend = async (text, imageFile) => {
     if (!text && !imageFile) return;
     if (!user || !chatId) return;
@@ -165,7 +165,7 @@ export default function PrivateChat() {
     setReplyingTo(messageId);
   };
 
-  // Delete message (with proper inbox preview update)
+  // ✅ ✅ ✅ FULLY FIXED DELETE (UPDATES INBOX PREVIEW)
   const handleDelete = async (messageId, forEveryone) => {
     if (!user || !chatId) return;
 
@@ -181,7 +181,7 @@ export default function PrivateChat() {
       });
     }
 
-    // Update last message preview in inbox
+    // ✅ UPDATE LAST MESSAGE FOR INBOX
     const q = query(
       collection(db, "privateChats", chatId, "messages"),
       orderBy("timestamp", "desc"),
@@ -204,10 +204,9 @@ export default function PrivateChat() {
     }
   };
 
-  // Pin/unpin message
+  // ✅ PIN MESSAGE
   const handlePin = async (messageId) => {
     if (!user || !chatId) return;
-
     const db = getFirestore();
     const chatRef = doc(db, "privateChats", chatId);
 
@@ -227,15 +226,15 @@ export default function PrivateChat() {
 
   return (
     <div className={styles.chatContainer}>
-<ChatHeader
-  otherUser={otherUser || { name: "User" }}   // fallback name if no profile
-  onBack={() => router.back()}
-  onProfileClick={
-    otherUser 
-      ? () => router.push(`/view-profile/${otherUserId}`)
-      : undefined   // ← important: no click if no profile exists
-  }
-/>
+      <ChatHeader
+        otherUser={otherUser || {}}
+        onBack={() => router.back()}
+        onProfileClick={() => {
+          if (otherUserId) {
+            router.push(`/${`/view-profile/${otherUserId}`}`);
+          }
+        }}
+      />
 
       <MessageList
         messages={messages}
@@ -248,12 +247,13 @@ export default function PrivateChat() {
 
       {replyingTo && (
         <div className={styles.replyPreview}>
-          Replying to: {messages.find((m) => m.id === replyingTo)?.text || "(Message)"}
+          Replying to:{" "}
+          {messages.find((m) => m.id === replyingTo)?.text || "(Message)"}
           <button onClick={() => setReplyingTo(null)}>Cancel</button>
         </div>
       )}
 
-      <ChatInput onSend={handleSend} replyingTo={replyingTo} />
+      <ChatInput onSend={handleSend} />
     </div>
   );
 }
