@@ -243,11 +243,9 @@ export default function Home({ initialProfiles = [] }) {
       setSelectedCounty(foundCounty);
       setSelectedWard(foundWard);
       setSelectedArea('');
-      const formatted = `${foundCounty}, ${foundWard}`;
-      if (searchLocation !== formatted) setSearchLocation(formatted);
       setFilteredLocations([]);
     }
-  }, [debouncedSearchLocation, searchLocation]);
+  }, [debouncedSearchLocation]);
   const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
