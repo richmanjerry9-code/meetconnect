@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -9,14 +8,6 @@ import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
-const servicesList = [
-  'Dinner Date',
-  'Just Vibes',
-  'Relationship',
-  'Night Out',
-  'Friendship',
-  'Companionship / Meetup',
-];
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -32,8 +23,7 @@ export default function ProfileSetup() {
     ward: '',
     area: '',
     nearby: [],
-    services: [],
-    otherServices: '',
+    bio: '',
     profilePic: '',
     normalPics: [],
     exclusivePics: [],
@@ -84,7 +74,7 @@ export default function ProfileSetup() {
   // Profile pic file and preview
   const [profilePicFile, setProfilePicFile] = useState(null);
   const [profilePicPreview, setProfilePicPreview] = useState('');
-  const steps = ['Profile', 'Location', 'Services', 'Media', 'Membership & Wallets'];
+  const steps = ['Profile', 'Location', 'Bio', 'Media', 'Membership & Wallets'];
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
   const profilePicInputRef = useRef(null);
@@ -131,7 +121,7 @@ export default function ProfileSetup() {
             ...data,
             username: user.username,
             phone: loadedPhone,
-            services: data.services || [],
+            bio: data.bio || '',
             nearby: data.nearby || [],
             normalPics: data.normalPics || [],
             exclusivePics: data.exclusivePics || [],
@@ -289,11 +279,8 @@ export default function ProfileSetup() {
       });
       return;
     }
-    if (type === 'checkbox') {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: checked ? [...(prev[name] || []), value] : (prev[name] || []).filter((v) => v !== value),
-      }));
+    if (name === 'bio') {
+      setFormData((prev) => ({ ...prev, [name]: value }));
       return;
     }
     let v = value;
@@ -481,8 +468,9 @@ export default function ProfileSetup() {
         }
         return true;
       case 2:
-        if ((formData.services || []).length < 1) {
-          setError('Select at least 1 service.');
+        const words = formData.bio.trim().split(/\s+/).length;
+        if (words > 100) {
+          setError('Bio must be 100 words or less.');
           return false;
         }
         return true;
@@ -905,24 +893,19 @@ export default function ProfileSetup() {
               )}
               {activeStep === 2 && (
                 <div className={styles.stepContent}>
-                  <h2>Services</h2>
+                  <h2>Bio</h2>
                   <label className={styles.label}>
-                    Select Services (at least 1)
-                    <div className={styles.checkboxGroup}>
-                      {servicesList.map((service) => (
-                        <div key={service}>
-                          <input
-                            type="checkbox"
-                            value={service}
-                            checked={(formData.services || []).includes(service)}
-                            onChange={handleChange}
-                            name="services"
-                          />
-                          <span>{service}</span>
-                        </div>
-                      ))}
-                    </div>
+                    Write a short bio about yourself (optional, max 100 words)
+                    <textarea
+                      name="bio"
+                      value={formData.bio}
+                      onChange={handleChange}
+                      rows={6}
+                      className={styles.input}
+                      style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
+                    />
                   </label>
+                  <div>{formData.bio.trim().split(/\s+/).length} / 100 words</div>
                 </div>
               )}
               {activeStep === 3 && (

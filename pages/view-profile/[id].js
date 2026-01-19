@@ -309,7 +309,6 @@ export default function ViewProfile() {
   if (error) return <div className={styles.notFound}>{error}</div>;
   if (!profile) return <div className={styles.notFound}>Profile not found</div>;
 
-  const services = profile.services || [];
   const nearby = profile.nearby || [];
   const cleanPhone = profile.phone?.replace(/\D/g, '') || '';
   const phoneLink = cleanPhone.startsWith('254') ? cleanPhone : '254' + cleanPhone.replace(/^0/, '');
@@ -364,13 +363,11 @@ export default function ViewProfile() {
           </>
         )}
 
-        {services.length > 0 && (
-          <>
-            <p className={styles.pinkLabel}>Looking for</p>
-            <div className={styles.tags}>
-              {services.map((s, i) => <span key={i} className={styles.tag}>{s}</span>)}
-            </div>
-          </>
+        {profile.bio && (
+          <div className={styles.infoCard}>
+            <h3>Bio</h3>
+            <p>{profile.bio}</p>
+          </div>
         )}
 
         {/* Phone number and copy button - visible even on own profile */}

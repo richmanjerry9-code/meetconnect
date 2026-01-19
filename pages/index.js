@@ -9,6 +9,7 @@ import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
 import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
+import { createOrGetChat } from '../lib/chat'; // Import the chat utility
 
 /**
  * Custom hook for debouncing values.
@@ -95,7 +96,8 @@ export default function Home({ initialProfiles = [] }) {
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [protectedFeature, setProtectedFeature] = useState('');
-  const [pendingPath, setPendingPath] = useState(null); // ← remembers where user wanted to go
+  const [pendingPath, setPendingPath] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null); // New: For pending actions like messaging a specific profile
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [registerForm, setRegisterForm] = useState({ name: '' });
   const [loginLoading, setLoginLoading] = useState(false);
@@ -108,6 +110,7 @@ export default function Home({ initialProfiles = [] }) {
   const unsubscribeRef = useRef(null);
   const allProfilesRef = useRef(allProfiles);
   useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);
+
   // Session storage restore
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -127,6 +130,7 @@ export default function Home({ initialProfiles = [] }) {
       }
     }
   }, []);
+
   // Save scroll + profiles on navigation
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
@@ -140,6 +144,7 @@ export default function Home({ initialProfiles = [] }) {
     router.events.on('routeChangeStart', saveState);
     return () => router.events.off('routeChangeStart', saveState);
   }, [router]);
+
   // Auth state
   useEffect(() => {
     setUserLoading(true);
@@ -178,6 +183,7 @@ export default function Home({ initialProfiles = [] }) {
     });
     return unsubscribe;
   }, []);
+
   // Real-time profiles
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -197,6 +203,7 @@ export default function Home({ initialProfiles = [] }) {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
+
   // Location search filtering
   useEffect(() => {
     if (!debouncedSearchLocation) return setFilteredLocations([]);
@@ -214,6 +221,7 @@ export default function Home({ initialProfiles = [] }) {
     });
     setFilteredLocations(matches.slice(0, 5));
   }, [debouncedSearchLocation]);
+
   // Auto-set ward or area-based ward if partial match
   useEffect(() => {
     if (!debouncedSearchLocation) {
@@ -222,7 +230,7 @@ export default function Home({ initialProfiles = [] }) {
       return;
     }
     const lower = debouncedSearchLocation.trim().toLowerCase();
-    let foundWard = null, foundCounty = null, foundArea = null;
+    let foundWard = null, foundCounty = null;
     Object.keys(counties).some(county => {
       return Object.keys(counties[county]).some(ward => {
         if (ward.toLowerCase().includes(lower)) {
@@ -231,7 +239,6 @@ export default function Home({ initialProfiles = [] }) {
           return true;
         }
         if (counties[county][ward].some(area => area.toLowerCase().includes(lower))) {
-          foundArea = lower; // We don't need the exact case for area since we're not using it in formatted
           foundWard = ward;
           foundCounty = county;
           return true;
@@ -246,6 +253,7 @@ export default function Home({ initialProfiles = [] }) {
       setFilteredLocations([]);
     }
   }, [debouncedSearchLocation]);
+
   const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
@@ -253,6 +261,7 @@ export default function Home({ initialProfiles = [] }) {
     setSearchLocation(`${county}, ${ward}${area ? `, ${area}` : ''}`);
     setFilteredLocations([]);
   };
+
   const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter(p => {
@@ -266,7 +275,8 @@ export default function Home({ initialProfiles = [] }) {
     });
     return filtered;
   }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
-  // Protected navigation — remembers intended destination
+
+  // Protected navigation (for general paths like /inbox)
   const handleAccessProtected = (path, featureName) => {
     if (user) {
       router.push(path);
@@ -276,6 +286,25 @@ export default function Home({ initialProfiles = [] }) {
       setShowLogin(true);
     }
   };
+
+  // Specific message handler for a profile
+  const handleMessageClick = async (e, profileId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (user) {
+      try {
+        const chatId = await createOrGetChat(user.uid || user.id, profileId);
+        router.push(`/inbox/${chatId}`);
+      } catch (err) {
+        alert('Could not open chat. Try again.');
+      }
+    } else {
+      setPendingAction({ type: 'message', profileId });
+      setProtectedFeature('Messaging');
+      setShowLogin(true);
+    }
+  };
+
   // Google Login/Signup handler
   const handleGoogleAuth = async (customName = '') => {
     setAuthError('');
@@ -301,20 +330,25 @@ export default function Home({ initialProfiles = [] }) {
         await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
         profileData = { id: firebaseUser.uid, ...basicProfile };
         isNewUser = true;
-        // Send verification email if not verified (though Google accounts are usually verified)
-        if (!firebaseUser.emailVerified) {
-          await sendEmailVerification(firebaseUser);
-        }
       }
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
       setAuthError('Success!');
-      setTimeout(() => {
+      setTimeout(async () => {
         setShowLogin(false);
         setShowRegister(false);
-        const target = pendingPath || (isNewUser ? '/profile-setup?t=' + Date.now() : '/');
+        let target = pendingPath || (isNewUser ? '/profile-setup?t=' + Date.now() : '/');
+        if (pendingAction?.type === 'message') {
+          try {
+            const chatId = await createOrGetChat(firebaseUser.uid, pendingAction.profileId);
+            target = `/inbox/${chatId}`;
+          } catch (err) {
+            alert('Could not open chat after login. Try again.');
+          }
+        }
         router.push(target);
         setPendingPath(null);
+        setPendingAction(null);
         setProtectedFeature('');
         if (isNewUser) {
           setTimeout(() => alert('Welcome! Please complete your profile to appear in searches.'), 800);
@@ -333,7 +367,8 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
     }
   };
-  // Login handler — redirects to pendingPath after success
+
+  // Login handler
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -352,7 +387,6 @@ export default function Home({ initialProfiles = [] }) {
     }
     try {
       const { user: firebaseUser } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-      // Allow login even if not verified, as per request
       const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
       let profileData;
       let isNewUser = false;
@@ -374,11 +408,20 @@ export default function Home({ initialProfiles = [] }) {
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
       setAuthError('Login successful!');
-      setTimeout(() => {
+      setTimeout(async () => {
         setShowLogin(false);
-        const target = pendingPath || '/'; // if they clicked Group Chat → go there, else stay on home
+        let target = pendingPath || '/';
+        if (pendingAction?.type === 'message') {
+          try {
+            const chatId = await createOrGetChat(firebaseUser.uid, pendingAction.profileId);
+            target = `/inbox/${chatId}`;
+          } catch (err) {
+            alert('Could not open chat after login. Try again.');
+          }
+        }
         router.push(target);
         setPendingPath(null);
+        setPendingAction(null);
         setProtectedFeature('');
         if (isNewUser) {
           setTimeout(() => alert('Welcome! Please complete your profile to appear in searches.'), 800);
@@ -399,6 +442,7 @@ export default function Home({ initialProfiles = [] }) {
       setLoginLoading(false);
     }
   };
+
   // Forgot password handler
   const handleForgotPassword = async (e) => {
     e.preventDefault();
@@ -427,19 +471,23 @@ export default function Home({ initialProfiles = [] }) {
       setForgotLoading(false);
     }
   };
+
   const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
   };
-  // Close login modal & clear pending path
+
+  // Close login modal
   const closeLoginModal = () => {
     setShowLogin(false);
     setPendingPath(null);
+    setPendingAction(null);
     setProtectedFeature('');
     setForgotPasswordMode(false);
     setForgotEmail('');
     setForgotMessage('');
   };
+
   // ESC & click outside
   useEffect(() => {
     const handler = (e) => {
@@ -447,6 +495,7 @@ export default function Home({ initialProfiles = [] }) {
         setShowLogin(false);
         setShowRegister(false);
         setPendingPath(null);
+        setPendingAction(null);
         setProtectedFeature('');
         setForgotPasswordMode(false);
       }
@@ -454,6 +503,7 @@ export default function Home({ initialProfiles = [] }) {
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, []);
+
   useEffect(() => {
     const handler = (e) => {
       if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) closeLoginModal();
@@ -462,28 +512,26 @@ export default function Home({ initialProfiles = [] }) {
     if (showLogin || showRegister) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [showLogin, showRegister]);
+
   const countyOptions = Object.keys(counties);
   const wardOptions = selectedCounty && counties[selectedCounty] ? Object.keys(counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];
+
   const ProfileCard = memo(({ p }) => {
     if (!p?.username?.trim()) return null;
+
     const handlePhoneClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
       window.location.href = `tel:${p.phone}`;
     };
-    const handleMessageClick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (user) {
-        router.push(`/inbox?chatWith=${p.id}`); // Assuming your inbox handles chat initiation
-      } else {
-        handleAccessProtected(`/inbox?chatWith=${p.id}`, 'Messaging');
-      }
-    };
-    const defaultSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg==';
+
+    const defaultSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1NCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg==';
     const blurData = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q==";
     const hasCustomPic = !!p.profilePic;
+
+    const isOwnProfile = user && (p.id === user.id || p.id === user.uid);
+
     return (
       <Link href={`/view-profile/${p.id}`} className={styles.profileLink}>
         <div className={styles.profileCard} role="listitem">
@@ -513,12 +561,14 @@ export default function Home({ initialProfiles = [] }) {
             <p>{p.age} year old {p.gender.toLowerCase()}</p>
             <p>from {p.ward}, {p.county} in {p.area}</p>
           </div>
-          <button 
-            className={styles.messageButton}
-            onClick={handleMessageClick}
-          >
-            💬 Send Message
-          </button>
+          {!isOwnProfile && (
+            <button 
+              className={styles.messageButton}
+              onClick={(e) => handleMessageClick(e, p.id)}
+            >
+              💬 Send Message
+            </button>
+          )}
           {p.phone && (
             <p>
               <span className={styles.phoneLink} onClick={handlePhoneClick}>{p.phone}</span>
@@ -528,7 +578,9 @@ export default function Home({ initialProfiles = [] }) {
       </Link>
     );
   });
+
   ProfileCard.displayName = 'ProfileCard';
+
   const Modal = forwardRef(({ children, title, onClose }, ref) => (
     <div className={styles.modal} ref={ref}>
       <div className={styles.modalContent}>
@@ -539,6 +591,7 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   ));
   Modal.displayName = 'Modal';
+
   if (userLoading) {
     return (
       <div className={styles.container}>
@@ -580,6 +633,7 @@ export default function Home({ initialProfiles = [] }) {
       </div>
     );
   }
+
   return (
     <div className={styles.container}>
       <Head>
@@ -736,6 +790,7 @@ export default function Home({ initialProfiles = [] }) {
     </div>
   );
 }
+
 export async function getStaticProps() {
   let initialProfiles = [];
   try {
