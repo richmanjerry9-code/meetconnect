@@ -1,304 +1,478 @@
+/* Home.module.css */
+
 .container {
+  /* --- Color Palette Variables --- */
+  --primary-color: #ff4785;
+  --primary-hover: #e0356f;
+  --secondary-color: #9b5de5;
+  --bg-gradient-start: #fff0f3;
+  --bg-gradient-end: #ffe3e3;
+  --card-bg: rgba(255, 255, 255, 0.85);
+  --text-dark: #2d3436;
+  --text-muted: #636e72;
+  --border-radius: 16px;
+  --shadow-soft: 0 10px 25px -5px rgba(255, 71, 133, 0.15), 0 8px 10px -6px rgba(255, 71, 133, 0.1);
+  --shadow-hover: 0 20px 35px -5px rgba(255, 71, 133, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Layout & Fonts */
   padding: 20px;
-  font-family: Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   max-width: 1200px;
   margin: 0 auto;
-  background: linear-gradient(135deg, #f8f1f1, #ffe4e1); /* Light pink to misty rose */
+  
+  /* Animated Background */
+  background: linear-gradient(135deg, var(--bg-gradient-start), var(--bg-gradient-end), #e6e6fa);
+  background-size: 200% 200%;
+  animation: bgShift 15s ease infinite; 
+  
   min-height: 100vh;
   display: flex;
-  flex-direction: column; /* For sticky footer */
+  flex-direction: column;
 }
+
+/* FIX: Nesting :global within a class ensures the selector is "pure" 
+   while still allowing you to target the body or define keyframes.
+*/
+.container :global {
+  @keyframes bgShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+}
+
+/* If you must reset the body here, nest it like this: */
+.container :global(body) {
+  margin: 0;
+  padding: 0;
+}
+
 .main {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  flex: 1; /* Pushes footer to the bottom */
+  gap: 30px;
+  flex: 1;
 }
+
+/* --- Header --- */
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
+  padding: 10px 0;
 }
-.logoContainer {
-  cursor: pointer;
-}
+
 .title {
-  font-size: 2rem;
-  color: #ff69b4; /* Hot pink, kept for branding */
+  font-size: 2.2rem;
+  font-weight: 800;
+  background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   margin: 0;
+  letter-spacing: -1px;
 }
+
+/* --- Buttons --- */
 .authButtons {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
+
 .button {
-  padding: 10px 20px;
-  background: #ff80bf; /* Light pinkish-purple */
-  color: white;
+  padding: 10px 24px;
+  font-weight: 600;
   border: none;
-  border-radius: 5px;
+  border-radius: 50px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  font-size: 0.9rem;
 }
-.button:hover {
-  background: #ff4d94; /* Softer hot pink */
-}
+
 .login {
-  background: #dda0dd; /* Plum */
+  background: white;
+  color: var(--secondary-color);
+  border: 1px solid var(--secondary-color);
 }
 .login:hover {
-  background: #c71585; /* Medium violet red, muted */
+  background: var(--secondary-color);
+  color: white;
+  transform: translateY(-2px);
 }
+
 .logout {
-  background: #ff69b4; /* Hot pink */
+  background: linear-gradient(45deg, var(--primary-color), #ff6b6b);
+  color: white;
 }
 .logout:hover {
-  background: #ff1493; /* Deep pink, toned down */
+  box-shadow: 0 6px 15px rgba(255, 71, 133, 0.4);
+  transform: translateY(-2px);
 }
+
+/* --- Search & Inputs --- */
 .searchContainer {
   position: relative;
   width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
 }
+
 .searchInput {
   width: 100%;
-  padding: 10px;
+  padding: 15px 25px;
   font-size: 1rem;
-  border: 1px solid #ffb6c1; /* Light coral */
-  border-radius: 5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  background: #fff0f5; /* Lavender blush */
+  border: 1px solid transparent;
+  border-radius: 30px;
+  background: white;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+  transition: all 0.3s ease;
+  color: var(--text-dark);
 }
+.searchInput:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 20px rgba(255, 71, 133, 0.15);
+}
+
 .dropdown {
   position: absolute;
-  top: 100%;
+  top: 110%;
   left: 0;
   right: 0;
-  background: #fff0f5; /* Lavender blush */
-  border: 1px solid #ffb6c1; /* Light coral */
-  border-radius: 5px;
+  background: white;
+  border-radius: 15px;
+  border: 1px solid #eee;
   max-height: 200px;
   overflow-y: auto;
-  z-index: 10;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-.dropdownItem {
-  padding: 12px 10px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.dropdownItem:hover {
-  background: #ffe4e1; /* Misty rose */
-}
-.filters {
+  z-index: 100;
+  box-shadow: var(--shadow-soft);
+  
+  /* Layout for results if you want them as buttons */
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  padding: 8px;
+  gap: 5px;
 }
+
+.dropdownItem {
+  padding: 10px 15px;
+  border-radius: 10px;
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.dropdownItem:hover {
+  background: var(--bg-gradient-start);
+  color: var(--primary-color);
+}
+
+/* --- Filters Layout (Fixed to stay the same during search) --- */
+.filters {
+  display: grid;
+  /* Creates 2 equal columns on mobile to keep things side-by-side */
+  grid-template-columns: 1fr 1fr; 
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
 .select {
-  padding: 10px;
-  font-size: 1rem;
-  border: 1px solid #ffb6c1; /* Light coral */
-  border-radius: 5px;
-  background: #fff0f5; /* Lavender blush */
+  /* This ensures the select box doesn't grow based on text length */
+  width: 100%; 
+  padding: 12px 15px;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255, 71, 133, 0.2);
+  border-radius: 20px;
+  background: white;
+  color: var(--text-muted);
+  cursor: pointer;
+  outline: none;
+  /* Prevents text from pushing the box wider */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  
+  transition: all 0.2s ease;
 }
+
+/* Make the third filter (All Areas) span across both columns so it stays centered */
+.select:nth-child(3) {
+  grid-column: 1 / span 2;
+  width: 60%; /* Or 100% if you want it full width */
+  margin: 0 auto;
+}
+
+.select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(255, 71, 133, 0.1);
+}
+
+/* --- Profiles Grid --- */
 .profiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 25px;
+  padding: 10px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
-.profileCard {
-  background: #fff0f5; /* Lavender blush */
-  border: 1px solid #ffb6c1; /* Light coral */
+
+.profiles::-webkit-scrollbar {
+  width: 8px;
+}
+.profiles::-webkit-scrollbar-track {
+  background: transparent;
+}
+.profiles::-webkit-scrollbar-thumb {
+  background: rgba(255, 71, 133, 0.3);
   border-radius: 10px;
-  padding: 15px;
+}
+.profiles::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 71, 133, 0.6);
+}
+
+/* --- Profile Card --- */
+.profileCard {
+  background: var(--card-bg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--border-radius);
+  padding: 20px;
   text-align: center;
   cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  touch-action: pan-y !important; /* ← KILLS accidental clicks while scrolling */
+  transition: all 0.3s ease;
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y !important;
   user-select: none;
   -webkit-user-select: none;
 }
+
 .profileCard:hover {
-  transform: scale(1.05);
-  box-shadow: 0 8px 20px rgba(255, 105, 180, 0.25);
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(255, 71, 133, 0.3);
 }
+
 .profileImage {
+  width: 110px;
+  height: 110px;
   border-radius: 50%;
   object-fit: cover;
+  border: 3px solid white;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.1);
 }
+
 .profileInfo {
-  margin-top: 10px;
+  margin-top: 15px;
 }
+
 .profileInfo h3 {
   margin: 5px 0;
-  color: #c71585; /* Medium violet red */
-  font-size: 1.25rem;
+  color: var(--text-dark);
+  font-size: 1.3rem;
+  font-weight: 700;
 }
+
+.location {
+  color: var(--secondary-color); /* Matches your purple theme better than hardcoded #8a2be2 */
+  margin: 8px 0 4px;
+  font-size: 0.9rem;
+  font-weight: 600; /* Makes it look premium */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  
+  /* Critical for the layout fix you requested: */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; 
+  width: 100%;
+}
+/* --- Badges --- */
 .badge {
   display: inline-block;
-  padding: 5px 12px;
-  border-radius: 12px;
+  padding: 4px 12px;
+  border-radius: 20px;
   color: white;
-  font-size: 0.85rem;
-  font-weight: bold;
-  margin-top: 5px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  margin-top: 8px;
 }
-.vvip { background: #ff4500; } /* Orange red */
-.vip { background: #ff8c00; } /* Dark orange */
-.prime { background: #ffd700; } /* Gold */
-.regular { background: #b9a9f4; } /* Soft purple for Regular if you want */
-.location {
-  color: #8a2be2; /* Blue violet, muted */
-  margin: 8px 0 4px;
-  font-size: 0.95rem;
+
+.vvip { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
+.vip { background: linear-gradient(135deg, #f093fb, #f5576c); }
+.prime { background: linear-gradient(135deg, #f6d365, #fda085); color: #333; }
+.regular { background: #dfe6e9; color: #636e72; }
+
+/* --- Summary & Services --- */
+.profileSummary {
+  background: rgba(255, 255, 255, 0.5);
+  padding: 12px;
+  border-radius: 12px;
+  margin: 15px 0;
+  text-align: left;
+  font-size: 0.9rem;
+  border: 1px solid rgba(255,255,255,0.8);
 }
+.profileSummary p {
+  margin: 4px 0;
+  color: var(--text-muted);
+}
+.profileSummary p:first-child {
+  color: var(--primary-color);
+  font-weight: 600;
+  text-align: center;
+}
+
 .services {
-  margin-top: 10px;
+  margin-top: 15px;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   justify-content: center;
 }
+
 .serviceTag {
-  display: inline-block;
-  background: #dda0dd; /* Plum */
-  padding: 5px 10px;
-  border-radius: 12px;
-  margin: 2px;
-  color: white;
-  font-size: 0.8rem;
+  background: #fdf2f7;
+  color: var(--primary-color);
+  border: 1px solid rgba(255, 71, 133, 0.2);
+  padding: 6px 12px;
+  border-radius: 15px;
+  font-size: 0.75rem;
+  font-weight: 600;
 }
+
+/* --- Actions --- */
+.messageButton {
+  display: inline-block;
+  background: var(--secondary-color);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 12px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 10px rgba(155, 93, 229, 0.3);
+}
+.messageButton:hover {
+  background: #8e44ad;
+  transform: translateY(-2px);
+}
+
 .phoneLink {
-  color: #ff69b4; /* Hot pink */
+  color: var(--primary-color);
   text-decoration: none;
-  font-weight: bold;
+  font-weight: 700;
+  display: block;
+  margin-top: 10px;
+  transition: color 0.2s;
 }
 .phoneLink:hover {
-  text-decoration: underline;
+  color: var(--primary-hover);
 }
-.noProfiles {
-  text-align: center;
-  color: #8a2be2;
-  font-size: 1.1rem;
-  grid-column: 1 / -1;
-}
+
+/* --- Modal --- */
 .modal {
+  background: rgba(45, 52, 54, 0.7);
+  backdrop-filter: blur(5px);
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
 }
+
 .modalContent {
-  background: #fff0f5;
-  padding: 25px;
-  border-radius: 12px;
-  position: relative;
+  background: white;
+  padding: 30px;
+  border-radius: 20px;
+  border: none;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.3s ease-out;
   width: 90%;
   max-width: 340px;
-  border: 1px solid #ffb6c1;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  position: relative;
 }
+
 .close {
+  color: var(--text-muted);
+  font-weight: 300;
+  transition: color 0.2s;
   position: absolute;
   top: 10px;
   right: 12px;
   cursor: pointer;
   font-size: 1.8rem;
-  color: #ff1493;
-  font-weight: bold;
 }
+
 .input {
+  background: #f9f9f9;
+  border: 1px solid #eee;
+  padding: 15px;
+  border-radius: 8px;
+  transition: border 0.2s;
   width: 100%;
-  padding: 12px;
   margin: 10px 0;
-  border: 1px solid #ffb6c1;
-  border-radius: 5px;
-  background: #fff;
   font-size: 1rem;
 }
+
 .footer {
   text-align: center;
-  padding: 15px 0;
-  background: #fff0f5;
-  border-top: 1px solid #ffb6c1;
+  padding: 25px 0;
+  background: rgba(255,255,255,0.6);
+  border-top: 1px solid rgba(255, 71, 133, 0.1);
   margin-top: auto;
 }
+
 .footerLinks {
   display: flex;
   justify-content: center;
   gap: 25px;
   flex-wrap: wrap;
 }
+
 .footerLink {
-  color: #ff69b4;
-  text-decoration: none;
-  font-weight: bold;
-  font-size: 0.95rem;
-}
-.footerLink:hover {
-  text-decoration: underline;
-}
-/* Skeleton loading */
-.skeletonCard {
-  background: #fff0f5;
-  border: 1px solid #ffb6c1;
-  border-radius: 10px;
-  padding: 15px;
-  text-align: center;
-}
-.skeletonImage {
-  width: 150px;
-  height: 150px;
-  border-radius: 50%;
-  background: #eee;
-  margin: 0 auto;
-  animation: pulse 1.5s infinite;
-}
-.skeletonText {
-  height: 20px;
-  background: #eee;
-  margin: 10px auto;
-  width: 70%;
-  border-radius: 4px;
-  animation: pulse 1.5s infinite;
-}
-.skeletonTextSmall {
-  height: 16px;
-  background: #eee;
-  margin: 8px auto;
-  width: 50%;
-  border-radius: 4px;
-  animation: pulse 1.5s infinite;
-}
-@keyframes pulse {
-  0% { opacity: 0.6; }
-  50% { opacity: 1; }
-  100% { opacity: 0.6; }
-}
-/* Optional: If you want the profiles container to have its own scrollbar (instead of page-level) */
-.profiles {
-  max-height: calc(100vh - 150px); /* Adjust based on header/footer height to fit screen */
-  overflow-y: scroll; /* Make this div scrollable */
-  -webkit-overflow-scrolling: touch;
-}
-/* Customize scrollbar for .profiles if using the optional approach */
-.profiles::-webkit-scrollbar {
-  width: 12px;
-}
-.profiles::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-.profiles::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: color 0.2s;
 }
 
-.typingFix {
-  user-select: text !important;
-  -webkit-user-select: text !important;
-  touch-action: auto !important;
+/* --- Skeleton Loading --- */
+.skeletonCard {
+  background: white;
+  border: 1px solid #f0f0f0;
+  padding: 15px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.skeletonImage, .skeletonText, .skeletonTextSmall {
+  background: linear-gradient(90deg, #f0f0f0 25%, #fafafa 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
 }

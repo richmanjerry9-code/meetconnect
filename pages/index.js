@@ -467,11 +467,19 @@ export default function Home({ initialProfiles = [] }) {
   const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];
   const ProfileCard = memo(({ p }) => {
     if (!p?.username?.trim()) return null;
-    const locationDisplay = p.ward ? `${p.ward} (${p.area || 'All Areas'})` : (p.area || p.county || 'Location TBD');
     const handlePhoneClick = (e) => {
       e.preventDefault();
       e.stopPropagation();
       window.location.href = `tel:${p.phone}`;
+    };
+    const handleMessageClick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (user) {
+        router.push(`/inbox?chatWith=${p.id}`); // Assuming your inbox handles chat initiation
+      } else {
+        handleAccessProtected(`/inbox?chatWith=${p.id}`, 'Messaging');
+      }
     };
     const defaultSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg==';
     const blurData = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAABESEhQdHw/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q==";
@@ -500,12 +508,17 @@ export default function Home({ initialProfiles = [] }) {
               <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
             )}
           </div>
-          <p className={styles.location}>{locationDisplay}</p>
-          {p.services?.length > 0 && (
-            <div className={styles.services}>
-              {p.services.slice(0, 3).map((s, i) => <span key={i} className={styles.serviceTag}>{s}</span>)}
-            </div>
-          )}
+          <p className={styles.location}>{p.ward.toLowerCase()}/{p.area.toLowerCase()}</p>
+          <div className={styles.profileSummary}>
+            <p>{p.age} year old {p.gender.toLowerCase()}</p>
+            <p>from {p.ward}, {p.county} in {p.area}</p>
+          </div>
+          <button 
+            className={styles.messageButton}
+            onClick={handleMessageClick}
+          >
+            💬 Send Message
+          </button>
           {p.phone && (
             <p>
               <span className={styles.phoneLink} onClick={handlePhoneClick}>{p.phone}</span>
