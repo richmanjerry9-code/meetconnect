@@ -598,9 +598,6 @@ export default function Home({ initialProfiles = [] }) {
           <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
         </div>
         <div className={styles.authButtons}>
-          <button onClick={() => handleAccessProtected('/group-chat', 'Group Chat')} className={styles.button}>
-            Group Chat
-          </button>
           <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
             Inbox
           </button>

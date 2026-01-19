@@ -844,7 +844,7 @@ export default function ProfileSetup() {
                   </label>
                   <label className={styles.label}>
                     Age (18+)
-                    <input type="number" name="age" min="18" max="100" value={formData.age} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
+                    <input type="number" name="age" min="18" max="90" value={formData.age} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
                   </label>
                   <label className={styles.label}>
                     Nationality
