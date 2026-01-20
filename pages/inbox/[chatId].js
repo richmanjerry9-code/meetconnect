@@ -5,7 +5,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import MessageList from "../../lib/chat/MessageList";
 import ChatInput from "../../lib/chat/ChatInput";
 import ChatHeader from "../../lib/chat/ChatHeader";
-import { listenMessages, sendMessage, uploadImage } from "../../lib/chat";
+import { listenMessages, sendMessage, uploadMedia } from "../../lib/chat/";
 
 import {
   doc,
@@ -130,7 +130,7 @@ export default function PrivateChat() {
     if (!user || !chatId) return;
 
     let imageUrl = null;
-    if (imageFile) imageUrl = await uploadImage(imageFile, "chatImages");
+    if (imageFile) imageUrl = await uploadMedia(imageFile, "chatImages");
 
     await sendMessage(
       `privateChats/${chatId}/messages`,

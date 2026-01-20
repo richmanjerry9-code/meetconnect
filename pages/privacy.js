@@ -14,7 +14,7 @@ export default function Privacy() {
         <li>By using MeetConnect, you consent to the collection and use of data as described in this policy.</li>
       </ul>
       <p className="mt-4">
-        For support, contact us at <a href="mailto:meetconnect19@gmail.com" className="text-blue-600 underline">meetconnect19@gmail.com</a>.
+        For support, contact us at <a href="mailto:meetconnect.co.ke" className="text-blue-600 underline">meetconnect.co.ke</a>.
       </p>
     </div>
   );
