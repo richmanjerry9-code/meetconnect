@@ -511,9 +511,20 @@ export default function ProfileSetup() {
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
-        const fd = new FormData();
-        fd.append('image', profilePicFile);
-        const res = await fetch('/api/uploadProfilePic', { method: 'POST', body: fd });
+        // Convert file to base64
+        const reader = new FileReader();
+        reader.readAsDataURL(profilePicFile);
+        const base64 = await new Promise((resolve, reject) => {
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+        });
+
+        // Send as JSON
+        const res = await fetch('/api/uploadProfilePic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64: base64 }),
+        });
         const data = await res.json();
         if (!res.ok || !data.url) {
           setError(data.error || 'Failed to upload image.');
