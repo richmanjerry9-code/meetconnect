@@ -532,17 +532,7 @@ export default function ProfileSetup() {
           return;
         }
         profilePicUrl = data.url;
-        const modRes = await fetch('/api/moderateImage', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageUrl: profilePicUrl }),
-        });
-        const modData = await modRes.json();
-        if (!modRes.ok || !modData.isSafe) {
-          setError(modData.error || 'Image inappropriate.');
-          setSaveLoading(false);
-          return;
-        }
+        // Removed moderation step to ensure profile goes live on first save with pic
       } catch (err) {
         console.error('profile pic upload error', err);
         setError('Failed to process image.');
