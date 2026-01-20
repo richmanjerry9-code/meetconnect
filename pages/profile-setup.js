@@ -438,6 +438,7 @@ export default function ProfileSetup() {
         if (!formData.name) errors.push('Name');
         if (!formData.phone) errors.push('Phone');
         if (!formData.age) errors.push('Age');
+        if (!profilePicFile && !formData.profilePic) errors.push('Profile Picture');
         if (errors.length > 0) {
           setError(`Please add: ${errors.join(', ')}`);
           return false;
@@ -511,19 +512,12 @@ export default function ProfileSetup() {
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
-        // Convert file to base64
-        const reader = new FileReader();
-        reader.readAsDataURL(profilePicFile);
-        const base64 = await new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-        });
-
-        // Send as JSON
+        const fd = new FormData();
+        fd.append('image', profilePicFile);
+        
         const res = await fetch('/api/uploadProfilePic', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64 }),
+          body: fd,
         });
         const data = await res.json();
         if (!res.ok || !data.url) {
@@ -532,7 +526,6 @@ export default function ProfileSetup() {
           return;
         }
         profilePicUrl = data.url;
-        // Removed moderation step to ensure profile goes live on first save with pic
       } catch (err) {
         console.error('profile pic upload error', err);
         setError('Failed to process image.');
@@ -778,7 +771,7 @@ export default function ProfileSetup() {
                 <div className={styles.stepContent}>
                   <h2>Basics</h2>
                   <label className={styles.label}>
-                    Profile Picture
+                    Profile Picture (Required)
                     <button type="button" onClick={() => profilePicInputRef.current.click()} className={styles.button}>
                       Upload Profile Picture
                     </button>
