@@ -204,9 +204,7 @@ export default function ProfileSetup() {
             const isActive = expiresAtDate && expiresAtDate > new Date();
             return {
               id: d.id,
-              creatorId: data.creatorId,
-              creatorName,
-              creatorPic,
+              userName,
               amount: data.amount,
               duration: data.durationDays || data.duration,
               date: data.updatedAt ? data.updatedAt.toDate().toLocaleString() : '',
@@ -417,14 +415,16 @@ export default function ProfileSetup() {
     setShowMediaViewer(true);
   };
   const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
+    if (e.touches) touchStartX.current = e.touches[0].clientX;
   };
   const handleTouchEnd = (e) => {
-    const touchEndX = e.changedTouches[0].clientX;
-    if (touchStartX.current - touchEndX > 50) {
-      setSelectedIndex((prev) => (prev < selectedGallery.length - 1 ? prev + 1 : 0));
-    } else if (touchEndX - touchStartX.current > 50) {
-      setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1));
+    if (e.changedTouches) {
+      const touchEndX = e.changedTouches[0].clientX;
+      if (touchStartX.current - touchEndX > 50) {
+        setSelectedIndex((prev) => (prev < selectedGallery.length - 1 ? prev + 1 : 0));
+      } else if (touchEndX - touchStartX.current > 50) {
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1));
+      }
     }
   };
   // ----------------------------
@@ -510,19 +510,9 @@ export default function ProfileSetup() {
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
-        // Convert file to base64
-        const reader = new FileReader();
-        const base64Promise = new Promise((resolve, reject) => {
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = reject;
-          reader.readAsDataURL(profilePicFile);
-        });
-        const imageBase64 = await base64Promise;
-        const res = await fetch('/api/uploadProfilePic', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64 }),
-        });
+        const fd = new FormData();
+        fd.append('image', profilePicFile);
+        const res = await fetch('/api/uploadProfilePic', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || !data.url) {
           setError(data.error || 'Failed to upload image.');
@@ -1206,7 +1196,7 @@ export default function ProfileSetup() {
                 ←
               </button>
               <h2>Create Post</h2>
-              <p className={styles.tip}>Add photos/videos. Exclusive for subscribers only.</p>
+              <p className={styles.tip}>Add photos/videos. Exclusive for those subscribers only.</p>
               <button onClick={() => fileInputRef.current.click()} className={styles.button}>
                 Select Photos/Videos
               </button>
