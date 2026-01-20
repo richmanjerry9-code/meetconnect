@@ -492,7 +492,49 @@ export default function ProfileSetup() {
 
   // ---------------------------- 
   // Save profile
-  // ---------------------------- 
+  // ----------------------------
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const maxWidth = 800; // Resize to reasonable width for profile pics
+      const maxHeight = 800;
+      const reader = new FileReader();
+      
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const elem = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions
+          if (width > height) {
+            if (width > maxWidth) {
+              height *= maxWidth / width;
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width *= maxHeight / height;
+              height = maxHeight;
+            }
+          }
+
+          elem.width = width;
+          elem.height = height;
+          const ctx = elem.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Output as Base64 with 0.7 quality (70%) compression
+          // This turns a 10MB file into ~100KB-300KB
+          resolve(ctx.toDataURL('image/jpeg', 0.7)); 
+        };
+        img.onerror = (error) => reject(error);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaveLoading(true);
@@ -504,21 +546,38 @@ export default function ProfileSetup() {
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
-        const fd = new FormData();
-        fd.append('image', profilePicFile);
-        const res = await fetch('/api/uploadProfilePic', { method: 'POST', body: fd });
+        // --- CHANGED SECTION START ---
+        
+        // Instead of raw FileReader, we use the compressor
+        // This ensures the string sent to API is small (KB, not MB)
+        const imageBase64 = await compressImage(profilePicFile);
+        
+        // --- CHANGED SECTION END ---
+
+        const res = await fetch('/api/uploadProfilePic', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imageBase64 }),
+        });
+
         const data = await res.json();
+        
         if (!res.ok || !data.url) {
+          // Log the actual error for debugging
+          console.error("Upload failed:", data); 
           setError(data.error || 'Failed to upload image.');
           setSaveLoading(false);
           return;
         }
+
         profilePicUrl = data.url;
+
         const modRes = await fetch('/api/moderateImage', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageUrl: profilePicUrl }),
         });
+
         const modData = await modRes.json();
         if (!modRes.ok || !modData.isSafe) {
           setError(modData.error || 'Image inappropriate.');
@@ -527,20 +586,23 @@ export default function ProfileSetup() {
         }
       } catch (err) {
         console.error('profile pic upload error', err);
-        setError('Failed to process image.');
+        setError('Failed to process image. Try a smaller file.');
         setSaveLoading(false);
         return;
       }
     }
+
+    // ... rest of your save logic
     try {
-      await setDoc(
-        doc(db, 'profiles', loggedInUser.id),
-        { ...formData, profilePic: profilePicUrl, fundingBalance, earningsBalance },
-        { merge: true }
-      );
-      localStorage.setItem('profileSaved', 'true');
-      alert('Profile updated!');
-      router.push('/');
+       // ... existing Firestore logic
+       await setDoc(
+         doc(db, 'profiles', loggedInUser.id),
+         { ...formData, profilePic: profilePicUrl, fundingBalance, earningsBalance },
+         { merge: true }
+       );
+       localStorage.setItem('profileSaved', 'true');
+       alert('Successful! Your profile is now live!');
+       router.push('/');
     } catch (err) {
       console.error('save profile failed', err);
       setError('Failed to save.');

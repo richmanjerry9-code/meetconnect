@@ -16,7 +16,7 @@ export default function Terms() {
         <li>By using MeetConnect, you agree to indemnify and hold harmless MeetConnect and its affiliates from any claims arising from your use of the platform.</li>
       </ul>
       <p className="mt-4">
-        For support, contact us at <a href="mailto:meetconnect19@gmail.com" className="text-blue-600 underline">meetconnect19@gmail.com</a>.
+        For support, contact us at <a href="mailto:meetconnect.co.ke" className="text-blue-600 underline">meetconnect.co.ke</a>.
       </p>
     </div>
   );
