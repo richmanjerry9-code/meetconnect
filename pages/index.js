@@ -517,6 +517,15 @@ export default function Home({ initialProfiles = [] }) {
   const wardOptions = selectedCounty && counties[selectedCounty] ? Object.keys(counties[selectedCounty]) : [];
   const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];
 
+  // Handle logo click: Navigate or reload depending on current path
+  const handleLogoClick = () => {
+    if (router.pathname === '/') {
+      window.location.reload();
+    } else {
+      router.push('/');
+    }
+  };
+
   const ProfileCard = memo(({ p }) => {
     if (!p?.username?.trim()) return null;
 
@@ -597,7 +606,7 @@ export default function Home({ initialProfiles = [] }) {
       <div className={styles.container}>
         <header className={styles.header}>
           <div className={styles.logoContainer}>
-            <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
+            <h1 onClick={handleLogoClick} className={styles.title}> Meet Connect </h1>
           </div>
           <div className={styles.authButtons}>
             <button className={`${styles.button} ${styles.login}`}>Login</button>
@@ -649,7 +658,7 @@ export default function Home({ initialProfiles = [] }) {
       </Head>
       <header className={styles.header}>
         <div className={styles.logoContainer}>
-          <h1 onClick={() => router.push('/')} className={styles.title}> Meet Connect </h1>
+          <h1 onClick={handleLogoClick} className={styles.title}> Meet Connect </h1>
         </div>
         <div className={styles.authButtons}>
           <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
