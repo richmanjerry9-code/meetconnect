@@ -10,7 +10,7 @@ export default function Terms() {
         <li>Users must be 18 years or older and provide accurate information.</li>
         <li>MeetConnect is not responsible for any interactions, agreements, or conduct that occurs offline or outside the platform. All offline interactions are at your own risk, and MeetConnect disclaims any liability for damages, losses, or disputes arising from such interactions. For on-platform messaging, MeetConnect provides the tools but is not liable for the content of messages, agreements made via messaging, or any resulting disputes—users message at their own discretion and risk.</li>
         <li>Users agree to use the platform only for lawful purposes and social networking.</li>
-        <li>Harassment, scams, illegal activity, or posting sexual services for payment is strictly prohibited.</li>
+        <li>Harassment, scams or illegal activity are strictly prohibited.</li>
         <li>All payments on the platform (e.g., membership upgrades) are for in-app services only.</li>
         <li>MeetConnect may remove content or suspend accounts at our discretion.</li>
         <li>By using MeetConnect, you agree to indemnify and hold harmless MeetConnect and its affiliates from any claims arising from your use of the platform.</li>
