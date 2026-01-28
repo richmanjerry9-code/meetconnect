@@ -9,6 +9,8 @@ import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arr
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
+const ACTIVATION_FEE = 300;
+
 export default function ProfileSetup() {
   const router = useRouter();
   const [loggedInUser, setLoggedInUser] = useState(null);
@@ -30,6 +32,8 @@ export default function ProfileSetup() {
     exclusivePics: [],
     verified: false,
     createdAt: null,
+    hidden: true,        // Default hidden
+    activationPaid: false,
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
@@ -39,6 +43,8 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [verificationRequested, setVerificationRequested] = useState(false);
+  // Activation modal
+  const [showActivationModal, setShowActivationModal] = useState(false);
   // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
@@ -128,6 +134,8 @@ export default function ProfileSetup() {
             exclusivePics: data.exclusivePics || [],
             age: data.age || prev.age,
             verified: data.verified || false,
+            hidden: data.hidden ?? true,
+            activationPaid: data.activationPaid ?? false,
           }));
           setSelectedWard(data.ward || '');
           setFundingBalance(data.fundingBalance || 0);
@@ -135,6 +143,13 @@ export default function ProfileSetup() {
           setMembership(effectiveMembership);
           setMpesaPhone(loadedPhone);
           setVerificationRequested(!!data.verificationRequested);
+
+          // Detect successful activation payment
+          if (data.activationPaid && showActivationModal) {
+            setShowActivationModal(false);
+            alert('Payment successful! Your profile is now live forever on Regular membership.');
+            router.push('/');
+          }
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
           setFundingBalance(0);
@@ -534,14 +549,29 @@ export default function ProfileSetup() {
       }
     }
     try {
+      const isRegular = membership === 'Regular';
+      const profileUpdates = {
+        ...formData,
+        profilePic: profilePicUrl,
+        fundingBalance,
+        earningsBalance,
+        hidden: isRegular ? true : false,           // Hide if Regular
+        activationPaid: isRegular ? false : true,   // Premium skips activation
+      };
+
       await setDoc(
         doc(db, 'profiles', loggedInUser.id),
-        { ...formData, profilePic: profilePicUrl, fundingBalance, earningsBalance },
+        profileUpdates,
         { merge: true }
       );
       localStorage.setItem('profileSaved', 'true');
-      alert('Successful! Your profile is now live!');
-      router.push('/');
+
+      if (isRegular && !formData.activationPaid) {
+        setShowActivationModal(true);  // Immediate prompt
+      } else {
+        alert('Successful! Your profile is now live!');
+        router.push('/');
+      }
     } catch (err) {
       console.error('save profile failed', err);
       setError('Failed to save.');
@@ -592,7 +622,7 @@ export default function ProfileSetup() {
     setFundingBalance(newBalance);
     await setDoc(
       doc(db, 'profiles', loggedInUser.id),
-      { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance },
+      { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance, hidden: false, activationPaid: true },
       { merge: true }
     );
     setMembership(selectedLevel);
@@ -656,6 +686,15 @@ export default function ProfileSetup() {
     } catch (err) {
       console.error('Delete profile failed', err);
       alert('Failed to delete profile. Please try again.');
+    }
+  };
+  const handleActivate = async () => {
+    const profileRef = doc(db, 'profiles', loggedInUser.id);
+    if (membership === 'Regular') {
+      setShowActivationModal(true);
+    } else {
+      await setDoc(profileRef, { hidden: false, activationPaid: true }, { merge: true });
+      alert('Account activated!');
     }
   };
   // ----------------------------
@@ -737,7 +776,7 @@ export default function ProfileSetup() {
               </button>
             </div>
             <h2 className={styles.sectionTitle}>My Membership</h2>
-            <p>Current: {membership}</p>
+            <p>Current: {formData.hidden ? 'hidden' : membership}</p>
             <p>Regular: Free</p>
             <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
               Upgrade to Prime
@@ -933,6 +972,11 @@ export default function ProfileSetup() {
                 <button type="submit" className={styles.button} disabled={saveLoading}>
                   {saveLoading ? 'Saving...' : 'Save Profile'}
                 </button>
+                {!formData.activationPaid && (
+                  <button type="button" onClick={handleActivate} className={styles.button}>
+                    Activate
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -965,6 +1009,30 @@ export default function ProfileSetup() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+        {showActivationModal && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>🎉 Profile Created Successfully!</h3>
+              <p>Pay a one-time KES {ACTIVATION_FEE} to activate lifetime visibility and start connecting with gentlemen.</p>
+              <p>Serious members only — ensures better matches!</p>
+              <StkPushForm
+                initialPhone={mpesaPhone}
+                initialAmount={ACTIVATION_FEE}
+                readOnlyAmount={true}
+                apiEndpoint="/api/stkpush"
+                additionalBody={{
+                  userId: loggedInUser.id,
+                  type: 'activation',
+                  accountReference: `act_${loggedInUser.id.slice(-8)}`,
+                  transactionDesc: 'One-time activation fee for lifetime visibility',
+                }}
+              />
+              <button onClick={() => setShowActivationModal(false)} className={styles.closeButton}>
+                Later (profile stays hidden)
+              </button>
             </div>
           </div>
         )}
