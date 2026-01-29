@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -6,7 +5,7 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
-import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
@@ -33,7 +32,7 @@ export default function ProfileSetup() {
     exclusivePics: [],
     verified: false,
     createdAt: null,
-    hidden: true,        // Default hidden
+    hidden: true,
     activationPaid: false,
     regularLifetime: false,
   });
@@ -47,14 +46,19 @@ export default function ProfileSetup() {
   const [verificationRequested, setVerificationRequested] = useState(false);
   // Activation modal
   const [showActivationModal, setShowActivationModal] = useState(false);
+  const [activationLocked, setActivationLocked] = useState(false);
+  // Deactivation modal
+  const [showDeactivationModal, setShowDeactivationModal] = useState(false);
   // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('');
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet');
+  const [upgradeLocked, setUpgradeLocked] = useState(false);
   // Add funds / withdraw
   const [showAddFundModal, setShowAddFundModal] = useState(false);
+  const [addFundLocked, setAddFundLocked] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawLoading, setWithdrawLoading] = useState(false);
@@ -87,12 +91,14 @@ export default function ProfileSetup() {
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
   const profilePicInputRef = useRef(null);
-  // New states for menu and delete profile
+  // New states for menu and deactivate account
   const [showMenu, setShowMenu] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteReasons, setDeleteReasons] = useState([]);
+  const [deactivateReasons, setDeactivateReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
   const reasons = ['Not interested anymore', 'Too expensive', 'Found alternative', 'Privacy concerns', 'Technical issues', 'Other'];
+  // Guards for snapshot writes
+  const didBackfillCreatedAt = useRef(false);
+  const didHandleExpiry = useRef(false);
   // ----------------------------
   // Lifecycle: load profile & subscriptions
   // ----------------------------
@@ -111,15 +117,17 @@ export default function ProfileSetup() {
         if (snap.exists()) {
           const data = snap.data();
           const loadedPhone = (data.phone || '').replace(/[^\d]/g, '');
-          // Backfill createdAt if missing
-          if (!data.createdAt) {
+          // Backfill createdAt if missing (guarded)
+          if (!data.createdAt && !didBackfillCreatedAt.current) {
+            didBackfillCreatedAt.current = true;
             setDoc(profileRef, { createdAt: serverTimestamp() }, { merge: true }).catch(console.error);
           }
-          // membership expiry handling
+          // membership expiry handling (guarded)
           let effectiveMembership = data.membership || 'Regular';
           if (data.membershipExpiresAt && data.membershipExpiresAt.seconds) {
             const expiresAt = new Date(data.membershipExpiresAt.seconds * 1000);
-            if (expiresAt < new Date()) {
+            if (expiresAt < new Date() && !didHandleExpiry.current) {
+              didHandleExpiry.current = true;
               effectiveMembership = 'Regular';
               setDoc(
                 profileRef,
@@ -154,10 +162,10 @@ export default function ProfileSetup() {
           setMpesaPhone(loadedPhone);
           setVerificationRequested(!!data.verificationRequested);
 
-          // Detect successful activation payment
+          // Detect successful activation payment (READ-ONLY - no writes)
           if (data.activationPaid && showActivationModal) {
             setShowActivationModal(false);
-            alert('🎉 Activated! You are visible forever + Prime for 7 days.');
+            alert(' Activated! You are visible forever + Prime for 7 days.');
             router.push('/');
           }
         } else {
@@ -456,67 +464,52 @@ export default function ProfileSetup() {
   // ----------------------------
   // Validation / stepper
   // ----------------------------
-  const validateStep = (step) => {
+  const getStepErrors = (step) => {
+    const errors = [];
     switch (step) {
       case 0:
-        const errors = [];
         if (!formData.name) errors.push('Name');
         if (!formData.phone) errors.push('Phone');
         if (!formData.age) errors.push('Age');
         if (!profilePicFile && !formData.profilePic) errors.push('Profile Picture');
-        if (errors.length > 0) {
-          setError(`Please add: ${errors.join(', ')}`);
-          return false;
-        }
         const numericAge = parseInt(formData.age, 10);
-        if (isNaN(numericAge) || numericAge < 18) {
-          setError('You must be 18 or older.');
-          return false;
-        }
+        if (isNaN(numericAge) || numericAge < 18) errors.push('You must be 18 or older.');
         try {
           formatPhoneForMpesa(formData.phone);
-        } catch (err) {
-          setError(err.message);
-          return false;
+        } catch {
+          errors.push('Invalid phone format');
         }
-        return true;
+        return errors;
       case 1:
-        const locErrors = [];
-        if (!formData.county) locErrors.push('County');
-        if (!formData.ward) locErrors.push('City/Town');
-        if (!formData.area) locErrors.push('Area');
-        if (locErrors.length > 0) {
-          setError(`Please add: ${locErrors.join(', ')}`);
-          return false;
-        }
-        if ((formData.nearby || []).length > 4) {
-          setError('Up to 4 nearby locations only.');
-          return false;
-        }
-        return true;
+        if (!formData.county) errors.push('County');
+        if (!formData.ward) errors.push('City/Town');
+        if (!formData.area) errors.push('Area');
+        if ((formData.nearby || []).length > 4) errors.push('Up to 4 nearby locations only.');
+        return errors;
       case 2:
         const words = formData.bio.trim().split(/\s+/).length;
-        if (words > 100) {
-          setError('Bio must be 100 words or less.');
-          return false;
-        }
-        return true;
+        if (words > 100) errors.push('Bio must be 100 words or less.');
+        return errors;
       default:
-        return true;
+        return [];
     }
   };
+  const isStepValid = (step) => getStepErrors(step).length === 0;
   const findInvalidStep = () => {
     for (let i = 0; i < 3; i++) {
-      if (!validateStep(i)) {
+      if (!isStepValid(i)) {
         return i;
       }
     }
     return -1;
   };
   const handleNextStep = () => {
-    if (validateStep(activeStep)) {
+    const errors = getStepErrors(activeStep);
+    if (errors.length === 0) {
       setError('');
       setActiveStep((s) => Math.min(s + 1, steps.length - 1));
+    } else {
+      setError(`Please fix: ${errors.join(', ')}`);
     }
   };
   const handlePrevStep = () => setActiveStep((s) => Math.max(s - 1, 0));
@@ -530,7 +523,7 @@ export default function ProfileSetup() {
     const invalidStep = findInvalidStep();
     if (invalidStep !== -1) {
       setActiveStep(invalidStep);
-      validateStep(invalidStep); // Sets the error message for the invalid step
+      setError(`Please fix in ${steps[invalidStep]}: ${getStepErrors(invalidStep).join(', ')}`);
       setSaveLoading(false);
       return;
     }
@@ -539,7 +532,6 @@ export default function ProfileSetup() {
       try {
         const fd = new FormData();
         fd.append('image', profilePicFile);
-        
         const res = await fetch('/api/uploadProfilePic', {
           method: 'POST',
           body: fd,
@@ -560,13 +552,21 @@ export default function ProfileSetup() {
     }
     try {
       const profileUpdates = {
-        ...formData,
+        name: formData.name,
+        phone: formData.phone,
+        gender: formData.gender,
+        sexualOrientation: formData.sexualOrientation,
+        age: formData.age,
+        nationality: formData.nationality,
+        county: formData.county,
+        ward: formData.ward,
+        area: formData.area,
+        nearby: formData.nearby,
+        bio: formData.bio,
         profilePic: profilePicUrl,
-        fundingBalance,
-        earningsBalance,
-        hidden: formData.hidden,
-        activationPaid: formData.activationPaid,
-        regularLifetime: formData.regularLifetime,
+        normalPics: formData.normalPics,
+        exclusivePics: formData.exclusivePics,
+        // Explicitly no sensitive fields like activationPaid, hidden, membership, balances, etc.
       };
 
       await setDoc(
@@ -577,7 +577,7 @@ export default function ProfileSetup() {
       localStorage.setItem('profileSaved', 'true');
 
       if (!formData.activationPaid) {
-        setShowActivationModal(true);  // Immediate prompt
+        setShowActivationModal(true); // Immediate prompt
       } else {
         alert('Successful! Your profile is now live!');
         router.push('/');
@@ -619,26 +619,31 @@ export default function ProfileSetup() {
   };
   const handlePaymentMethodChange = (m) => setSelectedPaymentMethod(m);
   const handleConfirmWalletUpgrade = async () => {
+    setUpgradeLocked(true);
     const price = plans[selectedLevel][selectedDuration];
-    if (fundingBalance < price) {
-      alert('Insufficient balance');
+    if (!confirm(`Upgrade to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet?`)) {
+      setUpgradeLocked(false);
       return;
     }
-    const daysMap = { '3 Days': 3, '7 Days': 7, '15 Days': 15, '30 Days': 30 };
-    const days = daysMap[selectedDuration] || 0;
-    const clientExpiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    if (!confirm(`Upgrade to ${selectedLevel} for ${selectedDuration} at KSh ${price} using Wallet?`)) return;
-    const newBalance = fundingBalance - price;
-    setFundingBalance(newBalance);
-    await setDoc(
-      doc(db, 'profiles', loggedInUser.id),
-      { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance, hidden: false, activationPaid: true, regularLifetime: true },
-      { merge: true }
-    );
-    setMembership(selectedLevel);
-    setShowPaymentChoice(false);
-    setSelectedDuration('');
-    alert('Upgrade successful!');
+    try {
+      const res = await fetch('/api/upgradeMembership', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: selectedLevel, duration: selectedDuration }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Upgrade failed');
+      }
+      alert('Upgrade successful!');
+      window.location.reload();
+    } catch (err) {
+      alert(err.message);
+      setUpgradeLocked(false);
+    } finally {
+      setShowPaymentChoice(false);
+      setSelectedDuration('');
+    }
   };
   const handleAddFund = () => {
     setShowAddFundModal(true);
@@ -647,14 +652,14 @@ export default function ProfileSetup() {
     try {
       if (!formData.phone) throw new Error('Add phone first.');
       const amount = parseInt(withdrawAmount, 10);
-      if (isNaN(amount) || amount <= 0 || amount > earningsBalance) throw new Error('Invalid amount.');
+      if (isNaN(amount) || amount <= 0) throw new Error('Invalid amount.');
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       if (!confirm(`Withdraw KSh ${amount} to ${formattedPhone}?`)) return;
       setWithdrawLoading(true);
       const res = await fetch('/api/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: loggedInUser.id, amount, phoneNumber: formattedPhone }),
+        body: JSON.stringify({ amount, phoneNumber: formattedPhone }),
       });
       const data = await res.json();
       if (data.success) {
@@ -679,23 +684,28 @@ export default function ProfileSetup() {
     await signOut(auth);
     router.push('/');
   };
-  // New: Delete profile handlers
+  // New: Deactivate account handlers
   const handleReasonChange = (e, reason) => {
     const checked = e.target.checked;
-    setDeleteReasons((prev) => (checked ? [...prev, reason] : prev.filter((r) => r !== reason)));
+    setDeactivateReasons((prev) => (checked ? [...prev, reason] : prev.filter((r) => r !== reason)));
   };
-  const handleDeleteProfile = async () => {
-    if (deleteReasons.length === 0) {
+  const handleDeactivateAccount = async () => {
+    if (deactivateReasons.length === 0) {
       alert('Please select at least one reason.');
       return;
     }
-    if (!confirm('Are you sure you want to delete your profile? This action cannot be undone.')) return;
+    if (!confirm('Deactivating your account will make your profile invisible to other users. Should you wish to reactivate in the future, the activation fee will be required again.')) return;
     try {
-      await deleteDoc(doc(db, 'profiles', loggedInUser.id));
+      await updateDoc(doc(db, 'profiles', loggedInUser.id), {
+        hidden: true,
+        activationPaid: false,
+        membership: 'Regular',
+        membershipExpiresAt: null,
+      });
       handleLogout();
     } catch (err) {
-      console.error('Delete profile failed', err);
-      alert('Failed to delete profile. Please try again.');
+      console.error('Deactivate account failed', err);
+      alert('Failed to deactivate account. Please try again.');
     }
   };
   const handleActivate = () => {
@@ -751,8 +761,11 @@ export default function ProfileSetup() {
           {showMenu && (
             <div className={styles.dropdown}>
               <ul>
-                <li onClick={() => { setShowMenu(false); setShowDeleteModal(true); }}>
-                  Delete Profile
+                <li onClick={() => {
+                  setShowMenu(false);
+                  formData.activationPaid ? setShowDeactivationModal(true) : setShowActivationModal(true);
+                }}>
+                  {formData.activationPaid ? 'Deactivate Account' : 'Activate Account'}
                 </li>
               </ul>
             </div>
@@ -805,7 +818,7 @@ export default function ProfileSetup() {
                 <button
                   key={s}
                   onClick={() => {
-                    if (idx < activeStep || validateStep(activeStep - 1)) setActiveStep(idx);
+                    if (idx < activeStep || isStepValid(activeStep - 1)) setActiveStep(idx);
                   }}
                   className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
                 >
@@ -1024,7 +1037,7 @@ export default function ProfileSetup() {
         {showActivationModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
-              <h3>🎉 Profile Created Successfully!</h3>
+              <h3> Profile Created Successfully!</h3>
               <p>Pay a one-time KES 300 to activate lifetime visibility and start connecting with gentlemen.</p>
               <p>Serious members only — ensures better matches!</p>
               <StkPushForm
@@ -1032,6 +1045,8 @@ export default function ProfileSetup() {
                 initialAmount={ACTIVATION_FEE}
                 readOnlyAmount={true}
                 apiEndpoint="/api/stkpush"
+                onInitiated={() => setActivationLocked(true)}
+                onFailure={() => setActivationLocked(false)}
                 additionalBody={{
                   userId: loggedInUser.id,
                   type: 'activation',
@@ -1039,7 +1054,7 @@ export default function ProfileSetup() {
                   transactionDesc: 'Payment for Prime 7 days activation',
                 }}
               />
-              <button onClick={() => setShowActivationModal(false)} className={styles.closeButton}>
+              <button onClick={() => setShowActivationModal(false)} className={styles.closeButton} disabled={activationLocked}>
                 Later (profile stays hidden)
               </button>
             </div>
@@ -1087,6 +1102,8 @@ export default function ProfileSetup() {
                   initialAmount={plans[selectedLevel][selectedDuration]}
                   readOnlyAmount={true}
                   apiEndpoint="/api/stkpush"
+                  onInitiated={() => setUpgradeLocked(true)}
+                  onFailure={() => setUpgradeLocked(false)}
                   additionalBody={{
                     userId: loggedInUser.id,
                     type: 'upgrade',
@@ -1098,11 +1115,11 @@ export default function ProfileSetup() {
                 />
               )}
               {selectedPaymentMethod === 'wallet' && (
-                <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton}>
+                <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton} disabled={upgradeLocked}>
                   Confirm
                 </button>
               )}
-              <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton}>
+              <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton} disabled={upgradeLocked}>
                 Close
               </button>
             </div>
@@ -1116,6 +1133,8 @@ export default function ProfileSetup() {
               <StkPushForm
                 initialPhone={mpesaPhone}
                 apiEndpoint="/api/stkpush"
+                onInitiated={() => setAddFundLocked(true)}
+                onFailure={() => setAddFundLocked(false)}
                 additionalBody={{
                   userId: loggedInUser.id,
                   type: 'addfund',
@@ -1123,7 +1142,7 @@ export default function ProfileSetup() {
                   transactionDesc: 'Add funds',
                 }}
               />
-              <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton}>
+              <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton} disabled={addFundLocked}>
                 Close
               </button>
             </div>
@@ -1143,10 +1162,10 @@ export default function ProfileSetup() {
                 className={styles.input}
                 style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
               />
-              <button onClick={handleWithdraw} className={styles.withdrawButton}>
+              <button onClick={handleWithdraw} className={styles.withdrawButton} disabled={withdrawLoading}>
                 {withdrawLoading ? 'Processing...' : 'Withdraw'}
               </button>
-              <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton}>
+              <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton} disabled={withdrawLoading}>
                 Cancel
               </button>
             </div>
@@ -1225,22 +1244,22 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
-        {showDeleteModal && (
+        {showDeactivationModal && (
           <div className={styles.modal}>
             <div className={styles.modalContent}>
-              <h3>Delete Profile?</h3>
-              <p>Please tell us why you&apos;re leaving:</p>
+              <h3>Deactivate Account?</h3>
+              <p>Please select the reason(s) for deactivating your account. Note that deactivation will render your profile invisible to other users, and reactivation will require payment of the activation fee again.</p>
               <div className={styles.checkboxGroup}>
                 {reasons.map((reason) => (
                   <div key={reason}>
                     <input
                       type="checkbox"
                       id={reason}
-                      checked={deleteReasons.includes(reason)}
+                      checked={deactivateReasons.includes(reason)}
                       onChange={(e) => handleReasonChange(e, reason)}
                     />
                     <label htmlFor={reason}>{reason}</label>
-                    {reason === 'Other' && deleteReasons.includes('Other') && (
+                    {reason === 'Other' && deactivateReasons.includes('Other') && (
                       <textarea
                         value={otherReason}
                         onChange={(e) => setOtherReason(e.target.value)}
@@ -1252,10 +1271,10 @@ export default function ProfileSetup() {
                   </div>
                 ))}
               </div>
-              <button onClick={handleDeleteProfile} className={styles.button}>
-                Confirm Delete
+              <button onClick={handleDeactivateAccount} className={styles.button}>
+                Confirm Deactivation
               </button>
-              <button onClick={() => setShowDeleteModal(false)} className={styles.closeButton}>
+              <button onClick={() => setShowDeactivationModal(false)} className={styles.closeButton}>
                 Cancel
               </button>
             </div>
