@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -147,7 +148,12 @@ export default function ProfileSetup() {
           // Detect successful activation payment
           if (data.activationPaid && showActivationModal) {
             setShowActivationModal(false);
-            alert('Payment successful! Your profile is now live forever on Regular membership.');
+            if (effectiveMembership === 'Regular') {
+              const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+              setDoc(profileRef, { membership: 'Prime', membershipExpiresAt: expiresAt }, { merge: true });
+              setMembership('Prime');
+            }
+            alert('Payment successful! Your profile is now live on Prime for 7 days.');
             router.push('/');
           }
         } else {
@@ -959,7 +965,7 @@ export default function ProfileSetup() {
                 </div>
               )}
               <div className={styles.stepButtons}>
-                {activeStep > 0 && (
+                {activeStep > 0 && formData.activationPaid && (
                   <button type="button" onClick={handlePrevStep} className={styles.button}>
                     Previous
                   </button>
@@ -1016,7 +1022,7 @@ export default function ProfileSetup() {
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>🎉 Profile Created Successfully!</h3>
-              <p>Pay a one-time KES {ACTIVATION_FEE} to activate lifetime visibility and start connecting with gentlemen.</p>
+              <p>Pay a one-time KES 300 to activate lifetime visibility and start connecting with gentlemen.</p>
               <p>Serious members only — ensures better matches!</p>
               <StkPushForm
                 initialPhone={mpesaPhone}
@@ -1027,7 +1033,7 @@ export default function ProfileSetup() {
                   userId: loggedInUser.id,
                   type: 'activation',
                   accountReference: `act_${loggedInUser.id.slice(-8)}`,
-                  transactionDesc: 'One-time activation fee for lifetime visibility',
+                  transactionDesc: 'Payment for Prime 7 days activation',
                 }}
               />
               <button onClick={() => setShowActivationModal(false)} className={styles.closeButton}>
