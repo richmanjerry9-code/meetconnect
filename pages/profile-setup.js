@@ -35,6 +35,7 @@ export default function ProfileSetup() {
     createdAt: null,
     hidden: true,        // Default hidden
     activationPaid: false,
+    regularLifetime: false,
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [membership, setMembership] = useState('Regular');
@@ -120,8 +121,15 @@ export default function ProfileSetup() {
             const expiresAt = new Date(data.membershipExpiresAt.seconds * 1000);
             if (expiresAt < new Date()) {
               effectiveMembership = 'Regular';
-              // server should expire, but we also clear client-side
-              setDoc(profileRef, { membership: 'Regular', membershipExpiresAt: null }, { merge: true }).catch(() => {});
+              setDoc(
+                profileRef,
+                {
+                  membership: 'Regular',
+                  membershipExpiresAt: null,
+                  hidden: data.activationPaid ? false : true,
+                },
+                { merge: true }
+              ).catch(() => {});
             }
           }
           setFormData((prev) => ({
@@ -137,6 +145,7 @@ export default function ProfileSetup() {
             verified: data.verified || false,
             hidden: data.hidden ?? true,
             activationPaid: data.activationPaid ?? false,
+            regularLifetime: data.regularLifetime ?? false,
           }));
           setSelectedWard(data.ward || '');
           setFundingBalance(data.fundingBalance || 0);
@@ -148,12 +157,7 @@ export default function ProfileSetup() {
           // Detect successful activation payment
           if (data.activationPaid && showActivationModal) {
             setShowActivationModal(false);
-            if (effectiveMembership === 'Regular') {
-              const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-              setDoc(profileRef, { membership: 'Prime', membershipExpiresAt: expiresAt }, { merge: true });
-              setMembership('Prime');
-            }
-            alert('Payment successful! Your profile is now live on Prime for 7 days.');
+            alert('🎉 Activated! You are visible forever + Prime for 7 days.');
             router.push('/');
           }
         } else {
@@ -555,14 +559,14 @@ export default function ProfileSetup() {
       }
     }
     try {
-      const isRegular = membership === 'Regular';
       const profileUpdates = {
         ...formData,
         profilePic: profilePicUrl,
         fundingBalance,
         earningsBalance,
-        hidden: isRegular ? true : false,           // Hide if Regular
-        activationPaid: isRegular ? false : true,   // Premium skips activation
+        hidden: formData.hidden,
+        activationPaid: formData.activationPaid,
+        regularLifetime: formData.regularLifetime,
       };
 
       await setDoc(
@@ -572,7 +576,7 @@ export default function ProfileSetup() {
       );
       localStorage.setItem('profileSaved', 'true');
 
-      if (isRegular && !formData.activationPaid) {
+      if (!formData.activationPaid) {
         setShowActivationModal(true);  // Immediate prompt
       } else {
         alert('Successful! Your profile is now live!');
@@ -628,7 +632,7 @@ export default function ProfileSetup() {
     setFundingBalance(newBalance);
     await setDoc(
       doc(db, 'profiles', loggedInUser.id),
-      { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance, hidden: false, activationPaid: true },
+      { membership: selectedLevel, membershipExpiresAt: clientExpiresAt, fundingBalance: newBalance, hidden: false, activationPaid: true, regularLifetime: true },
       { merge: true }
     );
     setMembership(selectedLevel);
@@ -694,13 +698,9 @@ export default function ProfileSetup() {
       alert('Failed to delete profile. Please try again.');
     }
   };
-  const handleActivate = async () => {
-    const profileRef = doc(db, 'profiles', loggedInUser.id);
-    if (membership === 'Regular') {
+  const handleActivate = () => {
+    if (!formData.activationPaid) {
       setShowActivationModal(true);
-    } else {
-      await setDoc(profileRef, { hidden: false, activationPaid: true }, { merge: true });
-      alert('Account activated!');
     }
   };
   // ----------------------------
@@ -782,7 +782,10 @@ export default function ProfileSetup() {
               </button>
             </div>
             <h2 className={styles.sectionTitle}>My Membership</h2>
-            <p>Current: {formData.hidden ? 'hidden' : membership}</p>
+            <p>
+              Current: {membership}
+              {!formData.activationPaid && ' (Hidden until activation)'}
+            </p>
             <p>Regular: Free</p>
             <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
               Upgrade to Prime
