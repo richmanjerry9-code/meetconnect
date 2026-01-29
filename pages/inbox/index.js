@@ -63,6 +63,7 @@ export default function Inbox() {
             lastMessage: data.lastMessage || "No message",
             timestamp: data.timestamp || null,
             pinnedBy: data.pinnedBy || [],
+            unreadCounts: data.unreadCounts || {},   // ✅ ADD THIS
             otherUserId,
             otherUser,
           };
@@ -149,79 +150,87 @@ export default function Inbox() {
         </p>
       )}
 
-      {chats.map((chat) => (
-        <div
-          key={chat.id}
-          className={styles.chatRow}
-          onClick={() => router.push(`/inbox/${chat.id}`)}
-        >
-          {/* Avatar */}
-          <Image
-            src={chat.otherUser?.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg=='}
-            width={50}
-            height={50}
-            className={styles.avatar}
-            alt="User"
-          />
+      {chats.map((chat) => {
+        const hasUnread = chat.unreadCounts?.[user.uid] > 0;
 
-          {/* Name + Last message */}
-          <div className={styles.chatInfo}>
-            <div className={styles.chatName}>
-              {chat.otherUser?.name || "User"}
-            </div>
+        return (
+          <div
+            key={chat.id}
+            className={styles.chatRow}
+            onClick={() => router.push(`/inbox/${chat.id}`)}
+          >
+            {/* Avatar */}
+            <Image
+              src={chat.otherUser?.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg=='}
+              width={50}
+              height={50}
+              className={styles.avatar}
+              alt="User"
+            />
 
-            <div className={styles.chatLastMessageRow}>
-              <span className={styles.chatLastMessage}>
-                {chat.lastMessage}
-              </span>
-            </div>
-          </div>
+            {/* Name + Last message */}
+            <div className={styles.chatInfo}>
+              <div className={styles.chatNameRow}>
+                <span className={styles.chatName}>
+                  {chat.otherUser?.name || "User"}
+                </span>
 
-          {/* Time */}
-          <div className={styles.chatTime}>
-            {chat.timestamp?.toDate?.().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }) || "--"}
-          </div>
-
-          {/* ✅ 3-Dot Menu */}
-          <div className={styles.chatActions}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpenMenuId(openMenuId === chat.id ? null : chat.id);
-              }}
-              className={styles.menuBtn}
-              style={{ fontSize: "22px" }}
-            >
-              ⋮
-            </button>
-
-            {openMenuId === chat.id && (
-              <div className={styles.menuDropdown}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handlePin(chat.id, chat.pinnedBy.includes(user.uid));
-                  }}
-                >
-                  {chat.pinnedBy.includes(user.uid) ? "Unpin" : "Pin"} Chat
-                </button>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(chat.id);
-                  }}
-                >
-                  Delete Chat
-                </button>
+                {hasUnread && <span className={styles.unreadDot}></span>}
               </div>
-            )}
+
+              <div className={styles.chatLastMessageRow}>
+                <span className={styles.chatLastMessage}>
+                  {chat.lastMessage}
+                </span>
+              </div>
+            </div>
+
+            {/* Time */}
+            <div className={styles.chatTime}>
+              {chat.timestamp?.toDate?.().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }) || "--"}
+            </div>
+
+            {/* ✅ 3-Dot Menu */}
+            <div className={styles.chatActions}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setOpenMenuId(openMenuId === chat.id ? null : chat.id);
+                }}
+                className={styles.menuBtn}
+                style={{ fontSize: "22px" }}
+              >
+                ⋮
+              </button>
+
+              {openMenuId === chat.id && (
+                <div className={styles.menuDropdown}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handlePin(chat.id, chat.pinnedBy.includes(user.uid));
+                    }}
+                  >
+                    {chat.pinnedBy.includes(user.uid) ? "Unpin" : "Pin"} Chat
+                  </button>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(chat.id);
+                    }}
+                  >
+                    Delete Chat
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

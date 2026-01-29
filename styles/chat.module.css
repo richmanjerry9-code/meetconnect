@@ -1,3 +1,4 @@
+
 /* /styles/chat.module.css - Redesigned for Premium, Elegant Vibe: Glassmorphism, Soft Pink Palette, Smooth Animations, Mobile-First */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
@@ -267,6 +268,12 @@
   overflow: hidden;
 }
 
+/* ✅ NAME ROW WITH UNREAD DOT */
+.chatNameRow {
+  display: flex;
+  align-items: center;
+}
+
 /* ✅ USER NAME */
 .chatName {
   font-size: 15px;
@@ -275,6 +282,17 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ✅ UNREAD DOT */
+.unreadDot {
+  width: 8px;
+  height: 8px;
+  background-color: #D81B60;
+  border-radius: 50%;
+  display: inline-block;
+  margin-left: 5px;
+  box-shadow: 0 0 4px rgba(216, 27, 96, 0.5);
 }
 
 /* ✅ LAST MESSAGE TEXT */
@@ -438,4 +456,20 @@
   align-self: flex-end;
   border-radius: 10px 10px 0 10px;
   margin-left: auto;
+}
+
+.imageModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.fullImage {
+  max-width: 90%;
+  max-height: 90%;
+  border-radius: 10px;
 }

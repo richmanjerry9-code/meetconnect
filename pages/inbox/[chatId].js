@@ -27,6 +27,7 @@ import {
 } from "firebase/firestore";
 
 import styles from "../../styles/chat.module.css";
+import Image from "next/image";
 
 export default function PrivateChat() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function PrivateChat() {
   const [loading, setLoading] = useState(true);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null); // ✅ For image modal
 
   // ✅ LOAD CHAT + USER
   useEffect(() => {
@@ -243,6 +245,7 @@ export default function PrivateChat() {
         onDelete={handleDelete}
         onPin={handlePin}
         pinnedMessages={pinnedMessages}
+        onImageClick={setSelectedImage} // ✅ Pass handler for image click
       />
 
       {replyingTo && (
@@ -254,6 +257,28 @@ export default function PrivateChat() {
       )}
 
       <ChatInput onSend={handleSend} />
+
+      {/* ✅ Image Modal */}
+      {selectedImage && (
+        <div
+          className={styles.imageModal}
+          onClick={() => setSelectedImage(null)}
+        >
+          <Image
+            src={selectedImage}
+            alt="Full size image"
+            fill
+            style={{ objectFit: "contain" }}
+            onClick={(e) => e.stopPropagation()} // Prevent close on image click
+          />
+          <button
+            className={styles.closeModal}
+            onClick={() => setSelectedImage(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
