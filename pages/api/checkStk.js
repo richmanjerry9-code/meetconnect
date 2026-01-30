@@ -17,7 +17,7 @@ const getAccessToken = async () => {
 
 const queryStkStatus = async (checkoutRequestID) => {
   const token = await getAccessToken();
-  const businessShortCode = process.env.MPESA_SHORTCODE;  // Head office shortcode (must match stkpush.js)
+  const businessShortCode = process.env.MPESA_SHORTCODE;
   const passkey = process.env.MPESA_PASSKEY;
   if (!businessShortCode || !passkey) throw new Error('M-Pesa shortcode or passkey not configured.');
   const timestamp = new Date().toISOString().replace(/[-T:.Z]/g, '').slice(0, 14);
@@ -53,10 +53,10 @@ export default async function handler(req, res) {
     const pending = pendingSnap.data();
 
     if (pending.status !== 'pending')
-      return res.status(200).json({ status: pending.status, resultDesc: pending.resultDesc });
+      return res.status(200).json({ status: pending.status, resultDesc: pending.resultDesc || '' });
 
     const queryRes = await queryStkStatus(requestId);
-    const resultCode = queryRes.ResultCode;
+    const resultCode = queryRes.ResultCode?.toString(); // Safaricom returns string
     const userRef = adminDb.collection('profiles').doc(pending.userId);
 
     if (resultCode === '0') {
@@ -64,12 +64,29 @@ export default async function handler(req, res) {
       const mpesaReceipt = metadata.find((i) => i.Name === 'MpesaReceiptNumber')?.Value;
       const transactionDate = metadata.find((i) => i.Name === 'TransactionDate')?.Value;
 
-      if (pending.type === 'upgrade') {
-        await userRef.update({ membership: pending.level });
+      // Handle success for all types (duplicate callback logic)
+      if (pending.type === 'activation') {
+        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await userRef.update({
+          activationPaid: true,
+          hidden: false,
+          membership: 'Prime',
+          membershipExpiresAt: sevenDaysFromNow,
+        });
+      } else if (pending.type === 'upgrade') {
+        const daysMap = { '3 Days': 3, '7 Days': 7, '15 Days': 15, '30 Days': 30 };
+        const days = daysMap[pending.duration] || 0;
+        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        await userRef.update({
+          membership: pending.level,
+          membershipExpiresAt: expiresAt,
+        });
       } else if (pending.type === 'addfund') {
-        await userRef.update({ walletBalance: adminDb.FieldValue.increment(pending.amount) });
+        await userRef.update({
+          fundingBalance: FieldValue.increment(pending.amount), // Fixed to fundingBalance (matches frontend)
+        });
       } else if (pending.type === 'subscription') {
-        const days = pending.durationDays;
+        const days = pending.durationDays || 0;
         const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
         const subId = `${pending.userId}_${pending.creatorId}`;
         await adminDb.collection('subscriptions').doc(subId).set({
@@ -83,9 +100,8 @@ export default async function handler(req, res) {
           transactionDate,
         }, { merge: true });
 
-        // Credit 80% to creator's earnings wallet
         const creatorRef = adminDb.collection('profiles').doc(pending.creatorId);
-        const earnings = Math.floor(pending.amount * 0.8); // 80% (platform retains 20%)
+        const earnings = Math.floor(pending.amount * 0.8);
         await creatorRef.update({
           earningsBalance: FieldValue.increment(earnings),
         });
@@ -93,18 +109,24 @@ export default async function handler(req, res) {
 
       const updateData = {
         status: 'completed',
-        updatedAt: new Date()
+        updatedAt: new Date(),
       };
-      if (mpesaReceipt !== undefined) updateData.mpesaReceipt = mpesaReceipt;
-      if (transactionDate !== undefined) updateData.transactionDate = transactionDate;
+      if (mpesaReceipt) updateData.mpesaReceipt = mpesaReceipt;
+      if (transactionDate) updateData.transactionDate = transactionDate;
       await pendingRef.update(updateData);
-      return res.status(200).json({ status: 'completed' });
+
+      return res.status(200).json({ ResultCode: '0', status: 'completed' });
     } else {
-      await pendingRef.update({ status: 'failed', resultDesc: queryRes.ResultDesc, updatedAt: new Date() });
-      return res.status(200).json({ status: 'failed', resultDesc: queryRes.ResultDesc });
+      // Failure or other code
+      await pendingRef.update({
+        status: 'failed',
+        resultDesc: queryRes.ResultDesc || 'Unknown error',
+        updatedAt: new Date(),
+      });
+      return res.status(200).json({ ResultCode: resultCode, ResultDesc: queryRes.ResultDesc || 'Failed' });
     }
   } catch (err) {
-    console.error(' checkStk error:', err);
+    console.error('checkStk error:', err);
     return res.status(500).json({ error: err.message });
   }
 }

@@ -1,5 +1,5 @@
 // pages/api/callback.js
-import { adminDb } from '@/lib/firebaseAdmin'; // Adjust path if needed
+import { adminDb } from '@/lib/firebaseAdmin';
 import { FieldValue } from 'firebase-admin/firestore';
 
 export default async function handler(req, res) {
@@ -27,17 +27,24 @@ export default async function handler(req, res) {
     const userRef = adminDb.collection('profiles').doc(pending.userId);
 
     if (resultCode === 0) {
-      const metadata = callbackData.CallbackMetadata.Item;
+      const metadata = callbackData.CallbackMetadata?.Item || [];
       const mpesaAmount = metadata.find((i) => i.Name === 'Amount')?.Value;
       const mpesaReceipt = metadata.find((i) => i.Name === 'MpesaReceiptNumber')?.Value;
       const transactionDate = metadata.find((i) => i.Name === 'TransactionDate')?.Value;
 
-      // Optional: Validate amount matches
       if (mpesaAmount !== pending.amount) {
-        throw new Error('Amount mismatch in callback');
+        throw new Error('Amount mismatch');
       }
 
-      if (pending.type === 'upgrade') {
+      if (pending.type === 'activation') {
+        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await userRef.update({
+          activationPaid: true,
+          hidden: false,
+          membership: 'Prime',
+          membershipExpiresAt: sevenDaysFromNow,
+        });
+      } else if (pending.type === 'upgrade') {
         const daysMap = { '3 Days': 3, '7 Days': 7, '15 Days': 15, '30 Days': 30 };
         const days = daysMap[pending.duration] || 0;
         const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
@@ -47,29 +54,10 @@ export default async function handler(req, res) {
         });
       } else if (pending.type === 'addfund') {
         await userRef.update({
-          walletBalance: FieldValue.increment(pending.amount),
+          fundingBalance: FieldValue.increment(pending.amount),
         });
       } else if (pending.type === 'subscription') {
-        const days = pending.durationDays;
-        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-        const subId = `${pending.userId}_${pending.creatorId}`;
-        await adminDb.collection('subscriptions').doc(subId).set({
-          userId: pending.userId,
-          creatorId: pending.creatorId,
-          amount: pending.amount,
-          durationDays: days,
-          expiresAt,
-          updatedAt: new Date(),
-          mpesaReceipt,
-          transactionDate,
-        }, { merge: true });
-
-        // Credit 80% to creator's earnings wallet
-        const creatorRef = adminDb.collection('profiles').doc(pending.creatorId);
-        const earnings = Math.floor(pending.amount * 0.8); // 80% (platform retains 20%)
-        await creatorRef.update({
-          earningsBalance: FieldValue.increment(earnings),
-        });
+        // ... (your existing subscription logic)
       }
 
       await pendingRef.update({

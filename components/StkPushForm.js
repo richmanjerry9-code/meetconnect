@@ -8,6 +8,9 @@ const StkPushForm = ({
   readOnlyAmount = false,
   apiEndpoint,
   additionalBody = {},
+  onInitiated = () => {},
+  onFailure = () => {},
+  onSuccess = () => {},
 }) => {
   const [phone, setPhone] = useState(initialPhone);
   const [amount, setAmount] = useState(initialAmount);
@@ -17,6 +20,17 @@ const StkPushForm = ({
   const [checkoutRequestID, setCheckoutRequestID] = useState(null);
   const [pollingInterval, setPollingInterval] = useState(null);
   const [initiated, setInitiated] = useState(false);
+
+  const normalizePhone = (rawPhone) => {
+    let formatted = rawPhone.replace(/[^\d]/g, '');
+    if (formatted.startsWith('0')) formatted = '254' + formatted.slice(1);
+    else if (formatted.length === 9 && formatted.startsWith('7')) formatted = '254' + formatted;
+    else if (formatted.startsWith('254') && formatted.length === 12) return formatted;
+    if (formatted.length !== 12 || !formatted.startsWith('2547')) {
+      throw new Error('Invalid M-Pesa phone number. Please enter in 07XXXXXXXX or 2547XXXXXXXX format.');
+    }
+    return formatted;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,22 +44,33 @@ const StkPushForm = ({
     }
     setError('');
     setLoading(true);
+    let formattedPhone;
+    try {
+      formattedPhone = normalizePhone(phone);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, amount, ...additionalBody }),
+        body: JSON.stringify({ phone: formattedPhone, amount, ...additionalBody }),
       });
       const data = await res.json();
       if (res.ok) {
         setMessage('STK Push initiated. Please check your phone and enter your PIN to complete the payment.');
         setCheckoutRequestID(data.checkoutRequestID); // Assume server returns it in response
         setInitiated(true);
+        onInitiated(data.checkoutRequestID);
       } else {
         setError(data.error || 'Failed to initiate payment.');
+        onFailure();
       }
     } catch (err) {
       setError('Error initiating payment: ' + err.message);
+      onFailure();
     } finally {
       setLoading(false);
     }
@@ -53,6 +78,7 @@ const StkPushForm = ({
 
   useEffect(() => {
     if (checkoutRequestID) {
+      setMessage('Processing payment...');
       const interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/checkStk?requestId=${checkoutRequestID}`);
@@ -61,12 +87,14 @@ const StkPushForm = ({
             if (data.status === 'completed') {
               setMessage('Payment completed successfully!');
               clearInterval(interval);
+              onSuccess();
               // Optionally refresh page or update state
               setTimeout(() => window.location.reload(), 3000);
             } else if (data.status === 'failed') {
               setError('Payment failed: ' + data.resultDesc);
               clearInterval(interval);
               setCheckoutRequestID(null);
+              onFailure();
             }
             // else pending, continue polling
           }
@@ -81,6 +109,7 @@ const StkPushForm = ({
         clearInterval(interval);
         setError('Payment timeout. Please try again.');
         setCheckoutRequestID(null);
+        onFailure();
       }, 60000);
 
       return () => {
@@ -88,7 +117,7 @@ const StkPushForm = ({
         clearTimeout(timeout);
       };
     }
-  }, [checkoutRequestID]);
+  }, [checkoutRequestID, onFailure, onSuccess]);
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
@@ -128,3 +157,7 @@ const StkPushForm = ({
 };
 
 export default StkPushForm;
+
+
+
+

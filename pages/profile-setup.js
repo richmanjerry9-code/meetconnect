@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -47,6 +48,9 @@ export default function ProfileSetup() {
   // Activation modal
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [activationLocked, setActivationLocked] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState('idle'); // 'idle', 'initiated', 'processing', 'failed'
+  const [checkoutRequestID, setCheckoutRequestID] = useState(null);
+  const pollingInterval = useRef(null);
   // Deactivation modal
   const [showDeactivationModal, setShowDeactivationModal] = useState(false);
   // Membership modals & payment
@@ -165,7 +169,7 @@ export default function ProfileSetup() {
           // Detect successful activation payment (READ-ONLY - no writes)
           if (data.activationPaid && showActivationModal) {
             setShowActivationModal(false);
-            alert(' Activated! You are visible forever + Prime for 7 days.');
+            alert('Your account is now live. You also got a 7 day prime deal.');
             router.push('/');
           }
         } else {
@@ -259,9 +263,41 @@ export default function ProfileSetup() {
       // revoke previews
       postPreviews.forEach((u) => URL.revokeObjectURL(u));
       if (profilePicPreview) URL.revokeObjectURL(profilePicPreview);
+      if (pollingInterval.current) clearInterval(pollingInterval.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+  // ----------------------------
+  // Polling for payment status
+  // ----------------------------
+  useEffect(() => {
+    if (paymentStatus === 'initiated' && checkoutRequestID) {
+      pollingInterval.current = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/checkStk?requestId=${checkoutRequestID}`);
+          const data = await res.json();
+          if (data.ResultCode === '0') {
+            // Success - but snapshot will detect activationPaid
+            setPaymentStatus('idle');
+            clearInterval(pollingInterval.current);
+          } else if (data.ResultCode !== '4999') {
+            // Failure (not processing)
+            setPaymentStatus('failed');
+            clearInterval(pollingInterval.current);
+            setActivationLocked(false);
+          }
+          // If 4999 (processing), continue polling
+        } catch (err) {
+          console.error('Polling error', err);
+          setPaymentStatus('failed');
+          clearInterval(pollingInterval.current);
+          setActivationLocked(false);
+        }
+      }, 10000); // Poll every 10 seconds
+
+      return () => clearInterval(pollingInterval.current);
+    }
+  }, [paymentStatus, checkoutRequestID]);
   // ----------------------------
   // Helpers
   // ----------------------------
@@ -321,8 +357,13 @@ export default function ProfileSetup() {
     if (name === 'phone') {
       v = value.replace(/[^\d]/g, '');
       setMpesaPhone(v);
-      if (v.length === 10 && v.startsWith('07')) setError('');
-      else if (v.length > 0) setError('Phone should be in the format 07XXXXXXXX');
+      let formatted;
+      try {
+        formatted = formatPhoneForMpesa(v); // Validate format
+        setError('');
+      } catch (err) {
+        if (v.length > 0) setError(err.message);
+      }
     }
     if (name === 'county') {
       setFormData((prev) => ({ ...prev, county: v, ward: '', area: '', nearby: [] }));
@@ -711,7 +752,17 @@ export default function ProfileSetup() {
   const handleActivate = () => {
     if (!formData.activationPaid) {
       setShowActivationModal(true);
+      setPaymentStatus('idle');
     }
+  };
+  const handlePaymentInitiated = (requestId) => {
+    setCheckoutRequestID(requestId);
+    setPaymentStatus('initiated');
+    setActivationLocked(true);
+  };
+  const handlePaymentFailure = () => {
+    setPaymentStatus('failed');
+    setActivationLocked(false);
   };
   // ----------------------------
   // UI derived values
@@ -1040,21 +1091,28 @@ export default function ProfileSetup() {
               <h3> Profile Created Successfully!</h3>
               <p>Pay a one-time KES 300 to activate lifetime visibility and start connecting with gentlemen.</p>
               <p>Serious members only — ensures better matches!</p>
-              <StkPushForm
-                initialPhone={mpesaPhone}
-                initialAmount={ACTIVATION_FEE}
-                readOnlyAmount={true}
-                apiEndpoint="/api/stkpush"
-                onInitiated={() => setActivationLocked(true)}
-                onFailure={() => setActivationLocked(false)}
-                additionalBody={{
-                  userId: loggedInUser.id,
-                  type: 'activation',
-                  accountReference: `act_${loggedInUser.id.slice(-8)}`,
-                  transactionDesc: 'Payment for Prime 7 days activation',
-                }}
-              />
-              <button onClick={() => setShowActivationModal(false)} className={styles.closeButton} disabled={activationLocked}>
+              {paymentStatus === 'initiated' ? (
+                <p>Waiting for payment confirmation... This may take a few moments.</p>
+              ) : (
+                <StkPushForm
+                  initialPhone={mpesaPhone}
+                  initialAmount={ACTIVATION_FEE}
+                  readOnlyAmount={true}
+                  apiEndpoint="/api/stkpush"
+                  onInitiated={(requestId) => handlePaymentInitiated(requestId)}
+                  onFailure={handlePaymentFailure}
+                  additionalBody={{
+                    userId: loggedInUser.id,
+                    type: 'activation',
+                    accountReference: `act_${loggedInUser.id.slice(-8)}`,
+                    transactionDesc: 'Payment for Prime 7 days activation',
+                  }}
+                />
+              )}
+              {paymentStatus === 'failed' && (
+                <p>Payment failed. Please try again.</p>
+              )}
+              <button onClick={() => setShowActivationModal(false)} className={styles.closeButton} disabled={activationLocked || paymentStatus === 'initiated'}>
                 Later (profile stays hidden)
               </button>
             </div>
