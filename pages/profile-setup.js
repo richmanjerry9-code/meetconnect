@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -608,6 +607,7 @@ export default function ProfileSetup() {
         normalPics: formData.normalPics,
         exclusivePics: formData.exclusivePics,
         // Explicitly no sensitive fields like activationPaid, hidden, membership, balances, etc.
+        hidden: formData.activationPaid ? false : true,
       };
 
       await setDoc(
