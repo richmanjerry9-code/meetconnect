@@ -164,13 +164,6 @@ export default function ProfileSetup() {
           setMembership(effectiveMembership);
           setMpesaPhone(loadedPhone);
           setVerificationRequested(!!data.verificationRequested);
-
-          // Detect successful activation payment (READ-ONLY - no writes)
-          if (data.activationPaid && showActivationModal) {
-            setShowActivationModal(false);
-            alert('Your account is now live. You also got a 7 day prime deal.');
-            router.push('/');
-          }
         } else {
           setFormData((prev) => ({ ...prev, username: user.username }));
           setFundingBalance(0);
@@ -276,9 +269,12 @@ export default function ProfileSetup() {
           const res = await fetch(`/api/checkStk?requestId=${checkoutRequestID}`);
           const data = await res.json();
           if (data.ResultCode === '0') {
-            // Success - but snapshot will detect activationPaid
+            // Success
             setPaymentStatus('idle');
             clearInterval(pollingInterval.current);
+            setShowActivationModal(false);
+            alert('Your account is now live. You also got a 7 day prime deal.');
+            router.push('/');
           } else if (data.ResultCode !== '4999') {
             // Failure (not processing)
             setPaymentStatus('failed');
@@ -296,7 +292,7 @@ export default function ProfileSetup() {
 
       return () => clearInterval(pollingInterval.current);
     }
-  }, [paymentStatus, checkoutRequestID]);
+  }, [paymentStatus, checkoutRequestID, router]);
   // ----------------------------
   // Helpers
   // ----------------------------
@@ -1104,7 +1100,7 @@ export default function ProfileSetup() {
                   additionalBody={{
                     userId: loggedInUser.id,
                     type: 'activation',
-                    accountReference: `act_${loggedInUser.id.slice(-8)}`,
+                    accountReference: `act_${loggedInUser.id.slice(0, 8)}`,
                     transactionDesc: 'Payment for Prime 7 days activation',
                   }}
                 />
