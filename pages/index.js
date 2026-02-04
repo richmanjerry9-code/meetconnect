@@ -7,7 +7,7 @@ import * as counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot, where } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { createOrGetChat } from '../lib/chat'; // Import the chat utility
 
@@ -105,6 +105,7 @@ export default function Home({ initialProfiles = [] }) {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState('');
+  const [unreadTotal, setUnreadTotal] = useState(0); // New: Total unread messages
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
   const unsubscribeRef = useRef(null);
@@ -217,6 +218,32 @@ export default function Home({ initialProfiles = [] }) {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
+
+  // New: Real-time unread total
+  useEffect(() => {
+    if (!user?.uid) {
+      setUnreadTotal(0);
+      return;
+    }
+
+    const q = query(
+      collection(firestore, 'privateChats'),
+      where('participants', 'array-contains', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let total = 0;
+      snapshot.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        total += data.unreadCounts?.[user.uid] || 0;
+      });
+      setUnreadTotal(total);
+    }, (err) => {
+      console.error('Unread snapshot error:', err);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
 
   // Location search filtering
   useEffect(() => {
@@ -676,7 +703,7 @@ export default function Home({ initialProfiles = [] }) {
         </div>
         <div className={styles.authButtons}>
           <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
-            Inbox
+            Inbox {unreadTotal > 0 && <span className={styles.unreadBadge}>{unreadTotal > 99 ? '99+' : unreadTotal}</span>}
           </button>
           {user ? (
             <>

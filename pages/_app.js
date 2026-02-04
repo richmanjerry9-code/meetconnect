@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { getMessaging, getToken } from "firebase/messaging";
+import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Added onMessage import
 import { getFirestore, doc, setDoc, arrayUnion } from "firebase/firestore";
 import { app } from "../lib/firebase";
 import '../styles/globals.css';
@@ -53,6 +53,27 @@ const AppContent = ({ Component, pageProps }) => {
       return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     }
   }, [user]);
+
+  // Add foreground message handler
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const messaging = getMessaging(app);
+        onMessage(messaging, (payload) => {
+          console.log('Foreground message received:', payload);
+          // Customize notification display for foreground
+          const notificationTitle = payload.notification?.title || 'New Message';
+          const notificationOptions = {
+            body: payload.notification?.body || 'You have a new message',
+            icon: '/icon.png', // Replace with your app icon path
+          };
+          new Notification(notificationTitle, notificationOptions);
+        });
+      } catch (err) {
+        console.error('Error setting up foreground messaging:', err);
+      }
+    }
+  }, []);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {

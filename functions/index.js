@@ -2,30 +2,56 @@ const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
 
-exports.sendMessageNotification = functions.https.onCall(async (data, context) => {
-  const { recipientId, senderName, messageText, chatId } = data;
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Unauthorized');
+exports.sendChatNotification = functions.firestore
+  .document('privateChats/{chatId}/messages/{messageId}')
+  .onCreate(async (snap, context) => {
+    const messageData = snap.data();
+    const chatId = context.params.chatId;
 
-  const db = admin.firestore();
-  const recipientSnap = await db.collection('profiles').doc(recipientId).get(); // Assuming token in profiles
-  const token = recipientSnap.data()?.fcmToken;
+    // Get the chat doc to find participants and avoid sending to sender
+    const chatRef = admin.firestore().doc(`privateChats/${chatId}`);
+    const chatSnap = await chatRef.get();
+    if (!chatSnap.exists) return;
 
-  if (!token) return { success: false };
+    const chat = chatSnap.data();
+    const senderId = messageData.senderId;
+    const recipientId = chat.participants.find(id => id !== senderId);
+    if (!recipientId) return; // No recipient (e.g., self-chat)
 
-  const payload = {
-    notification: {
-      title: `New Message from ${senderName}`,
-      body: messageText || 'You have a new image!',
-      icon: '/favicon-192x192.png',
-    },
-    data: { chatId },
-  };
+    // Get recipient's profile for FCM tokens
+    const recipientRef = admin.firestore().doc(`profiles/${recipientId}`);
+    const recipientSnap = await recipientRef.get();
+    if (!recipientSnap.exists) return;
 
-  try {
-    await admin.messaging().sendToDevice(token, payload);
-    return { success: true };
-  } catch (err) {
-    console.error(err);
-    throw new functions.https.HttpsError('internal', 'Failed to send notification');
-  }
-});
+    const recipient = recipientSnap.data();
+    const tokens = recipient.fcmTokens || [recipient.fcmToken]; // Support multi-device
+    if (!tokens.length) return; // No tokens
+
+    // Get sender's name for notification body
+    const senderRef = admin.firestore().doc(`profiles/${senderId}`);
+    const senderSnap = await senderRef.get();
+    const senderName = senderSnap.exists ? senderSnap.data().name || 'Someone' : 'Someone';
+
+    // Build FCM payload (notification for background display + data for handling)
+    const payload = {
+      notification: {
+        title: `New Message from ${senderName}`,
+        body: messageData.text || 'You have a new message!',
+      },
+      data: {
+        chatId: chatId,
+        // Add more data if needed, like messageId
+      },
+    };
+
+    // Send to all tokens (multi-device support)
+    try {
+      await admin.messaging().sendToDevice(tokens, payload);
+      console.log('Notification sent successfully');
+    } catch (err) {
+      console.error('Error sending notification:', err);
+    }
+
+    // Optional: Clean up invalid tokens (if send fails)
+    // You can expand this to handle failed tokens by removing them from the user's profile
+  });
