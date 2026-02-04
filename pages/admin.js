@@ -1,3 +1,4 @@
+// admin.js
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
@@ -12,16 +13,15 @@ import {
   query,
   where,
   updateDoc,
-  orderBy,
-  serverTimestamp,
 } from 'firebase/firestore';
 
+// Add servicesList definition
 const servicesList = [
-  'Dinner Date',
-  'Just Vibes',
-  'Relationship',
-  'Night Out',
-  'Friendship',
+  '🍽️ Dinner Date',
+  '💬 Just Vibes',
+  '❤️ Relationship',
+  '🌆 Night Out',
+  '👥 Friendship',
 ];
 
 const ADMIN_PASSWORD = '447962Pa$$word';
@@ -30,19 +30,13 @@ export default function AdminPanel() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [users, setUsers] = useState([]);
-  const [transactions, setTransactions] = useState([]);
   const [refresh, setRefresh] = useState(false);
-
-  // Profile picture upload state
-  const [profilePicFile, setProfilePicFile] = useState(null);
-
   const [form, setForm] = useState({
     username: '',
     email: '',
     phone: '',
     role: 'User',
     membership: 'Regular',
-    subscriptionEndDate: '',
     name: '',
     gender: 'Female',
     sexualOrientation: 'Straight',
@@ -55,107 +49,47 @@ export default function AdminPanel() {
     services: [],
     otherServices: '',
     profilePic: null,
-    hidden: false,
-    bio: '',
+    activationPaid: false,
   });
   const [selectedWard, setSelectedWard] = useState('');
   const [isEdit, setIsEdit] = useState(false);
   const [editId, setEditId] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [showPasswords, setShowPasswords] = useState({});
-  const [deletedUsers, setDeletedUsers] = useState([]);
-  const [lastEdit, setLastEdit] = useState(null);
-  const [globalMenuOpen, setGlobalMenuOpen] = useState(false);
+  const [showPasswords, setShowPasswords] = useState({}); // For table password toggles
+  const [deletedUsers, setDeletedUsers] = useState([]); // Track deleted users
+  const [lastEdit, setLastEdit] = useState(null); // Track last edited profile
+  const [globalMenuOpen, setGlobalMenuOpen] = useState(false); // For global 3-dot menu
   const [currentViewers, setCurrentViewers] = useState(0);
   const [allVisits, setAllVisits] = useState([]);
+  // New states for activity viewer
   const [activityLogs, setActivityLogs] = useState([]);
-  const [activityFilter, setActivityFilter] = useState('all');
-  const [activitySearch, setActivitySearch] = useState('');
-  const [userSearch, setUserSearch] = useState('');
-  const [userFilter, setUserFilter] = useState('all');
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [activeSubscriptions, setActiveSubscriptions] = useState(0);
-  const [expiringSoon, setExpiringSoon] = useState(0);
+  const [activityFilter, setActivityFilter] = useState('all'); // Filter by action type: all, create, update, delete, etc.
+  const [activitySearch, setActivitySearch] = useState(''); // Search term
+  const [userSearch, setUserSearch] = useState(''); // Search for users
 
   useEffect(() => {
-    if (!loggedIn) return;
-
-    const fetchData = async () => {
-      try {
-        const usersQuery = query(collection(db, 'profiles'), orderBy('createdAt', 'desc'));
-        const usersSnapshot = await getDocs(usersQuery);
-        let userData = usersSnapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
-
-        // Auto-clean expired memberships
-        const now = new Date();
-        const expired = userData.filter(u => u.subscriptionEndDate && new Date(u.subscriptionEndDate) < now);
-        if (expired.length > 0) {
-          const promises = expired.map(u => updateDoc(doc(db, 'profiles', u.id), { membership: 'Regular', subscriptionEndDate: null }));
-          await Promise.all(promises);
-          console.log(`Cleaned ${expired.length} expired memberships`);
-        }
-
-        // Set activationPaid for legacy live accounts
-        const legacyLive = userData.filter(u => !u.hidden && (u.activationPaid === undefined || u.activationPaid === false));
-        if (legacyLive.length > 0) {
-          const promises = legacyLive.map(u => updateDoc(doc(db, 'profiles', u.id), { activationPaid: true }));
-          await Promise.all(promises);
-          console.log(`Updated ${legacyLive.length} legacy accounts to activated`);
-        }
-
-        // Refetch after cleaning
-        const refreshedSnapshot = await getDocs(usersQuery);
-        userData = refreshedSnapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
-        setUsers(userData);
-
-        const transactionsQuery = query(collection(db, 'transactions'), orderBy('date', 'desc'));
-        const transactionsSnapshot = await getDocs(transactionsQuery);
-        const transactionData = transactionsSnapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
-        setTransactions(transactionData);
-
-        const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-        const logsQuery = query(
-          collection(db, 'activityLogs'),
-          where('timestamp', '>=', thirtyDaysAgo),
-          orderBy('timestamp', 'desc')
-        );
-        const logsSnapshot = await getDocs(logsQuery);
-        const logData = logsSnapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data(),
-        }));
-        setActivityLogs(logData);
-
-        const revenue = transactionData.reduce((sum, tx) => sum + (tx.amount || 0), 0);
-        setTotalRevenue(revenue);
-
-        const activeSubs = userData.filter((u) =>
-          u.subscriptionEndDate && new Date(u.subscriptionEndDate) > now
-        ).length;
-        setActiveSubscriptions(activeSubs);
-
-        const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        const expiring = userData.filter((u) =>
-          u.subscriptionEndDate &&
-          new Date(u.subscriptionEndDate) > now &&
-          new Date(u.subscriptionEndDate) < sevenDaysFromNow
-        ).length;
-        setExpiringSoon(expiring);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
+    const fetchUsers = async () => {
+      const q = query(collection(db, 'profiles'));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      setUsers(data);
     };
+    fetchUsers();
 
-    fetchData();
+    // New: Fetch activity logs
+    const fetchActivityLogs = async () => {
+      const q = query(collection(db, 'activityLogs'), where('timestamp', '>=', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))); // Last 30 days
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); // Desc order
+      setActivityLogs(data);
+    };
+    fetchActivityLogs();
 
     const storedVisits = JSON.parse(localStorage.getItem('visits') || '[]');
     const newVisit = { timestamp: new Date().toISOString() };
@@ -166,25 +100,24 @@ export default function AdminPanel() {
     const handleUnload = () => setCurrentViewers((prev) => Math.max(prev - 1, 0));
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
-  }, [loggedIn, refresh]);
+  }, [refresh]);
 
+  // New: Function to log activity (call this in existing functions for enhancement)
   const logActivity = async (action, details = {}) => {
     try {
       await addDoc(collection(db, 'activityLogs'), {
         action,
-        details: { ...details, admin: true },
-        timestamp: serverTimestamp(),
-        siteId: 'main-site',
+        details: { ...details, admin: true }, // Mark as admin action
+        timestamp: new Date(),
+        siteId: 'main-site', // Assume single site; extend for multi
       });
-      setActivityLogs((prev) => [
-        {
-          id: Date.now().toString(),
-          action,
-          details: { ...details, admin: true },
-          timestamp: new Date(),
-        },
-        ...prev,
-      ]);
+      // Optimistically update UI
+      setActivityLogs(prev => [{
+        id: Date.now().toString(),
+        action,
+        details: { ...details, admin: true },
+        timestamp: new Date(),
+      }, ...prev]);
     } catch (error) {
       console.error('Failed to log activity:', error);
     }
@@ -207,18 +140,20 @@ export default function AdminPanel() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    if (type === 'checkbox' && name === 'services') {
-      const updated = checked
-        ? [...(form.services || []), value]
-        : (form.services || []).filter((s) => s !== value);
-      setForm({ ...form, services: updated });
-    } else if (type === 'checkbox' && name === 'nearby') {
-      const updated = checked
-        ? [...(form.nearby || []), value]
-        : (form.nearby || []).filter((n) => n !== value);
-      setForm({ ...form, nearby: updated.slice(0, 4) });
-    } else if (type === 'checkbox' && name === 'hidden') {
-      setForm({ ...form, hidden: checked });
+    if (type === 'checkbox') {
+      if (name === 'services') {
+        const updated = checked
+          ? [...(form.services || []), value]
+          : (form.services || []).filter((s) => s !== value);
+        setForm({ ...form, services: updated });
+      } else if (name === 'nearby') {
+        const updated = checked
+          ? [...(form.nearby || []), value]
+          : (form.nearby || []).filter((n) => n !== value);
+        setForm({ ...form, nearby: updated.slice(0, 4) });
+      } else {
+        setForm({ ...form, [name]: checked });
+      }
     } else {
       setForm({ ...form, [name]: value });
     }
@@ -243,11 +178,8 @@ export default function AdminPanel() {
   const handleProfilePic = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-
-    setProfilePicFile(file);
-
     const reader = new FileReader();
-    reader.onload = () => setForm(prev => ({ ...prev, profilePic: reader.result }));
+    reader.onload = () => setForm({ ...form, profilePic: reader.result });
     reader.readAsDataURL(file);
   };
 
@@ -257,43 +189,13 @@ export default function AdminPanel() {
       return;
     }
 
-    let finalPhotoURL = form.profilePic;
-
-    if (profilePicFile) {
-      try {
-        const fd = new FormData();
-        fd.append('media', profilePicFile);
-        fd.append('userId', isEdit ? editId : 'admin');
-        fd.append('isExclusive', 'false');
-        fd.append('caption', 'profile_pic');
-        const res = await fetch('/api/uploadPost', {
-          method: 'POST',
-          body: fd,
-        });
-        const data = await res.json();
-        if (!res.ok || !data.url) {
-          throw new Error(data.error || 'Upload failed');
-        }
-        finalPhotoURL = data.url;
-      } catch (err) {
-        console.error('Admin profile pic upload error:', err);
-        alert('Failed to upload profile picture');
-        return;
-      }
-    }
+    const hidden = !form.activationPaid;
 
     try {
-      const profileData = {
-        ...form,
-        profilePic: finalPhotoURL,
-        subscriptionEndDate: form.subscriptionEndDate ? new Date(form.subscriptionEndDate) : null,
-        bio: form.bio || '',
-      };
-
       if (isEdit) {
-        await updateDoc(doc(db, 'profiles', editId), profileData);
-        alert('Profile updated!');
-        setUsers((prev) => prev.map((u) => (u.id === editId ? { ...u, ...profileData } : u)));
+        await updateDoc(doc(db, 'profiles', editId), { ...form, hidden });
+        alert('✅ Profile updated!');
+        setUsers((prev) => prev.map((u) => (u.id === editId ? { ...form, id: editId, hidden } : u)));
         logActivity('profile_update', { userId: editId, username: form.username });
       } else {
         const q = query(collection(db, 'profiles'), where('username', '==', form.username));
@@ -302,17 +204,28 @@ export default function AdminPanel() {
           alert('Username already exists!');
           return;
         }
+
         const fakeEmail = form.email || `${form.username.toLowerCase()}@meetconnect.fake`;
         const fakePassword = Math.random().toString(36).slice(-8);
-        const newProfileData = {
-          ...profileData,
+
+        const profileData = {
+          ...form,
           email: fakeEmail,
           password: fakePassword,
           createdAt: Date.now(),
+          county: form.county || '',
+          ward: form.ward || '',
+          area: form.area || '',
+          nearby: form.nearby || [],
+          services: form.services || [],
+          otherServices: form.otherServices || '',
+          profilePic: form.profilePic || '',
+          hidden,
         };
-        const docRef = await addDoc(collection(db, 'profiles'), newProfileData);
-        alert(`Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`);
-        setUsers((prev) => [...prev, { id: docRef.id, ...newProfileData }]);
+
+        const docRef = await addDoc(collection(db, 'profiles'), profileData);
+        alert(`✅ Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`);
+        setUsers((prev) => [...prev, { id: docRef.id, ...profileData }]);
         logActivity('profile_create', { userId: docRef.id, username: form.username });
       }
 
@@ -322,7 +235,6 @@ export default function AdminPanel() {
         phone: '',
         role: 'User',
         membership: 'Regular',
-        subscriptionEndDate: '',
         name: '',
         gender: 'Female',
         sexualOrientation: 'Straight',
@@ -335,10 +247,8 @@ export default function AdminPanel() {
         services: [],
         otherServices: '',
         profilePic: null,
-        hidden: false,
-        bio: '',
+        activationPaid: false,
       });
-      setProfilePicFile(null);
       setIsEdit(false);
       setEditId(null);
       setShowPassword(false);
@@ -352,19 +262,20 @@ export default function AdminPanel() {
   const handleToggleActivation = async (userId) => {
     const user = users.find((u) => u.id === userId);
     if (!user) return alert('User not found.');
-    const isActivated = user.activationPaid && !user.hidden;
-    const newActivated = !isActivated;
+    if (user.role === 'Admin') return alert('Cannot toggle admin account!');
+    const newActivationPaid = !user.activationPaid;
+    const newHidden = !newActivationPaid;
     try {
-      await updateDoc(doc(db, 'profiles', userId), { activationPaid: newActivated, hidden: !newActivated });
+      await updateDoc(doc(db, 'profiles', userId), { activationPaid: newActivationPaid, hidden: newHidden });
       setUsers((prev) =>
-        prev.map((u) => (u.id === userId ? { ...u, activationPaid: newActivated, hidden: !newActivated } : u))
+        prev.map((u) => (u.id === userId ? { ...u, activationPaid: newActivationPaid, hidden: newHidden } : u))
       );
-      alert(`Account ${newActivated ? 'activated' : 'deactivated'} successfully!`);
-      logActivity('toggle_activation', { userId, activated: newActivated, username: user.username });
+      alert(`Account ${newActivationPaid ? 'activated' : 'deactivated'} successfully!`);
+      logActivity('toggle_activation', { userId, activationPaid: newActivationPaid, username: user.username });
       setRefresh(!refresh);
     } catch (error) {
-      console.error('Error toggling activation:', error);
-      alert('Failed to toggle activation.');
+      console.error('Error toggling activation status:', error);
+      alert('Failed to toggle account status.');
     }
   };
 
@@ -372,14 +283,20 @@ export default function AdminPanel() {
     const userToDelete = users.find((u) => u.id === userId);
     if (!userToDelete) return alert('User not found.');
     if (userToDelete.role === 'Admin') return alert('Cannot delete admin account!');
-    if (!confirm('Delete this profile?')) return;
+    if (!confirm('Delete this profile??')) return;
+
     try {
       await deleteDoc(doc(db, 'profiles', userId));
-      setDeletedUsers((prev) => [...prev, userToDelete]);
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-      alert('Profile deleted successfully!');
+      setDeletedUsers((prev) => [...prev, userToDelete]); // Store deleted user
+      const q = query(collection(db, 'profiles'));
+      const querySnapshot = await getDocs(q);
+      const updatedUsers = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }));
+      setUsers(updatedUsers);
+      alert('✅ Profile deleted successfully!');
       logActivity('profile_delete', { userId, username: userToDelete.username });
-      setRefresh(!refresh);
     } catch (error) {
       console.error('Error deleting profile:', error);
       alert('Failed to delete profile.');
@@ -403,36 +320,15 @@ export default function AdminPanel() {
     }
   };
 
-  const handleCleanExpired = async () => {
-    if (!confirm('Clean expired memberships? This will set expired ones to Regular.')) return;
-    try {
-      const now = new Date();
-      const expired = users.filter(u => u.subscriptionEndDate && new Date(u.subscriptionEndDate) < now);
-      const promises = expired.map(u => updateDoc(doc(db, 'profiles', u.id), { membership: 'Regular', subscriptionEndDate: null }));
-      await Promise.all(promises);
-      setUsers(prev => prev.map(u => {
-        if (expired.some(e => e.id === u.id)) {
-          return { ...u, membership: 'Regular', subscriptionEndDate: null };
-        }
-        return u;
-      }));
-      alert(`${expired.length} memberships cleaned.`);
-      logActivity('clean_expired', { count: expired.length });
-      setRefresh(!refresh);
-    } catch (error) {
-      console.error('Error cleaning expired:', error);
-      alert('Failed to clean expired.');
-    }
-  };
-
   const handleDeleteAll = async () => {
-    if (!confirm('Are you sure you want to delete all accounts? This cannot be undone directly.')) return;
+    if (!confirm('Are you sure you want to delete all accounts? This cannot be undone directly.'))
+      return;
     try {
       const promises = users.map((u) => deleteDoc(doc(db, 'profiles', u.id)));
       await Promise.all(promises);
-      setDeletedUsers((prev) => [...prev, ...users]);
+      setDeletedUsers((prev) => [...prev, ...users]); // Store all deleted users
       setUsers([]);
-      alert('All accounts deleted!');
+      alert('✅ All accounts deleted!');
       logActivity('bulk_delete_all', { count: users.length });
       setRefresh(!refresh);
     } catch (error) {
@@ -445,12 +341,12 @@ export default function AdminPanel() {
     if (deletedUsers.length === 0) return alert('No deleted accounts to restore!');
     try {
       const promises = deletedUsers.map((user) =>
-        addDoc(collection(db, 'profiles'), { ...user, id: undefined, activationPaid: false, hidden: true })
+        addDoc(collection(db, 'profiles'), { ...user, id: undefined })
       );
       await Promise.all(promises);
-      setDeletedUsers([]);
+      setDeletedUsers([]); // Clear deleted users after restoration
       setRefresh(!refresh);
-      alert('All deleted accounts restored!');
+      alert('✅ All deleted accounts restored!');
       logActivity('bulk_restore_all', { count: deletedUsers.length });
     } catch (error) {
       console.error('Error restoring accounts:', error);
@@ -466,8 +362,8 @@ export default function AdminPanel() {
         setUsers((prev) =>
           prev.map((u) => (u.id === userId ? { ...previousData, id: userId } : u))
         );
-        setLastEdit(null);
-        alert('Last edit reverted successfully!');
+        setLastEdit(null); // Clear last edit after revert
+        alert('✅ Last edit reverted successfully!');
         logActivity('revert_edit', { userId });
         setRefresh(!refresh);
       })
@@ -482,40 +378,20 @@ export default function AdminPanel() {
       ...user,
       services: user.services || [],
       nearby: user.nearby || [],
-      subscriptionEndDate: user.subscriptionEndDate ? new Date(user.subscriptionEndDate).toISOString().split('T')[0] : '',
-      hidden: user.hidden || false,
-      bio: user.bio || '',
+      activationPaid: user.activationPaid || false,
     });
     setSelectedWard(user.ward || '');
     setIsEdit(true);
     setEditId(user.id);
     setShowPassword(false);
-    setLastEdit({ userId: user.id, previousData: { ...user } });
+    setLastEdit({ userId: user.id, previousData: { ...user } }); // Store original data
     logActivity('start_edit', { userId: user.id });
   };
 
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch = JSON.stringify(u).toLowerCase().includes(userSearch.toLowerCase());
-    const now = new Date();
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    if (userFilter === 'active') return u.active && matchesSearch;
-    if (userFilter === 'inactive') return !u.active && matchesSearch;
-    if (userFilter === 'expiring') {
-      return (
-        matchesSearch &&
-        u.subscriptionEndDate &&
-        new Date(u.subscriptionEndDate) > now &&
-        new Date(u.subscriptionEndDate) < sevenDaysFromNow
-      );
-    }
-    if (userFilter === 'hidden') return u.hidden && matchesSearch;
-    return matchesSearch;
-  });
-
-  const filteredLogs = activityLogs.filter((log) => {
+  // New: Filtered logs for display
+  const filteredLogs = activityLogs.filter(log => {
     if (activityFilter !== 'all' && log.action !== activityFilter) return false;
-    if (activitySearch && !JSON.stringify(log).toLowerCase().includes(activitySearch.toLowerCase()))
-      return false;
+    if (activitySearch && !JSON.stringify(log).toLowerCase().includes(activitySearch.toLowerCase())) return false;
     return true;
   });
 
@@ -523,42 +399,36 @@ export default function AdminPanel() {
     return (
       <div
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          background: '#f5f5f5',
-          fontFamily: "'Roboto', sans-serif",
+          padding: '10px',
+          fontFamily: 'Arial',
+          background: '#f0f0f0',
+          textAlign: 'center',
         }}
       >
         <Head>
           <title>Admin Login</title>
         </Head>
-        <h1 style={{ color: '#333', marginBottom: '20px' }}>Admin Login</h1>
+        <h1 style={{ color: '#e91e63' }}>Admin Login</h1>
         <input
           type="password"
           value={passwordInput}
           onChange={(e) => setPasswordInput(e.target.value)}
           style={{
-            padding: '12px',
-            width: '300px',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            marginBottom: '10px',
-            fontSize: '1rem',
+            padding: '8px',
+            margin: '5px 0',
+            width: '200px',
+            fontSize: '0.9rem',
           }}
         />
+        <br />
         <button
           onClick={handleLogin}
           style={{
-            padding: '12px 24px',
+            padding: '8px 16px',
             background: '#4CAF50',
             color: 'white',
             border: 'none',
-            borderRadius: '4px',
-            fontSize: '1rem',
-            cursor: 'pointer',
+            fontSize: '0.9rem',
           }}
         >
           Login
@@ -571,52 +441,192 @@ export default function AdminPanel() {
   const wards = form.county ? Object.keys(locations[form.county]) : [];
   const areas = selectedWard && form.county ? locations[form.county][selectedWard] : [];
 
+  const lowerSearch = userSearch.toLowerCase();
+  const activatedUsers = users
+    .filter(u => u.activationPaid)
+    .filter(u => u.username?.toLowerCase().includes(lowerSearch) || u.name?.toLowerCase().includes(lowerSearch))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  const deactivatedUsers = users
+    .filter(u => !u.activationPaid)
+    .filter(u => u.username?.toLowerCase().includes(lowerSearch) || u.name?.toLowerCase().includes(lowerSearch))
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  const userTable = (userList, title) => (
+    <>
+      <h2 style={{ color: '#e91e63' }}>{title} ({userList.length})</h2>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+        <thead>
+          <tr style={{ background: '#ddd' }}>
+            <th>Username</th>
+            <th>Name</th>
+            <th>Age</th>
+            <th>Area</th>
+            <th>Email</th>
+            <th>Password</th>
+            <th>Phone</th>
+            <th>Role</th>
+            <th>Membership</th>
+            <th>Activation Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {userList.map((u) => (
+            <tr key={u.id}>
+              <td>{u.username || 'N/A'}</td>
+              <td>{u.name || 'N/A'}</td>
+              <td>{u.age || 'N/A'}</td>
+              <td>{u.area || 'N/A'}</td>
+              <td>{u.email || 'N/A'}</td>
+              <td style={{ display: 'flex', alignItems: 'center' }}>
+                {showPasswords[u.id] ? u.password || 'N/A' : '********'}
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    marginLeft: '10px',
+                  }}
+                >
+                  {showPasswords[u.id] ? '🙈' : '👁️'}
+                </button>
+              </td>
+              <td>{u.phone || 'N/A'}</td>
+              <td>{u.role || 'User'}</td>
+              <td>
+                <select
+                  value={u.membership || 'Regular'}
+                  onChange={(e) => handleUpdateMembership(u.id, e.target.value)}
+                  style={{
+                    padding: '5px',
+                    marginRight: '5px',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  <option>Regular</option>
+                  <option>Prime</option>
+                  <option>VIP</option>
+                  <option>VVIP</option>
+                </select>
+              </td>
+              <td>
+                <span style={{ color: u.activationPaid ? 'green' : 'red', fontWeight: 'bold' }}>
+                  {u.activationPaid ? 'Activated' : 'Deactivated'}
+                </span>
+              </td>
+              <td style={{ position: 'relative' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation(); // Prevent menu open
+                    handleEdit(u);
+                  }}
+                  style={{
+                    background: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    padding: '5px 10px',
+                    marginRight: '5px',
+                    cursor: 'pointer',
+                    pointerEvents: 'auto',
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleActivation(u.id);
+                  }}
+                  style={{
+                    background: u.activationPaid ? '#f44336' : '#4CAF50',
+                    color: 'white',
+                    border: 'none',
+                    padding: '5px 10px',
+                    marginRight: '5px',
+                    cursor: 'pointer',
+                    pointerEvents: 'auto',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  {u.activationPaid ? 'Deactivate' : 'Activate'}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(u.id);
+                  }}
+                  style={{
+                    background: '#f44336',
+                    color: 'white',
+                    border: 'none',
+                    padding: '5px 10px',
+                    cursor: 'pointer',
+                    pointerEvents: 'auto',
+                  }}
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+
   return (
     <div
-      style={{
-        padding: '20px',
-        fontFamily: "'Roboto', sans-serif",
-        background: '#f5f5f5',
-        minHeight: '100vh',
-        position: 'relative',
-      }}
+      style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0', position: 'relative' }}
     >
       <Head>
         <title>Admin Panel</title>
       </Head>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ color: '#333' }}>Admin Panel</h1>
-        <button
-          onClick={handleLogout}
-          style={{
-            padding: '10px 20px',
-            background: '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '1rem',
-            cursor: 'pointer',
-          }}
-        >
-          Logout
-        </button>
+      <h1 style={{ textAlign: 'center', color: '#e91e63' }}>Admin Panel</h1>
+
+      <button
+        onClick={handleLogout}
+        style={{
+          padding: '8px 16px',
+          background: '#f44336',
+          color: 'white',
+          border: 'none',
+          fontSize: '0.9rem',
+          marginBottom: '10px',
+        }}
+      >
+        Logout
+      </button>
+
+      {/* New: Current Viewers Display */}
+      <div style={{ textAlign: 'center', marginBottom: '10px', background: '#fff', padding: '10px' }}>
+        <h3>Live Metrics</h3>
+        <p>Current Viewers: {currentViewers}</p>
+        <p>Total Visits Today: {allVisits.filter(v => new Date(v.timestamp).toDateString() === new Date().toDateString()).length}</p>
       </div>
 
+      {/* Global 3-dot menu at top right */}
       <button
         onClick={() => setGlobalMenuOpen(!globalMenuOpen)}
         style={{
           position: 'absolute',
           top: '20px',
           right: '20px',
-          background: 'transparent',
-          color: '#333',
+          background: '#666',
+          color: 'white',
           border: 'none',
-          fontSize: '24px',
+          padding: '8px',
+          borderRadius: '50%',
           cursor: 'pointer',
+          fontSize: '18px',
+          zIndex: 100,
         }}
       >
-        More
+        ⋮
       </button>
       {globalMenuOpen && (
         <div
@@ -624,11 +634,11 @@ export default function AdminPanel() {
             position: 'absolute',
             top: '60px',
             right: '20px',
-            background: 'white',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            background: '#fff',
+            border: '1px solid #ccc',
             padding: '10px',
+            borderRadius: '5px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
             zIndex: 100,
           }}
         >
@@ -637,11 +647,12 @@ export default function AdminPanel() {
             style={{
               display: 'block',
               width: '100%',
-              padding: '10px',
-              background: 'transparent',
-              color: '#f44336',
+              padding: '8px',
+              background: '#f44336',
+              color: 'white',
               border: 'none',
-              textAlign: 'left',
+              borderRadius: '3px',
+              marginBottom: '5px',
               cursor: 'pointer',
             }}
           >
@@ -652,354 +663,337 @@ export default function AdminPanel() {
             style={{
               display: 'block',
               width: '100%',
-              padding: '10px',
-              background: 'transparent',
-              color: '#4CAF50',
+              padding: '8px',
+              background: '#4CAF50',
+              color: 'white',
               border: 'none',
-              textAlign: 'left',
+              borderRadius: '3px',
               cursor: 'pointer',
             }}
           >
-            Restore All Deleted
-          </button>
-          <button
-            onClick={handleRevertLastEdit}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '10px',
-              background: 'transparent',
-              color: '#ff9800',
-              border: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
-          >
-            Revert Last Action
-          </button>
-          <button
-            onClick={handleCleanExpired}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '10px',
-              background: 'transparent',
-              color: '#2196f3',
-              border: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
-          >
-            Clean Expired Memberships
+            Restore All Deleted Accounts
           </button>
         </div>
       )}
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-          gap: '20px',
-          marginBottom: '30px',
-        }}
-      >
-        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginBottom: '10px', color: '#666' }}>Total Users</h3>
-          <p style={{ fontSize: '2rem', color: '#333' }}>{users.length}</p>
-        </div>
-        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginBottom: '10px', color: '#666' }}>Active Subscriptions</h3>
-          <p style={{ fontSize: '2rem', color: '#333' }}>{activeSubscriptions}</p>
-        </div>
-        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginBottom: '10px', color: '#666' }}>Expiring Soon (7 days)</h3>
-          <p style={{ fontSize: '2rem', color: '#333' }}>{expiringSoon}</p>
-        </div>
-        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginBottom: '10px', color: '#666' }}>Total Revenue</h3>
-          <p style={{ fontSize: '2rem', color: '#333' }}>${totalRevenue.toFixed(2)}</p>
-        </div>
-        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginBottom: '10px', color: '#666' }}>Current Viewers</h3>
-          <p style={{ fontSize: '2rem', color: '#333' }}>{currentViewers}</p>
-        </div>
-        <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ marginBottom: '10px', color: '#666' }}>Visits Today</h3>
-          <p style={{ fontSize: '2rem', color: '#333' }}>
-            {allVisits.filter((v) => new Date(v.timestamp).toDateString() === new Date().toDateString()).length}
-          </p>
-        </div>
-      </div>
-
-      <div
-        style={{
-          background: 'white',
-          padding: '20px',
-          borderRadius: '8px',
-          marginBottom: '30px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-        }}
-      >
-        <h2 style={{ color: '#333', marginBottom: '20px' }}>{isEdit ? 'Edit Profile' : 'Create Profile'}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-          <input name="username" placeholder="Username" value={form.username} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <input name="email" placeholder="Email (optional)" value={form.email} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          {isEdit && (
-            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: '4px', padding: '12px' }}>
-              <span style={{ flex: 1 }}>Password: {showPassword ? form.password || 'N/A' : '********'}</span>
-              <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }}>
-                {showPassword ? 'Hide' : 'Show'}
-              </button>
+      <div style={{ background: '#fff', padding: '10px', marginBottom: '10px' }}>
+        <h2 style={{ color: '#e91e63' }}>Create Profile</h2>
+        <input
+          name="username"
+          placeholder="Username"
+          value={form.username}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <input
+          name="email"
+          placeholder="Email (optional)"
+          value={form.email}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        {isEdit && (
+          <div
+            style={{
+              padding: '8px',
+              background: 'lightgray',
+              marginBottom: '5px',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ marginRight: '10px' }}>Password: </span>
+            <span style={{ flex: 1 }}>{showPassword ? form.password || 'N/A' : '********'}</span>
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '16px',
+                marginLeft: '10px',
+              }}
+            >
+              {showPassword ? '🙈' : '👁️'}
+            </button>
+          </div>
+        )}
+        <input
+          name="phone"
+          placeholder="Phone"
+          value={form.phone}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <select
+          name="role"
+          value={form.role}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option>User</option>
+          <option>Admin</option>
+        </select>
+        <select
+          name="membership"
+          value={form.membership}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option>Regular</option>
+          <option>Prime</option>
+          <option>VIP</option>
+          <option>VVIP</option>
+        </select>
+        <label style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
+          Activated:
+          <input
+            type="checkbox"
+            name="activationPaid"
+            checked={form.activationPaid}
+            onChange={handleChange}
+            style={{ marginLeft: '10px' }}
+          />
+        </label>
+        <input
+          name="name"
+          placeholder="Full Name"
+          value={form.name}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <select
+          name="gender"
+          value={form.gender}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option value="Female">Female</option>
+          <option value="Male">Male</option>
+        </select>
+        <select
+          name="sexualOrientation"
+          value={form.sexualOrientation}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option value="Straight">Straight</option>
+          <option value="Gay">Gay</option>
+          <option value="Bisexual">Bisexual</option>
+          <option value="Other">Other</option>
+        </select>
+        <input
+          type="number"
+          name="age"
+          min="18"
+          max="100"
+          placeholder="Age"
+          value={form.age}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <input
+          name="nationality"
+          placeholder="Nationality (optional)"
+          value={form.nationality}
+          onChange={handleChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        <select
+          name="county"
+          value={form.county}
+          onChange={handleCountyChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        >
+          <option value="">Select County</option>
+          {counties.map((county) => (
+            <option key={county} value={county}>
+              {county}
+            </option>
+          ))}
+        </select>
+        <select
+          name="ward"
+          value={form.ward}
+          onChange={handleWardChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+          disabled={!form.county}
+        >
+          <option value="">Select City/Town</option>
+          {wards.map((ward) => (
+            <option key={ward} value={ward}>
+              {ward}
+            </option>
+          ))}
+        </select>
+        <select
+          name="area"
+          value={form.area}
+          onChange={handleAreaChange}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+          disabled={!selectedWard}
+        >
+          <option value="">Select Area</option>
+          {areas.map((area) => (
+            <option key={area} value={area}>
+              {area}
+            </option>
+          ))}
+        </select>
+        <div>
+          <label>Nearby Places:</label>
+          {areas.map((place) => (
+            <div key={place}>
+              <input
+                type="checkbox"
+                name="nearby"
+                value={place}
+                checked={(form.nearby || []).includes(place)}
+                onChange={handleChange}
+              />
+              <span>{place}</span>
             </div>
-          )}
-          <input name="phone" placeholder="Phone" value={form.phone} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <select name="role" value={form.role} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>User</option>
-            <option>Admin</option>
-          </select>
-          <select name="membership" value={form.membership} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>Regular</option>
-            <option>Prime</option>
-            <option>VIP</option>
-            <option>VVIP</option>
-          </select>
-          <input type="date" name="subscriptionEndDate" value={form.subscriptionEndDate} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <label style={{ display: 'flex', alignItems: 'center' }}>
-            Hidden:
-            <input type="checkbox" name="hidden" checked={form.hidden} onChange={handleChange} style={{ marginLeft: '10px' }} />
-          </label>
-          <input name="name" placeholder="Full Name" value={form.name} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <select name="gender" value={form.gender} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>Female</option>
-            <option>Male</option>
-          </select>
-          <select name="sexualOrientation" value={form.sexualOrientation} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>Straight</option>
-            <option>Gay</option>
-            <option>Bisexual</option>
-            <option>Other</option>
-          </select>
-          <input type="number" name="age" min="18" max="100" placeholder="Age" value={form.age} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <input name="nationality" placeholder="Nationality (optional)" value={form.nationality} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <select name="county" value={form.county} onChange={handleCountyChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>Select County</option>
-            {counties.map((county) => (
-              <option key={county} value={county}>{county}</option>
-            ))}
-          </select>
-          <select name="ward" value={form.ward} onChange={handleWardChange} disabled={!form.county} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>Select City/Town</option>
-            {wards.map((ward) => (
-              <option key={ward} value={ward}>{ward}</option>
-            ))}
-          </select>
-          <select name="area" value={form.area} onChange={handleAreaChange} disabled={!selectedWard} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option>Select Area</option>
-            {areas.map((area) => (
-              <option key={area} value={area}>{area}</option>
-            ))}
-          </select>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{ display: 'block', marginBottom: '10px' }}>Nearby Places:</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              {areas.map((place) => (
-                <label key={place} style={{ display: 'flex', alignItems: 'center' }}>
-                  <input type="checkbox" name="nearby" value={place} checked={(form.nearby || []).includes(place)} onChange={handleChange} />
-                  {place}
-                </label>
-              ))}
-            </div>
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{ display: 'block', marginBottom: '10px' }}>Services:</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              {servicesList.map((service) => (
-                <label key={service} style={{ display: 'flex', alignItems: 'center' }}>
-                  <input type="checkbox" name="services" value={service} checked={(form.services || []).includes(service)} onChange={handleChange} />
-                  {service}
-                </label>
-              ))}
-            </div>
-          </div>
-          <input name="otherServices" placeholder="Other Services (optional)" value={form.otherServices} onChange={handleChange} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px', gridColumn: 'span 2' }} />
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{ display: 'block', marginBottom: '10px' }}>Bio</label>
-            <textarea name="bio" value={form.bio} onChange={handleChange} rows={6} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          </div>
-          <div style={{ gridColumn: 'span 2' }}>
-            <label style={{ display: 'block', marginBottom: '10px' }}>Profile Picture:</label>
-            <input type="file" accept="image/*" onChange={handleProfilePic} style={{ padding: '12px' }} />
-            {form.profilePic && (
-              <Image src={form.profilePic} alt="Profile Picture" width={150} height={150} style={{ borderRadius: '8px', marginTop: '10px' }} />
-            )}
-          </div>
+          ))}
         </div>
-        <button onClick={handleSave} style={{ marginTop: '20px', padding: '12px 24px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', fontSize: '1rem', cursor: 'pointer' }}>
-          {isEdit ? 'Update Profile' : 'Create Profile'}
+        <div>
+          <label>Services:</label>
+          {servicesList.map((service) => (
+            <div key={service}>
+              <input
+                type="checkbox"
+                name="services"
+                value={service}
+                checked={(form.services || []).includes(service)}
+                onChange={handleChange}
+              />
+              <span>{service}</span>
+            </div>
+          ))}
+        </div>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleProfilePic}
+          style={{ width: '100%', padding: '8px', marginBottom: '5px' }}
+        />
+        {form.profilePic && (
+          <Image
+            src={form.profilePic}
+            alt="Current Profile Picture"
+            width={150}
+            height={150}
+            style={{
+              objectFit: 'cover',
+              marginTop: '10px',
+              borderRadius: '8px',
+            }}
+          />
+        )}
+        <button
+          onClick={handleSave}
+          style={{
+            background: '#4CAF50',
+            color: '#fff',
+            border: 'none',
+            padding: '8px 16px',
+            marginTop: '5px',
+          }}
+        >
+          {isEdit ? 'Update' : 'Save'}
         </button>
       </div>
 
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-        <h2 style={{ color: '#333', marginBottom: '20px' }}>All Users</h2>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <input type="text" placeholder="Search users..." value={userSearch} onChange={(e) => setUserSearch(e.target.value)} style={{ padding: '12px', width: '300px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <select value={userFilter} onChange={(e) => setUserFilter(e.target.value)} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
-            <option value="all">All Users</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="expiring">Expiring Soon</option>
-            <option value="hidden">Hidden</option>
-          </select>
-        </div>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                <th style={{ padding: '12px' }}>Username</th>
-                <th style={{ padding: '12px' }}>Name</th>
-                <th style={{ padding: '12px' }}>Age</th>
-                <th style={{ padding: '12px' }}>Area</th>
-                <th style={{ padding: '12px' }}>Email</th>
-                <th style={{ padding: '12px' }}>Password</th>
-                <th style={{ padding: '12px' }}>Phone</th>
-                <th style={{ padding: '12px' }}>Role</th>
-                <th style={{ padding: '12px' }}>Membership</th>
-                <th style={{ padding: '12px' }}>Subscription Ends</th>
-                <th style={{ padding: '12px' }}>Activation Status</th>
-                <th style={{ padding: '12px' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredUsers.map((u) => {
-                const subEnd = u.subscriptionEndDate ? new Date(u.subscriptionEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
-                const isExpired = u.subscriptionEndDate && new Date(u.subscriptionEndDate) < new Date();
-                const isActivated = u.activationPaid && !u.hidden;
-                return (
-                  <tr key={u.id} style={{ borderBottom: '1px solid #ddd' }}>
-                    <td style={{ padding: '12px' }}>{u.username || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}>{u.name || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}>{u.age || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}>{u.area || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}>{u.email || 'N/A'}</td>
-                    <td style={{ padding: '12px', display: 'flex', alignItems: 'center' }}>
-                      {showPasswords[u.id] ? u.password || 'N/A' : '********'}
-                      <button onClick={() => setShowPasswords((prev) => ({ ...prev, [u.id]: !prev[u.id] }))} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '10px' }}>
-                        {showPasswords[u.id] ? 'Hide' : 'Show'}
-                      </button>
-                    </td>
-                    <td style={{ padding: '12px' }}>{u.phone || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}>{u.role || 'User'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <select value={u.membership || 'Regular'} onChange={(e) => handleUpdateMembership(u.id, e.target.value)} style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}>
-                          <option>Regular</option>
-                          <option>Prime</option>
-                          <option>VIP</option>
-                          <option>VVIP</option>
-                        </select>
-                      </div>
-                    </td>
-                    <td style={{ padding: '12px', color: isExpired ? 'red' : 'green' }}>{subEnd}</td>
-                    <td style={{ padding: '12px', color: isActivated ? 'green' : 'red' }}>{isActivated ? 'Activated' : 'Deactivated'}</td>
-                    <td style={{ padding: '12px' }}>
-                      <button onClick={() => handleEdit(u)} style={{ padding: '8px 12px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', marginRight: '10px', cursor: 'pointer' }}>Edit</button>
-                      <button onClick={() => handleToggleActivation(u.id)} style={{ padding: '8px 12px', background: isActivated ? '#ff1744' : '#4CAF50', color: 'white', border: 'none', borderRadius: '4px', marginRight: '10px', cursor: 'pointer' }}>{isActivated ? 'Deactivate' : 'Activate'}</button>
-                      <button onClick={() => handleDelete(u.id)} style={{ padding: '8px 12px', background: '#f44336', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Delete</button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {filteredUsers.length === 0 && (
-            <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No users found.</p>
-          )}
-        </div>
+      <div style={{ background: '#fff', padding: '10px' }}>
+        <h2 style={{ color: '#e91e63' }}>All Users</h2>
+        <input
+          type="text"
+          placeholder="Search by username or name..."
+          value={userSearch}
+          onChange={(e) => setUserSearch(e.target.value)}
+          style={{ width: '100%', padding: '8px', marginBottom: '10px' }}
+        />
+        {userTable(activatedUsers, 'Activated Users')}
+        {userTable(deactivatedUsers, 'Deactivated Users')}
       </div>
 
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', marginBottom: '30px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-        <h2 style={{ color: '#333', marginBottom: '20px' }}>All Purchases & Transactions</h2>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                <th style={{ padding: '12px' }}>Transaction ID</th>
-                <th style={{ padding: '12px' }}>User</th>
-                <th style={{ padding: '12px' }}>Amount</th>
-                <th style={{ padding: '12px' }}>Date</th>
-                <th style={{ padding: '12px' }}>Type</th>
-                <th style={{ padding: '12px' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((tx) => {
-                const user = users.find((u) => u.id === tx.userId);
-                const txDate = tx.date ? new Date(tx.date).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' }) : 'N/A';
-                return (
-                  <tr key={tx.id} style={{ borderBottom: '1px solid #ddd' }}>
-                    <td style={{ padding: '12px' }}>{tx.id}</td>
-                    <td style={{ padding: '12px' }}>{user ? user.username : 'Unknown'}</td>
-                    <td style={{ padding: '12px' }}>${tx.amount?.toFixed(2) || 'N/A'}</td>
-                    <td style={{ padding: '12px' }}>{txDate}</td>
-                    <td style={{ padding: '12px' }}>{tx.type || 'Subscription'}</td>
-                    <td style={{ padding: '12px', color: tx.status === 'success' ? 'green' : 'red' }}>{tx.status || 'N/A'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {transactions.length === 0 && (
-            <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No transactions found.</p>
-          )}
-        </div>
-      </div>
-
-      <div style={{ background: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-        <h2 style={{ color: '#333', marginBottom: '20px' }}>Activity Logs</h2>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
-          <select value={activityFilter} onChange={(e) => setActivityFilter(e.target.value)} style={{ padding: '12px', border: '1px solid #ddd', borderRadius: '4px' }}>
+      {/* New: Activity Dashboard Section */}
+      <div style={{ background: '#fff', padding: '10px', marginTop: '10px' }}>
+        <h2 style={{ color: '#e91e63' }}>Site Activity Dashboard</h2>
+        <div style={{ marginBottom: '10px' }}>
+          <select
+            value={activityFilter}
+            onChange={(e) => setActivityFilter(e.target.value)}
+            style={{ padding: '5px', marginRight: '10px' }}
+          >
             <option value="all">All Actions</option>
             <option value="profile_create">Profile Created</option>
             <option value="profile_update">Profile Updated</option>
             <option value="profile_delete">Profile Deleted</option>
             <option value="membership_update">Membership Updated</option>
-            <option value="toggle_active">Account Toggled</option>
-            <option value="toggle_hidden">Profile Toggled</option>
+            <option value="toggle_activation">Account Toggled</option>
             <option value="admin_login">Admin Login</option>
             <option value="admin_logout">Admin Logout</option>
           </select>
-          <input type="text" placeholder="Search logs..." value={activitySearch} onChange={(e) => setActivitySearch(e.target.value)} style={{ padding: '12px', width: '300px', border: '1px solid #ddd', borderRadius: '4px' }} />
-          <button onClick={() => setRefresh(!refresh)} style={{ padding: '12px 24px', background: '#2196F3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+          <input
+            type="text"
+            placeholder="Search logs..."
+            value={activitySearch}
+            onChange={(e) => setActivitySearch(e.target.value)}
+            style={{ padding: '5px', width: '200px' }}
+          />
+          <button
+            onClick={() => setRefresh(!refresh)} // Refresh logs
+            style={{ padding: '5px 10px', background: '#2196F3', color: 'white', border: 'none', marginLeft: '10px' }}
+          >
             Refresh
           </button>
         </div>
-        <div style={{ overflowX: 'auto', maxHeight: '400px', overflowY: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
             <thead>
-              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                <th style={{ padding: '12px' }}>Timestamp</th>
-                <th style={{ padding: '12px' }}>Action</th>
-                <th style={{ padding: '12px' }}>Details</th>
-                <th style={{ padding: '12px' }}>Site</th>
+              <tr style={{ background: '#ddd' }}>
+                <th>Timestamp</th>
+                <th>Action</th>
+                <th>Details</th>
+                <th>Site</th>
               </tr>
             </thead>
             <tbody>
-              {filteredLogs.map((log) => (
-                <tr key={log.id} style={{ borderBottom: '1px solid #ddd' }}>
-                  <td style={{ padding: '12px' }}>
-                    {new Date(log.timestamp?.toDate ? log.timestamp.toDate() : log.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: 'numeric' })}
-                  </td>
-                  <td style={{ padding: '12px' }}>{log.action}</td>
-                  <td style={{ padding: '12px' }}>{JSON.stringify(log.details).slice(1, -1).replace(/"/g, '') || 'N/A'}</td>
-                  <td style={{ padding: '12px' }}>{log.siteId || 'Main'}</td>
+              {filteredLogs.slice(0, 50).map((log) => ( // Limit to last 50 for perf
+                <tr key={log.id}>
+                  <td>{new Date(log.timestamp?.toDate ? log.timestamp.toDate() : log.timestamp).toLocaleString()}</td>
+                  <td style={{ color: log.admin ? '#e91e63' : '#333' }}>{log.action}</td>
+                  <td>{JSON.stringify(log.details).slice(1, -1).replace(/"/g, '') || 'N/A'}</td>
+                  <td>{log.siteId || 'Main'}</td>
                 </tr>
               ))}
+              {filteredLogs.length === 0 && (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>No activity logs found.</td>
+                </tr>
+              )}
             </tbody>
           </table>
-          {filteredLogs.length === 0 && (
-            <p style={{ textAlign: 'center', padding: '20px', color: '#666' }}>No activity logs found.</p>
-          )}
         </div>
+        <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '5px' }}>
+          Showing last 50 logs. Total: {activityLogs.length}
+        </p>
+      </div>
+
+      <div style={{ marginTop: '10px' }}>
+        <button
+          onClick={handleRevertLastEdit}
+          style={{
+            padding: '8px 16px',
+            background: '#ff9800',
+            color: 'white',
+            border: 'none',
+            fontSize: '0.9rem',
+          }}
+        >
+          Revert Previous Action
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
-// /pages/inbox/[chatId].js
+"use client";  // For client-side FCM
+
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import { useAuth } from "../../contexts/AuthContext";
@@ -6,11 +7,13 @@ import MessageList from "../../lib/chat/MessageList";
 import ChatInput from "../../lib/chat/ChatInput";
 import ChatHeader from "../../lib/chat/ChatHeader";
 import { listenMessages, sendMessage, uploadMedia } from "../../lib/chat/";
+import { messaging } from "../../lib/firebase";  // Import from lib/firebase.js
+import { getToken, onMessage } from "firebase/messaging";
+import { db } from "../../lib/firebase";  // For Firestore
 
 import {
   doc,
   getDoc,
-  getFirestore,
   increment,
   setDoc,
   onSnapshot,
@@ -40,18 +43,53 @@ export default function PrivateChat() {
   const [loading, setLoading] = useState(true);
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
-  const [selectedImage, setSelectedImage] = useState(null); // ✅ For image modal
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [toast, setToast] = useState(null);  // For foreground notifications
+  const [isTyping, setIsTyping] = useState(false);  // Typing indicator
 
-  // ✅ LOAD CHAT + USER
+  // FCM Setup with Error Handling
+  useEffect(() => {
+    if (!user) return;
+
+    const setupFCM = async () => {
+      try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          const token = await getToken(messaging, { vapidKey: 'YOUR_VAPID_KEY' });  // From Firebase Console
+          if (token) {
+            await fetch('/api/save-token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${await user.getIdToken()}`,
+              },
+              body: JSON.stringify({ token }),
+            });
+          }
+        }
+
+        onMessage(messaging, (payload) => {
+          setToast(payload.notification?.body || 'New message!');
+          setTimeout(() => setToast(null), 5000);
+        });
+      } catch (err) {
+        console.error('FCM setup error:', err);
+      }
+    };
+
+    setupFCM();
+  }, [user]);
+
+  // LOAD CHAT + USER (with Typing Listener)
   useEffect(() => {
     if (!chatId || !user) return;
 
     let unsubscribeMessages = null;
     let unsubscribeChat = null;
+    let unsubscribeTyping = null;
 
     async function fetchChatDetails() {
       try {
-        const db = getFirestore();
         const chatRef = doc(db, "privateChats", chatId);
         const chatSnap = await getDoc(chatRef);
 
@@ -74,7 +112,7 @@ export default function PrivateChat() {
         const otherUserDoc = await getDoc(doc(db, "profiles", otherId));
         setOtherUser(otherUserDoc.exists() ? otherUserDoc.data() : null);
 
-        // ✅ RESET MY UNREAD
+        // RESET MY UNREAD
         await setDoc(
           chatRef,
           {
@@ -85,15 +123,21 @@ export default function PrivateChat() {
           { merge: true }
         );
 
-        // ✅ MESSAGE LISTENER
+        // MESSAGE LISTENER
         unsubscribeMessages = listenMessages(
           `privateChats/${chatId}/messages`,
           (msgs) => setMessages(Array.isArray(msgs) ? msgs : [])
         );
 
-        // ✅ PIN LISTENER
+        // PIN LISTENER
         unsubscribeChat = onSnapshot(chatRef, (snap) => {
           setPinnedMessages(snap.data()?.pinnedMessages || []);
+        });
+
+        // TYPING LISTENER
+        unsubscribeTyping = onSnapshot(chatRef, (snap) => {
+          const typingUsers = snap.data()?.typing || [];
+          setIsTyping(typingUsers.includes(otherUserId));
         });
 
         setLoading(false);
@@ -108,118 +152,140 @@ export default function PrivateChat() {
     return () => {
       if (unsubscribeMessages) unsubscribeMessages();
       if (unsubscribeChat) unsubscribeChat();
+      if (unsubscribeTyping) unsubscribeTyping();
     };
   }, [chatId, user]);
 
-  // ✅ MARK AS SEEN
+  // MARK AS SEEN
   useEffect(() => {
     if (!messages.length || !user || !chatId) return;
 
-    const db = getFirestore();
     messages.forEach(async (msg) => {
       if (msg.senderId !== user.uid && !msg.seenBy?.includes(user.uid)) {
         const msgRef = doc(db, "privateChats", chatId, "messages", msg.id);
-        await updateDoc(msgRef, {
-          seenBy: arrayUnion(user.uid),
-        });
+        try {
+          await updateDoc(msgRef, {
+            seenBy: arrayUnion(user.uid),
+          });
+        } catch (err) {
+          console.error("Mark seen failed:", err);
+        }
       }
     });
   }, [messages, user, chatId]);
 
-  // ✅ SEND MESSAGE
+  // SEND MESSAGE
   const handleSend = async (text, imageFile) => {
     if (!text && !imageFile) return;
     if (!user || !chatId) return;
 
-    let imageUrl = null;
-    if (imageFile) imageUrl = await uploadMedia(imageFile, "chatImages");
+    try {
+      let imageUrl = null;
+      if (imageFile) imageUrl = await uploadMedia(imageFile, "chatImages");
 
-    await sendMessage(
-      `privateChats/${chatId}/messages`,
-      text,
-      imageUrl,
-      user.uid,
-      user.displayName || "User",
-      replyingTo
-    );
-
-    if (otherUserId) {
-      const db = getFirestore();
-      const chatRef = doc(db, "privateChats", chatId);
-
-      await setDoc(
-        chatRef,
-        {
-          unreadCounts: {
-            [otherUserId]: increment(1),
-          },
-          lastMessage: text || "📷 Image",
-          timestamp: serverTimestamp(),
-        },
-        { merge: true }
+      await sendMessage(
+        `privateChats/${chatId}/messages`,
+        text,
+        imageUrl,
+        user.uid,
+        user.displayName || "User",
+        replyingTo
       );
+
+      if (otherUserId) {
+        const chatRef = doc(db, "privateChats", chatId);
+
+        await setDoc(
+          chatRef,
+          {
+            unreadCounts: {
+              [otherUserId]: increment(1),
+            },
+            lastMessage: text || "📷 Image",
+            timestamp: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+
+      setReplyingTo(null);
+    } catch (err) {
+      console.error("Send failed:", err);
     }
-
-    setReplyingTo(null);
   };
 
-  const handleReply = (messageId) => {
-    setReplyingTo(messageId);
+  // TYPING HANDLER (call from ChatInput onChange)
+  const handleTyping = async (isTypingNow) => {
+    if (!chatId || !user) return;
+    const chatRef = doc(db, "privateChats", chatId);
+    try {
+      await updateDoc(chatRef, {
+        typing: isTypingNow ? arrayUnion(user.uid) : arrayRemove(user.uid),
+      });
+    } catch (err) {
+      console.error("Typing update failed:", err);
+    }
   };
 
-  // ✅ ✅ ✅ FULLY FIXED DELETE (UPDATES INBOX PREVIEW)
+  // DELETE MESSAGE (with inbox preview update)
   const handleDelete = async (messageId, forEveryone) => {
     if (!user || !chatId) return;
 
-    const db = getFirestore();
     const msgRef = doc(db, "privateChats", chatId, "messages", messageId);
     const chatRef = doc(db, "privateChats", chatId);
 
-    if (forEveryone) {
-      await deleteDoc(msgRef);
-    } else {
-      await updateDoc(msgRef, {
-        deletedFor: arrayUnion(user.uid),
-      });
-    }
+    try {
+      if (forEveryone) {
+        await deleteDoc(msgRef);
+      } else {
+        await updateDoc(msgRef, {
+          deletedFor: arrayUnion(user.uid),
+        });
+      }
 
-    // ✅ UPDATE LAST MESSAGE FOR INBOX
-    const q = query(
-      collection(db, "privateChats", chatId, "messages"),
-      orderBy("timestamp", "desc"),
-      limit(1)
-    );
+      // UPDATE LAST MESSAGE FOR INBOX
+      const q = query(
+        collection(db, "privateChats", chatId, "messages"),
+        orderBy("timestamp", "desc"),
+        limit(1)
+      );
 
-    const snap = await getDocs(q);
+      const snap = await getDocs(q);
 
-    if (snap.empty) {
-      await updateDoc(chatRef, {
-        lastMessage: "",
-        timestamp: null,
-      });
-    } else {
-      const lastMsg = snap.docs[0].data();
-      await updateDoc(chatRef, {
-        lastMessage: lastMsg.text || "📷 Image",
-        timestamp: lastMsg.timestamp || serverTimestamp(),
-      });
+      if (snap.empty) {
+        await updateDoc(chatRef, {
+          lastMessage: "",
+          timestamp: null,
+        });
+      } else {
+        const lastMsg = snap.docs[0].data();
+        await updateDoc(chatRef, {
+          lastMessage: lastMsg.text || "📷 Image",
+          timestamp: lastMsg.timestamp || serverTimestamp(),
+        });
+      }
+    } catch (err) {
+      console.error("Delete failed:", err);
     }
   };
 
-  // ✅ PIN MESSAGE
+  // PIN MESSAGE
   const handlePin = async (messageId) => {
     if (!user || !chatId) return;
-    const db = getFirestore();
     const chatRef = doc(db, "privateChats", chatId);
 
-    if (pinnedMessages.includes(messageId)) {
-      await updateDoc(chatRef, {
-        pinnedMessages: arrayRemove(messageId),
-      });
-    } else {
-      await updateDoc(chatRef, {
-        pinnedMessages: arrayUnion(messageId),
-      });
+    try {
+      if (pinnedMessages.includes(messageId)) {
+        await updateDoc(chatRef, {
+          pinnedMessages: arrayRemove(messageId),
+        });
+      } else {
+        await updateDoc(chatRef, {
+          pinnedMessages: arrayUnion(messageId),
+        });
+      }
+    } catch (err) {
+      console.error("Pin failed:", err);
     }
   };
 
@@ -233,7 +299,7 @@ export default function PrivateChat() {
         onBack={() => router.back()}
         onProfileClick={() => {
           if (otherUserId) {
-            router.push(`/${`/view-profile/${otherUserId}`}`);
+            router.push(`/view-profile/${otherUserId}`);
           }
         }}
       />
@@ -241,12 +307,14 @@ export default function PrivateChat() {
       <MessageList
         messages={messages}
         currentUserId={user.uid}
-        onReply={handleReply}
+        onReply={setReplyingTo}  // Updated to direct set (match if ChatInput uses it)
         onDelete={handleDelete}
         onPin={handlePin}
         pinnedMessages={pinnedMessages}
-        onImageClick={setSelectedImage} // ✅ Pass handler for image click
+        onImageClick={setSelectedImage}
       />
+
+      {isTyping && <div className={styles.typing}>Typing...</div>}
 
       {replyingTo && (
         <div className={styles.replyPreview}>
@@ -256,9 +324,8 @@ export default function PrivateChat() {
         </div>
       )}
 
-      <ChatInput onSend={handleSend} />
+      <ChatInput onSend={handleSend} onTyping={handleTyping} />  // Pass for input change
 
-      {/* ✅ Image Modal */}
       {selectedImage && (
         <div
           className={styles.imageModal}
@@ -269,7 +336,7 @@ export default function PrivateChat() {
             alt="Full size image"
             fill
             style={{ objectFit: "contain" }}
-            onClick={(e) => e.stopPropagation()} // Prevent close on image click
+            onClick={(e) => e.stopPropagation()}
           />
           <button
             className={styles.closeModal}
@@ -279,6 +346,8 @@ export default function PrivateChat() {
           </button>
         </div>
       )}
+
+      {toast && <div className={styles.toast}>{toast}</div>}
     </div>
   );
 }

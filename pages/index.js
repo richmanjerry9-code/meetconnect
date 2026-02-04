@@ -7,8 +7,8 @@ import * as counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
+import { collection, query, orderBy, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
 import { createOrGetChat } from '../lib/chat'; // Import the chat utility
 
 /**
@@ -56,7 +56,7 @@ const sortProfiles = (profiles) => {
   const regular = [];
 
   profiles.forEach(p => {
-    const mem = p.membership || 'Regular';
+    const mem = p.effectiveMembership;
     if (membershipPriority[mem] > 1) {
       premium.push(p);
     } else {
@@ -66,8 +66,8 @@ const sortProfiles = (profiles) => {
 
   // Sort premium: highest tier first, then newest first within tier
   premium.sort((a, b) => {
-    const priA = membershipPriority[a.membership || 'Regular'];
-    const priB = membershipPriority[b.membership || 'Regular'];
+    const priA = membershipPriority[a.effectiveMembership];
+    const priB = membershipPriority[b.effectiveMembership];
     if (priA !== priB) return priB - priA; // Descending priority
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Newest first
   });
@@ -80,9 +80,9 @@ const sortProfiles = (profiles) => {
   return [...premium, ...regular];
 };
 
-export default function Home({ initialProfiles = [] }) {
+export default function Home() {
   const router = useRouter();
-  const [allProfiles, setAllProfiles] = useState(initialProfiles);
+  const [allProfiles, setAllProfiles] = useState([]);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState('');
   const [user, setUser] = useState(null);
@@ -184,26 +184,33 @@ export default function Home({ initialProfiles = [] }) {
     return unsubscribe;
   }, []);
 
-  // Real-time profiles
+  // Real-time profiles (client-side only)
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
-      unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-        const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
-        const validProfiles = data.filter(p => 
-          isProfileComplete(p) && 
-          p.active !== false && 
-          p.hidden !== true
-        );
-        setAllProfiles(sortProfiles(validProfiles));
-        setError(null);
-      }, (err) => {
-        console.error('Snapshot error:', err);
-        setError('Failed to load profiles in real-time. Please refresh.');
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
+    unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
+      const profilesWithEffective = data.map(p => {
+        let effective = p.membership || 'Regular';
+        if (p.membershipExpiresAt) {
+          const expiresAt = new Date(p.membershipExpiresAt);
+          if (expiresAt < new Date()) {
+            effective = 'Regular';
+          }
+        }
+        return { ...p, effectiveMembership: effective };
       });
-    }, 1000);
+      const validProfiles = profilesWithEffective.filter(p => 
+        isProfileComplete(p) && 
+        p.active !== false && 
+        p.hidden !== true
+      );
+      setAllProfiles(sortProfiles(validProfiles));
+      setError(null);
+    }, (err) => {
+      console.error('Snapshot error:', err);
+      setError('Failed to load profiles in real-time. Please refresh.');
+    });
     return () => {
-      clearTimeout(timer);
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
@@ -565,8 +572,8 @@ export default function Home({ initialProfiles = [] }) {
           </div>
           <div className={styles.profileInfo}>
             <h3>{p.name}</h3>
-            {p.membership && p.membership !== 'Regular' && (
-              <span className={`${styles.badge} ${styles[p.membership.toLowerCase()]}`}>{p.membership}</span>
+            {p.effectiveMembership && p.effectiveMembership !== 'Regular' && (
+              <span className={`${styles.badge} ${styles[p.effectiveMembership.toLowerCase()]}`}>{p.effectiveMembership}</span>
             )}
           </div>
           <p className={styles.location}>{p.ward.toLowerCase()}/{p.area.toLowerCase()}</p>
@@ -802,22 +809,4 @@ export default function Home({ initialProfiles = [] }) {
       </footer>
     </div>
   );
-}
-
-export async function getStaticProps() {
-  let initialProfiles = [];
-  try {
-    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    initialProfiles = snapshot.docs
-      .map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }))
-      .filter(p => isProfileComplete(p) && p.active !== false && p.hidden !== true);
-    initialProfiles = sortProfiles(initialProfiles);
-  } catch (err) {
-    console.error('Error fetching homepage profiles:', err);
-  }
-  return {
-    props: { initialProfiles },
-    revalidate: 60,
-  };
 }
