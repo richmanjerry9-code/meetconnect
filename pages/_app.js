@@ -11,34 +11,53 @@ export default function App({ Component, pageProps }) {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   useEffect(() => {
+    // --- TRACKING: Check if App is Installed (Running in Standalone Mode) ---
+    // This detects if the user has ALREADY installed it and is opening it from Home Screen
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    
+    if (isStandalone) {
+      // Check if we've already logged this install to avoid duplicates
+      const hasLoggedInstall = localStorage.getItem('pwa_install_logged');
+      
+      if (!hasLoggedInstall) {
+        // Send "Success" event to Google Analytics
+        if (typeof window.gtag === 'function') {
+          window.gtag('event', 'pwa_install_success', {
+            event_category: 'engagement',
+            event_label: 'User opened installed app for first time'
+          });
+        }
+        // Mark as logged so we don't count it every time they open the app
+        localStorage.setItem('pwa_install_logged', 'true');
+      }
+    }
+
     // 1. Service Worker Registration
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        .then(reg => {
-          reg.update();
-        })
+        .then(reg => reg.update())
         .catch(err => console.error('SW registration failed:', err));
 
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('Service Worker registered:', reg))
           .catch(err => console.error('Registration failed:', err));
       });
     }
 
-    // 2. Check if device is iOS
+    // 2. Check Device
     const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     setIsIOS(isDeviceIOS);
 
-    // 3. Handle Android PWA Install Prompt
+    // 3. Handle Android Prompt
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowInstallButton(true);
+      // Only show button if not already installed (standalone check)
+      if (!isStandalone) setShowInstallButton(true);
     };
 
-    // 4. Force show button for iOS users (since the event won't fire)
-    if (isDeviceIOS) {
+    // 4. Force show for iOS (if not standalone)
+    if (isDeviceIOS && !isStandalone) {
       setShowInstallButton(true);
     }
 
@@ -50,17 +69,41 @@ export default function App({ Component, pageProps }) {
   }, []);
 
   const handleInstallClick = async () => {
-    // Logic for Android
+    // TRACKING: User clicked the main button (Intent)
+    if (typeof window.gtag === 'function') {
+      window.gtag('event', 'pwa_install_click', {
+        event_category: 'engagement',
+        event_label: 'User clicked Download App button'
+      });
+    }
+
+    // ANDROID LOGIC
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
+      
+      // TRACKING: Did they actually click "Install" or "Cancel" in the native popup?
       console.log('PWA install outcome:', outcome);
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', 'pwa_android_prompt_response', {
+          event_category: 'engagement',
+          event_label: outcome // will be 'accepted' or 'dismissed'
+        });
+      }
+
       setDeferredPrompt(null);
       setShowInstallButton(false);
     } 
-    // Logic for iOS
+    // IOS LOGIC
     else if (isIOS) {
       setShowIOSInstructions(true);
+      // TRACKING: User opened the iOS instruction modal
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', 'pwa_ios_instructions_view', {
+          event_category: 'engagement',
+          event_label: 'Instructions Opened'
+        });
+      }
     }
   };
 
@@ -91,7 +134,6 @@ export default function App({ Component, pageProps }) {
       </Script>
 
       <AuthProvider>
-        {/* Floating Install Button */}
         {showInstallButton && (
           <button
             onClick={handleInstallClick}
@@ -119,7 +161,6 @@ export default function App({ Component, pageProps }) {
           </button>
         )}
 
-        {/* iOS Instruction Modal */}
         {showIOSInstructions && (
           <div 
             style={{
@@ -132,7 +173,7 @@ export default function App({ Component, pageProps }) {
               zIndex: 9999,
               display: 'flex',
               justifyContent: 'center',
-              alignItems: 'flex-end', // Aligns directly pointing to the bottom share bar
+              alignItems: 'flex-end',
               paddingBottom: '20px'
             }}
             onClick={() => setShowIOSInstructions(false)}
@@ -188,9 +229,7 @@ export default function App({ Component, pageProps }) {
                   <span style={{ display: 'inline-block', marginLeft: '5px', border: '1px solid #ccc', borderRadius: '4px', padding: '2px 4px', fontSize: '10px', background: '#f5f5f5' }}>+</span>
                 </div>
               </div>
-
-              {/* Little arrow pointing down to the browser bar */}
-              <div style={{
+               <div style={{
                 position: 'absolute',
                 bottom: '-10px',
                 left: '50%',
