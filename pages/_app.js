@@ -1,310 +1,265 @@
+// _app.js
 import { useEffect, useState } from 'react';
-import Head from 'next/head'; // <--- This was missing
-import Script from 'next/script';
-import { AuthProvider } from '../contexts/AuthContext';
+import Head from 'next/head';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { getMessaging, getToken } from "firebase/messaging";
+import { getFirestore, doc, setDoc, arrayUnion } from "firebase/firestore";
+import { app } from "../lib/firebase";
 import '../styles/globals.css';
 
-export default function App({ Component, pageProps }) {
+// --- SUB-COMPONENT: HANDLES LOGIC INSIDE AUTH CONTEXT ---
+const AppContent = ({ Component, pageProps }) => {
+  const { user } = useAuth();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   useEffect(() => {
-    // --- TRACKING: Check if App is Installed (Running in Standalone Mode) ---
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    
-    if (isStandalone) {
-      const hasLoggedInstall = localStorage.getItem('pwa_install_logged');
-      if (!hasLoggedInstall) {
-        if (typeof window.gtag === 'function') {
-          window.gtag('event', 'pwa_install_success', {
-            event_category: 'engagement',
-            event_label: 'User opened installed app for first time'
-          });
-        }
-        localStorage.setItem('pwa_install_logged', 'true');
-      }
-    }
-
     // 1. Service Worker Registration
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        .then(reg => reg.update())
+        .then(reg => console.log("SW Registered"))
         .catch(err => console.error('SW registration failed:', err));
-
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .catch(err => console.error('Registration failed:', err));
-      });
     }
 
-    // 2. Check Device
-    const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    setIsIOS(isDeviceIOS);
+    // 2. Check Standalone (Installed) Status
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 
-    // 3. Handle Android Prompt
-    const handleBeforeInstallPrompt = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      if (!isStandalone) setShowInstallButton(true);
-    };
+    if (isStandalone) {
+      // --- INSTALLED LOGIC ---
+      
+      // A. Check if we need to ask for Notifications
+      // Only ask if permission is 'default' (not granted/denied) AND we have a user logged in
+      if (user && 'Notification' in window && Notification.permission === 'default') {
+        setTimeout(() => setShowNotificationPrompt(true), 2000); // Delay for effect
+      }
 
-    // 4. Force show for iOS (if not standalone)
-    if (isDeviceIOS && !isStandalone) {
-      setShowInstallButton(true);
+    } else {
+      // --- BROWSER LOGIC (SHOW INSTALL PROMPTS) ---
+      const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      setIsIOS(isDeviceIOS);
+
+      if (isDeviceIOS) setShowInstallButton(true);
+      
+      const handleBeforeInstallPrompt = (e) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+        setShowInstallButton(true);
+      };
+
+      window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     }
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
+  }, [user]);
 
   const handleInstallClick = async () => {
-    if (typeof window.gtag === 'function') {
-      window.gtag('event', 'pwa_install_click', {
-        event_category: 'engagement',
-        event_label: 'User clicked Download App button'
-      });
-    }
-
-    // ANDROID LOGIC
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      
-      console.log('PWA install outcome:', outcome);
-      if (typeof window.gtag === 'function') {
-        window.gtag('event', 'pwa_android_prompt_response', {
-          event_category: 'engagement',
-          event_label: outcome
-        });
-      }
-
-      setDeferredPrompt(null);
+      if (outcome === 'accepted') setDeferredPrompt(null);
       setShowInstallButton(false);
-    } 
-    // IOS LOGIC
-    else if (isIOS) {
+    } else if (isIOS) {
       setShowIOSInstructions(true);
-      if (typeof window.gtag === 'function') {
-        window.gtag('event', 'pwa_ios_instructions_view', {
-          event_category: 'engagement',
-          event_label: 'Instructions Opened'
-        });
-      }
     }
   };
 
-  const handleDismiss = () => {
-    setShowInstallButton(false);
+  // --- NOTIFICATION HANDLER ---
+  const handleEnableNotifications = async () => {
+    if (!('Notification' in window)) return;
+
+    // 1. Request Browser Permission
+    const permission = await Notification.requestPermission();
+    setShowNotificationPrompt(false);
+
+    if (permission === 'granted' && user) {
+      try {
+        const messaging = getMessaging(app);
+        // REPLACE 'YOUR_VAPID_KEY' WITH YOUR ACTUAL KEY FROM FIREBASE CONSOLE -> PROJECT SETTINGS -> CLOUD MESSAGING
+        const currentToken = await getToken(messaging, { vapidKey: 'YOUR_VAPID_KEY' });
+
+        if (currentToken) {
+           const db = getFirestore(app);
+           // Save token to user profile so we know who to send to
+           const userRef = doc(db, "profiles", user.uid); // or "users" depending on your db
+           await setDoc(userRef, { 
+             fcmToken: currentToken,
+             fcmTokens: arrayUnion(currentToken) // Optional: support multiple devices
+           }, { merge: true });
+           
+           console.log("Notification Token Saved!");
+        }
+      } catch (err) {
+        console.error('An error occurred while retrieving token. ', err);
+      }
+    }
   };
 
   return (
     <>
-      <Head>
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no"
-        />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#ff4785" />
-      </Head>
-
-      <style jsx global>{`
-        @keyframes slideUpBanner {
-          from { transform: translate(-50%, 100%); opacity: 0; }
-          to { transform: translate(-50%, 0); opacity: 1; }
-        }
-      `}</style>
-
-      <Script
-        src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
-        strategy="afterInteractive"
-      />
-      <Script id="google-analytics" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          gtag('js', new Date());
-          gtag('config', 'G-TBN1ZJECDJ');
-        `}
-      </Script>
-
-      <AuthProvider>
-        {/* --- MODERN INSTALL BANNER --- */}
-        {showInstallButton && (
-          <div
-            style={{
-              position: 'fixed',
-              bottom: '20px',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 9999,
-              width: '90%',
-              maxWidth: '420px',
+      {/* INSTALL BANNER */}
+      {showInstallButton && !showNotificationPrompt && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '20px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            width: '90%',
+            maxWidth: '420px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '16px 20px',
+            gap: '15px',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.6)',
+            borderRadius: '20px',
+            boxShadow: '0 20px 40px -10px rgba(255, 71, 133, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            animation: 'slideUpBanner 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #fff0f3, #ffe3e3)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 20px',
-              gap: '15px',
-              backgroundColor: 'rgba(255, 255, 255, 0.9)', 
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(255, 255, 255, 0.6)',
-              borderRadius: '20px',
-              boxShadow: '0 20px 40px -10px rgba(255, 71, 133, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              animation: 'slideUpBanner 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <div style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #fff0f3, #ffe3e3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '24px',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
-              }}>
-                📱
-              </div>
-              
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontWeight: '800', fontSize: '15px', color: '#2d3436', letterSpacing: '-0.5px' }}>
-                  Install App
-                </span>
-                <span style={{ fontSize: '12px', color: '#636e72', fontWeight: '500' }}>
-                  Faster & better experience
-                </span>
-              </div>
+              justifyContent: 'center',
+              fontSize: '24px',
+              boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
+            }}>
+              📱
             </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button
-                onClick={handleInstallClick}
-                style={{
-                  background: 'linear-gradient(45deg, #ff4785, #9b5de5)', 
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '30px',
-                  padding: '10px 20px',
-                  fontWeight: '700',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 15px rgba(255, 71, 133, 0.4)',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                Get App
-              </button>
-              
-              <button
-                onClick={handleDismiss}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: '#b2bec3',
-                  fontSize: '22px',
-                  lineHeight: '1',
-                  cursor: 'pointer',
-                  padding: '5px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                &times;
-              </button>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: '800', fontSize: '15px', color: '#2d3436', letterSpacing: '-0.5px' }}>
+                Install App
+              </span>
+              <span style={{ fontSize: '12px', color: '#636e72', fontWeight: '500' }}>
+                Faster & better experience
+              </span>
             </div>
           </div>
-        )}
 
-        {/* --- IOS INSTRUCTIONS --- */}
-        {showIOSInstructions && (
-          <div 
-            style={{
-              position: 'fixed',
-              top: 0, left: 0, width: '100%', height: '100%',
-              backgroundColor: 'rgba(45, 52, 54, 0.7)',
-              backdropFilter: 'blur(5px)',
-              zIndex: 9999,
-              display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: '20px'
-            }}
-            onClick={() => setShowIOSInstructions(false)}
-          >
-            <div 
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handleInstallClick}
               style={{
-                backgroundColor: 'white',
-                padding: '25px',
-                borderRadius: '20px',
-                width: '90%',
-                maxWidth: '400px',
-                textAlign: 'center',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
-                marginBottom: '20px',
-                position: 'relative'
+                background: 'linear-gradient(45deg, #ff4785, #9b5de5)', 
+                color: 'white',
+                border: 'none',
+                borderRadius: '30px',
+                padding: '10px 20px',
+                fontWeight: '700',
+                fontSize: '13px',
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(255, 71, 133, 0.4)',
+                whiteSpace: 'nowrap'
               }}
-              onClick={(e) => e.stopPropagation()}
             >
-              <button 
-                onClick={() => setShowIOSInstructions(false)}
-                style={{
-                  position: 'absolute',
-                  top: '10px',
-                  right: '15px',
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  color: '#666'
-                }}
-              >
-                ✕
-              </button>
-              
-              <h3 style={{ marginTop: 0, color: '#333' }}>Install MeetConnect</h3>
-              <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>
-                Install this app on your iPhone for the best experience.
-              </p>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px', textAlign: 'left' }}>
-                <span style={{ fontSize: '24px' }}>1️⃣</span>
-                <div>
-                  Tap the <strong>Share</strong> button <br/>
-                  <span style={{ fontSize: '12px', color: '#888' }}>(Look for square with arrow at bottom)</span>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', textAlign: 'left' }}>
-                <span style={{ fontSize: '24px' }}>2️⃣</span>
-                <div>
-                  Scroll down & tap <br/>
-                  <strong>Add to Home Screen</strong> 
-                  <span style={{ display: 'inline-block', marginLeft: '5px', border: '1px solid #ccc', borderRadius: '4px', padding: '2px 4px', fontSize: '10px', background: '#f5f5f5' }}>+</span>
-                </div>
-              </div>
-               <div style={{
-                position: 'absolute',
-                bottom: '-10px',
-                left: '50%',
-                transform: 'translateX(-50%) rotate(45deg)',
-                width: '20px',
-                height: '20px',
-                backgroundColor: 'white',
-              }}></div>
-            </div>
+              Get App
+            </button>
+            
+            <button
+              onClick={() => setShowInstallButton(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#b2bec3',
+                fontSize: '22px',
+                lineHeight: '1',
+                cursor: 'pointer',
+                padding: '5px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              &times;
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        <Component {...pageProps} />
-      </AuthProvider>
+      {/* NOTIFICATION BANNER (Only shows if installed) */}
+      {showNotificationPrompt && (
+        <Banner 
+          icon="🔔" 
+          title="Enable Inbox Alerts" 
+          subtitle="Get notified for new messages" 
+          btnText="Enable" 
+          btnColor="linear-gradient(45deg, #4785ff, #5de59b)"
+          onAction={handleEnableNotifications} 
+          onDismiss={() => setShowNotificationPrompt(false)} 
+        />
+      )}
+
+      {/* IOS INSTRUCTIONS */}
+      {showIOSInstructions && (
+        <IOSPopup onClose={() => setShowIOSInstructions(false)} />
+      )}
+
+      <Component {...pageProps} />
     </>
+  );
+};
+
+// --- REUSABLE UI COMPONENTS ---
+const Banner = ({ icon, title, subtitle, btnText, btnColor, onAction, onDismiss }) => (
+  <div style={{
+    position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
+    zIndex: 9999, width: '90%', maxWidth: '420px', display: 'flex', alignItems: 'center',
+    justifyContent: 'space-between', padding: '16px 20px', gap: '15px',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(12px)',
+    border: '1px solid rgba(255, 255, 255, 0.6)', borderRadius: '20px',
+    boxShadow: '0 20px 40px -10px rgba(0,0,0,0.1)', animation: 'slideUp 0.5s ease'
+  }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+      <div style={{ fontSize: '24px', background: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>{icon}</div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <span style={{ fontWeight: '800', fontSize: '15px', color: '#333' }}>{title}</span>
+        <span style={{ fontSize: '12px', color: '#666' }}>{subtitle}</span>
+      </div>
+    </div>
+    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <button onClick={onAction} style={{
+        background: btnColor, color: 'white', border: 'none', borderRadius: '30px',
+        padding: '10px 20px', fontWeight: '700', fontSize: '13px', cursor: 'pointer'
+      }}>{btnText}</button>
+      <button onClick={onDismiss} style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#999' }}>&times;</button>
+    </div>
+    <style jsx global>{`@keyframes slideUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }`}</style>
+  </div>
+);
+
+const IOSPopup = ({ onClose }) => (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: '20px'
+  }} onClick={onClose}>
+    <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '20px', width: '90%', maxWidth: '400px', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+      <h3>Install App</h3>
+      <p>1. Tap <strong>Share</strong> ⍐<br/>2. Tap <strong>Add to Home Screen</strong> ⊞</p>
+      <button onClick={onClose} style={{ marginTop: '10px', padding: '10px 20px', border: 'none', background: '#eee', borderRadius: '10px' }}>Close</button>
+    </div>
+  </div>
+);
+
+export default function App(props) {
+  return (
+    <AuthProvider>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="manifest" href="/manifest.json" />
+      </Head>
+      <AppContent {...props} />
+    </AuthProvider>
   );
 }

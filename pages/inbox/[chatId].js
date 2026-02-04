@@ -1,3 +1,4 @@
+// inbox/[chatId].js
 "use client";  // For client-side FCM
 
 import { useState, useEffect } from "react";
@@ -8,8 +9,9 @@ import ChatInput from "../../lib/chat/ChatInput";
 import ChatHeader from "../../lib/chat/ChatHeader";
 import { listenMessages, sendMessage, uploadMedia } from "../../lib/chat/";
 import { messaging } from "../../lib/firebase";  // Import from lib/firebase.js
-import { getToken, onMessage } from "firebase/messaging";
+import { onMessage } from "firebase/messaging";
 import { db } from "../../lib/firebase";  // For Firestore
+import { getFunctions, httpsCallable } from "firebase/functions"; // Added for Cloud Functions
 
 import {
   doc,
@@ -47,38 +49,21 @@ export default function PrivateChat() {
   const [toast, setToast] = useState(null);  // For foreground notifications
   const [isTyping, setIsTyping] = useState(false);  // Typing indicator
 
-  // FCM Setup with Error Handling
+  // CLEANED UP FCM: Only listen for foreground messages
   useEffect(() => {
     if (!user) return;
 
-    const setupFCM = async () => {
-      try {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          const token = await getToken(messaging, { vapidKey: 'YOUR_VAPID_KEY' });  // From Firebase Console
-          if (token) {
-            await fetch('/api/save-token', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${await user.getIdToken()}`,
-              },
-              body: JSON.stringify({ token }),
-            });
-          }
-        }
-
-        onMessage(messaging, (payload) => {
-          setToast(payload.notification?.body || 'New message!');
-          setTimeout(() => setToast(null), 5000);
-        });
-      } catch (err) {
-        console.error('FCM setup error:', err);
+    // We no longer request permission here. We just listen.
+    const unsubscribe = onMessage(messaging, (payload) => {
+      // If we are NOT currently looking at the chat that sent the message
+      if (payload.data?.chatId !== chatId) {
+        setToast(payload.notification?.body || 'New message!');
+        setTimeout(() => setToast(null), 5000);
       }
-    };
+    });
 
-    setupFCM();
-  }, [user]);
+    return () => unsubscribe();
+  }, [user, chatId]);
 
   // LOAD CHAT + USER (with Typing Listener)
   useEffect(() => {
@@ -206,6 +191,16 @@ export default function PrivateChat() {
           },
           { merge: true }
         );
+
+        // Send push notification via Cloud Function
+        const functions = getFunctions();
+        const sendNotif = httpsCallable(functions, 'sendMessageNotification');
+        await sendNotif({
+          recipientId: otherUserId,
+          senderName: user.displayName || 'Someone',
+          messageText: text || 'You have a new image!',
+          chatId,
+        });
       }
 
       setReplyingTo(null);
