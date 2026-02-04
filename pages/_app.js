@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import Head from 'next/head';
+import Head from 'next/head'; // <--- This was missing
 import Script from 'next/script';
 import { AuthProvider } from '../contexts/AuthContext';
 import '../styles/globals.css';
@@ -12,22 +12,17 @@ export default function App({ Component, pageProps }) {
 
   useEffect(() => {
     // --- TRACKING: Check if App is Installed (Running in Standalone Mode) ---
-    // This detects if the user has ALREADY installed it and is opening it from Home Screen
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
     
     if (isStandalone) {
-      // Check if we've already logged this install to avoid duplicates
       const hasLoggedInstall = localStorage.getItem('pwa_install_logged');
-      
       if (!hasLoggedInstall) {
-        // Send "Success" event to Google Analytics
         if (typeof window.gtag === 'function') {
           window.gtag('event', 'pwa_install_success', {
             event_category: 'engagement',
             event_label: 'User opened installed app for first time'
           });
         }
-        // Mark as logged so we don't count it every time they open the app
         localStorage.setItem('pwa_install_logged', 'true');
       }
     }
@@ -52,7 +47,6 @@ export default function App({ Component, pageProps }) {
     const handleBeforeInstallPrompt = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Only show button if not already installed (standalone check)
       if (!isStandalone) setShowInstallButton(true);
     };
 
@@ -69,7 +63,6 @@ export default function App({ Component, pageProps }) {
   }, []);
 
   const handleInstallClick = async () => {
-    // TRACKING: User clicked the main button (Intent)
     if (typeof window.gtag === 'function') {
       window.gtag('event', 'pwa_install_click', {
         event_category: 'engagement',
@@ -82,12 +75,11 @@ export default function App({ Component, pageProps }) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       
-      // TRACKING: Did they actually click "Install" or "Cancel" in the native popup?
       console.log('PWA install outcome:', outcome);
       if (typeof window.gtag === 'function') {
         window.gtag('event', 'pwa_android_prompt_response', {
           event_category: 'engagement',
-          event_label: outcome // will be 'accepted' or 'dismissed'
+          event_label: outcome
         });
       }
 
@@ -97,7 +89,6 @@ export default function App({ Component, pageProps }) {
     // IOS LOGIC
     else if (isIOS) {
       setShowIOSInstructions(true);
-      // TRACKING: User opened the iOS instruction modal
       if (typeof window.gtag === 'function') {
         window.gtag('event', 'pwa_ios_instructions_view', {
           event_category: 'engagement',
@@ -105,6 +96,10 @@ export default function App({ Component, pageProps }) {
         });
       }
     }
+  };
+
+  const handleDismiss = () => {
+    setShowInstallButton(false);
   };
 
   return (
@@ -117,8 +112,15 @@ export default function App({ Component, pageProps }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#FFC0CB" />
+        <meta name="theme-color" content="#ff4785" />
       </Head>
+
+      <style jsx global>{`
+        @keyframes slideUpBanner {
+          from { transform: translate(-50%, 100%); opacity: 0; }
+          to { transform: translate(-50%, 0); opacity: 1; }
+        }
+      `}</style>
 
       <Script
         src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
@@ -134,47 +136,106 @@ export default function App({ Component, pageProps }) {
       </Script>
 
       <AuthProvider>
+        {/* --- MODERN INSTALL BANNER --- */}
         {showInstallButton && (
-          <button
-            onClick={handleInstallClick}
+          <div
             style={{
               position: 'fixed',
-              bottom: '24px',
-              right: '24px',
-              zIndex: 9998,
+              bottom: '20px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 9999,
+              width: '90%',
+              maxWidth: '420px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
-              padding: '12px 20px',
-              backgroundColor: '#ff69b4',
-              color: 'white',
-              border: 'none',
-              borderRadius: '50px',
-              boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontFamily: 'system-ui, -apple-system, sans-serif',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              gap: '15px',
+              backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              border: '1px solid rgba(255, 255, 255, 0.6)',
+              borderRadius: '20px',
+              boxShadow: '0 20px 40px -10px rgba(255, 71, 133, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              animation: 'slideUpBanner 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
             }}
           >
-            <span style={{ fontSize: '20px' }}>📱</span>
-            <span>Download App</span>
-          </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <div style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '12px',
+                background: 'linear-gradient(135deg, #fff0f3, #ffe3e3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '24px',
+                boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
+              }}>
+                📱
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontWeight: '800', fontSize: '15px', color: '#2d3436', letterSpacing: '-0.5px' }}>
+                  Install App
+                </span>
+                <span style={{ fontSize: '12px', color: '#636e72', fontWeight: '500' }}>
+                  Faster & better experience
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button
+                onClick={handleInstallClick}
+                style={{
+                  background: 'linear-gradient(45deg, #ff4785, #9b5de5)', 
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '30px',
+                  padding: '10px 20px',
+                  fontWeight: '700',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 15px rgba(255, 71, 133, 0.4)',
+                  whiteSpace: 'nowrap'
+                }}
+              >
+                Get App
+              </button>
+              
+              <button
+                onClick={handleDismiss}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#b2bec3',
+                  fontSize: '22px',
+                  lineHeight: '1',
+                  cursor: 'pointer',
+                  padding: '5px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+              >
+                &times;
+              </button>
+            </div>
+          </div>
         )}
 
+        {/* --- IOS INSTRUCTIONS --- */}
         {showIOSInstructions && (
           <div 
             style={{
               position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100%',
-              height: '100%',
-              backgroundColor: 'rgba(0,0,0,0.6)',
+              top: 0, left: 0, width: '100%', height: '100%',
+              backgroundColor: 'rgba(45, 52, 54, 0.7)',
+              backdropFilter: 'blur(5px)',
               zIndex: 9999,
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'flex-end',
-              paddingBottom: '20px'
+              display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: '20px'
             }}
             onClick={() => setShowIOSInstructions(false)}
           >
