@@ -122,6 +122,16 @@ export default function Inbox() {
     }
   };
 
+  // ✅ Handle chat click: Mark as read then navigate
+  const handleChatClick = async (chatId) => {
+    const db = getFirestore();
+    const chatRef = doc(db, "privateChats", chatId);
+    await updateDoc(chatRef, {
+      [`unreadCounts.${user.uid}`]: 0
+    });
+    router.push(`/inbox/${chatId}`);
+  };
+
   if (!user) return <div>Please log in to view your inbox.</div>;
 
   return (
@@ -157,7 +167,7 @@ export default function Inbox() {
           <div
             key={chat.id}
             className={styles.chatRow}
-            onClick={() => router.push(`/inbox/${chat.id}`)}
+            onClick={() => handleChatClick(chat.id)}
           >
             {/* Avatar */}
             <Image
