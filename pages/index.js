@@ -7,8 +7,8 @@ import * as counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendPasswordResetEmail } from 'firebase/auth';
+import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { createOrGetChat } from '../lib/chat'; // Import the chat utility
 
 /**
@@ -80,9 +80,9 @@ const sortProfiles = (profiles) => {
   return [...premium, ...regular];
 };
 
-export default function Home() {
+export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
-  const [allProfiles, setAllProfiles] = useState([]);
+  const [allProfiles, setAllProfiles] = useState(initialProfiles);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState('');
   const [user, setUser] = useState(null);
@@ -184,33 +184,36 @@ export default function Home() {
     return unsubscribe;
   }, []);
 
-  // Real-time profiles (client-side only)
+  // Real-time profiles
   useEffect(() => {
-    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
-    unsubscribeRef.current = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
-      const profilesWithEffective = data.map(p => {
-        let effective = p.membership || 'Regular';
-        if (p.membershipExpiresAt) {
-          const expiresAt = new Date(p.membershipExpiresAt);
-          if (expiresAt < new Date()) {
-            effective = 'Regular';
+    const timer = setTimeout(() => {
+      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
+      unsubscribeRef.current = onSnapshot(q, (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
+        const profilesWithEffective = data.map(p => {
+          let effective = p.membership || 'Regular';
+          if (p.membershipExpiresAt) {
+            const expiresAt = new Date(p.membershipExpiresAt);
+            if (expiresAt < new Date()) {
+              effective = 'Regular';
+            }
           }
-        }
-        return { ...p, effectiveMembership: effective };
+          return { ...p, effectiveMembership: effective };
+        });
+        const validProfiles = profilesWithEffective.filter(p => 
+          isProfileComplete(p) && 
+          p.active !== false && 
+          p.hidden !== true
+        );
+        setAllProfiles(sortProfiles(validProfiles));
+        setError(null);
+      }, (err) => {
+        console.error('Snapshot error:', err);
+        setError('Failed to load profiles in real-time. Please refresh.');
       });
-      const validProfiles = profilesWithEffective.filter(p => 
-        isProfileComplete(p) && 
-        p.active !== false && 
-        p.hidden !== true
-      );
-      setAllProfiles(sortProfiles(validProfiles));
-      setError(null);
-    }, (err) => {
-      console.error('Snapshot error:', err);
-      setError('Failed to load profiles in real-time. Please refresh.');
-    });
+    }, 1000);
     return () => {
+      clearTimeout(timer);
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);
@@ -809,4 +812,32 @@ export default function Home() {
       </footer>
     </div>
   );
+}
+
+export async function getStaticProps() {
+  let initialProfiles = [];
+  try {
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    let profiles = snapshot.docs
+      .map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }))
+      .filter(p => isProfileComplete(p) && p.active !== false && p.hidden !== true);
+    const profilesWithEffective = profiles.map(p => {
+      let effective = p.membership || 'Regular';
+      if (p.membershipExpiresAt) {
+        const expiresAt = new Date(p.membershipExpiresAt);
+        if (expiresAt < new Date()) {
+          effective = 'Regular';
+        }
+      }
+      return { ...p, effectiveMembership: effective };
+    });
+    initialProfiles = sortProfiles(profilesWithEffective);
+  } catch (err) {
+    console.error('Error fetching homepage profiles:', err);
+  }
+  return {
+    props: { initialProfiles },
+    revalidate: 60,
+  };
 }

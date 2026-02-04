@@ -10,26 +10,25 @@ export default function App({ Component, pageProps }) {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/firebase-messaging-sw.js')
+        .then(reg => {
+          console.log('SW registered successfully:', reg);
+          reg.update();
+        })
+        .catch(err => console.error('SW registration failed:', err));
+
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
-          .then(reg => {
-            console.log('Service Worker registered:', reg);
-            reg.update();
-          })
+          .then(reg => console.log('Service Worker registered:', reg))
           .catch(err => console.error('Registration failed:', err));
       });
     }
 
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isIOS) {
-      setShowInstallButton(false);
-    } else {
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        setDeferredPrompt(e);
-        setShowInstallButton(true);
-      });
-    }
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallButton(true);
+    });
   }, []);
 
   const handleInstallClick = async () => {
@@ -73,7 +72,7 @@ export default function App({ Component, pageProps }) {
             onClick={handleInstallClick} 
             style={{ 
               position: 'fixed', 
-              bottom: '80px', 
+              bottom: '20px', 
               right: '20px', 
               padding: '10px 15px', 
               background: '#ff69b4', 
