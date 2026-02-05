@@ -1,8 +1,10 @@
 // _app.js
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
+import Script from 'next/script'; // For GA
+import { useRouter } from 'next/router'; // For route tracking
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { getMessaging, getToken, onMessage } from "firebase/messaging"; // Added onMessage import
+import { getMessaging, getToken, onMessage } from "firebase/messaging";
 import { getFirestore, doc, setDoc, arrayUnion } from "firebase/firestore";
 import { app } from "../lib/firebase";
 import '../styles/globals.css';
@@ -15,6 +17,7 @@ const AppContent = ({ Component, pageProps }) => {
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     // 1. Service Worker Registration
@@ -73,6 +76,22 @@ const AppContent = ({ Component, pageProps }) => {
         console.error('Error setting up foreground messaging:', err);
       }
     }
+  }, []);
+
+  // --- GA ROUTE TRACKING ---
+  useEffect(() => {
+    const handleRouteChange = (url) => {
+      if (window.gtag) {
+        window.gtag('config', 'G-XXXXXXXXXX', {
+          page_path: url,
+        });
+      }
+    };
+
+    handleRouteChange(window.location.pathname);
+
+    router.events.on('routeChangeComplete', handleRouteChange);
+    return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, []);
 
   const handleInstallClick = async () => {
@@ -141,7 +160,7 @@ const AppContent = ({ Component, pageProps }) => {
             border: '1px solid rgba(255, 255, 255, 0.6)',
             borderRadius: '20px',
             boxShadow: '0 20px 40px -10px rgba(255, 71, 133, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            animation: 'slideUpBanner 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+            animation: 'slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards', // Renamed to match Banner's keyframes
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           }}
         >
@@ -273,14 +292,32 @@ const IOSPopup = ({ onClose }) => (
   </div>
 );
 
-export default function App(props) {
+export default function App({ Component, pageProps }) {
   return (
     <AuthProvider>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="manifest" href="/manifest.json" />
       </Head>
-      <AppContent {...props} />
+
+      {/* Google Analytics */}
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"
+        strategy="afterInteractive"
+      />
+      <Script id="ga-init" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          window.gtag = gtag;
+          gtag('js', new Date());
+          gtag('config', 'G-XXXXXXXXXX', {
+            send_page_view: false
+          });
+        `}
+      </Script>
+
+      <AppContent Component={Component} pageProps={pageProps} />
     </AuthProvider>
   );
 }
