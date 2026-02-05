@@ -3,7 +3,7 @@ const admin = require('firebase-admin');
 admin.initializeApp();
 
 exports.sendChatNotification = functions.firestore
-  .document('privateChats/{chatId}/messages/{messageId}')
+  .document('inbox/{chatId}/messages/{messageId}')
   .onCreate(async (snap, context) => {
     const messageData = snap.data();
     const chatId = context.params.chatId;
