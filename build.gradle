@@ -1,0 +1,28 @@
+plugins {
+    id 'com.android.application'
+    // Add this line for Firebase
+    id 'com.google.gms.google-services'
+}
+
+android {
+    // Your existing config (e.g., compileSdk, minSdk)
+}
+
+dependencies {
+    // Use BOM to manage Firebase versions automatically
+    implementation platform('com.google.firebase:firebase-bom:33.5.1')
+
+    // Core Analytics SDK (tracks app opens, sessions, etc. automatically)
+    implementation 'com.google.firebase:firebase-analytics'
+
+    // Optional: For push notifications (integrates with your web FCM setup)
+    implementation 'com.google.firebase:firebase-messaging'
+
+    // Optional: For Firestore (e.g., to sync chats/profiles from your web database)
+    implementation 'com.google.firebase:firebase-firestore'
+
+    // Optional: For user authentication (if matching web auth)
+    implementation 'com.google.firebase:firebase-auth'
+
+    // Your other dependencies...
+}
