@@ -102,6 +102,7 @@ export default function Home({ initialProfiles = [] }) {
   const [registerForm, setRegisterForm] = useState({ name: '' });
   const [loginLoading, setLoginLoading] = useState(false);
   const [forgotPasswordMode, setForgotPasswordMode] = useState(false);
+  const [showEmailForm, setShowEmailForm] = useState(false); // New state for showing email form
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState('');
@@ -525,6 +526,7 @@ export default function Home({ initialProfiles = [] }) {
     setPendingAction(null);
     setProtectedFeature('');
     setForgotPasswordMode(false);
+    setShowEmailForm(false); // Reset email form state
     setForgotEmail('');
     setForgotMessage('');
   };
@@ -539,6 +541,7 @@ export default function Home({ initialProfiles = [] }) {
         setPendingAction(null);
         setProtectedFeature('');
         setForgotPasswordMode(false);
+        setShowEmailForm(false);
       }
     };
     document.addEventListener('keydown', handler);
@@ -769,12 +772,23 @@ export default function Home({ initialProfiles = [] }) {
                 Please login to access {protectedFeature}
               </p>
             )}
-            {!forgotPasswordMode ? (
-              <>
-                <button onClick={handleGoogleAuth} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                  {loginLoading ? 'Authenticating...' : 'Continue with Google'}
+            {forgotPasswordMode ? (
+              <form onSubmit={handleForgotPassword}>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                  <input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required disabled={forgotLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+                {forgotMessage && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{forgotMessage}</p>}
+                <button type="submit" disabled={forgotLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: forgotLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !forgotLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !forgotLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
                 </button>
-                <p style={{ margin: '10px 0', color: '#666' }}>or</p>
+                <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+                  <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(false)}>Back to Login</span>
+                </div>
+              </form>
+            ) : showEmailForm ? (
+              <>
                 <form onSubmit={handleLogin}>
                   <div style={{ marginBottom: '20px', textAlign: 'left' }}>
                     <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
@@ -792,25 +806,24 @@ export default function Home({ initialProfiles = [] }) {
                     <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(true)}>Forgot Password?</span>
                   </div>
                   <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                    Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>Create New Account</span>
+                    <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setShowEmailForm(false)}>Back</span>
                   </div>
                 </form>
               </>
             ) : (
-              <form onSubmit={handleForgotPassword}>
-                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                  <input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required disabled={forgotLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-                </div>
-                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-                {forgotMessage && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{forgotMessage}</p>}
-                <button type="submit" disabled={forgotLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: forgotLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !forgotLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !forgotLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+              <>
+                <button onClick={handleGoogleAuth} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                  {loginLoading ? 'Authenticating...' : 'Continue with Google'}
                 </button>
+                <p style={{ margin: '10px 0', color: '#666' }}>or</p>
+                <button onClick={() => setShowEmailForm(true)} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                  Continue with Email
+                </button>
+                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
                 <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                  <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(false)}>Back to Login</span>
+                  Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>Create New Account</span>
                 </div>
-              </form>
+              </>
             )}
           </div>
         </div>
