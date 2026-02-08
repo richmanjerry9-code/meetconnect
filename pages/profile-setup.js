@@ -50,6 +50,9 @@ export default function ProfileSetup() {
   const [paymentStatus, setPaymentStatus] = useState('idle'); // 'idle', 'initiated', 'processing', 'failed'
   const [checkoutRequestID, setCheckoutRequestID] = useState(null);
   const pollingInterval = useRef(null);
+  // Receipt modal
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receipt, setReceipt] = useState(null);
   // Deactivation modal
   const [showDeactivationModal, setShowDeactivationModal] = useState(false);
   // Membership modals & payment
@@ -102,6 +105,7 @@ export default function ProfileSetup() {
   // Guards for snapshot writes
   const didBackfillCreatedAt = useRef(false);
   const didHandleExpiry = useRef(false);
+
   // ----------------------------
   // Lifecycle: load profile & subscriptions
   // ----------------------------
@@ -259,6 +263,24 @@ export default function ProfileSetup() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  // ----------------------------
+  // Receipt Helper
+  // ----------------------------
+  const showPaymentReceipt = (receiptData) => {
+    setReceipt(receiptData);
+    setShowReceiptModal(true);
+
+    if (loggedInUser) {
+      setDoc(doc(collection(db, 'receipts'), `rec_${Date.now()}`), {
+        userId: loggedInUser.id,
+        username: loggedInUser.username,
+        ...receiptData,
+        createdAt: serverTimestamp(),
+      }).catch(console.error);
+    }
+  };
+
   // ----------------------------
   // Polling for payment status
   // ----------------------------
@@ -273,8 +295,29 @@ export default function ProfileSetup() {
             setPaymentStatus('idle');
             clearInterval(pollingInterval.current);
             setShowActivationModal(false);
-            alert('Your account is now live. You also got a 7 day prime deal.');
-            router.push('/');
+
+            const receiptData = {
+              type: 'activation',
+              title: 'Account Activation Receipt',
+              membership: 'Prime',
+              duration: '7 Days (Welcome Bonus) + Lifetime Visibility',
+              amount: ACTIVATION_FEE,
+              date: new Date().toLocaleString('en-KE', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+              reference: `ACT-${shortenUserId(loggedInUser?.id || '').toUpperCase()}`,
+              phone: mpesaPhone || formData.phone,
+              paymentMethod: 'M-Pesa',
+              status: 'Payment Successful',
+              message: 'Thank you! Your profile is now visible to all users. You have also received 7 days Prime membership as a welcome bonus.'
+            };
+
+            showPaymentReceipt(receiptData);
           } else if (data.ResultCode !== '4999') {
             // Failure (not processing)
             setPaymentStatus('failed');
@@ -292,7 +335,8 @@ export default function ProfileSetup() {
 
       return () => clearInterval(pollingInterval.current);
     }
-  }, [paymentStatus, checkoutRequestID, router]);
+  }, [paymentStatus, checkoutRequestID, router, mpesaPhone, formData.phone]);
+
   // ----------------------------
   // Helpers
   // ----------------------------
@@ -672,8 +716,29 @@ export default function ProfileSetup() {
       if (!res.ok) {
         throw new Error(data.error || 'Upgrade failed');
       }
-      alert('Upgrade successful!');
-      window.location.reload();
+
+      const receiptData = {
+        type: 'upgrade',
+        title: 'Membership Upgrade Receipt',
+        membership: selectedLevel,
+        duration: selectedDuration,
+        amount: price,
+        date: new Date().toLocaleString('en-KE', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        reference: `UPG-${shortenUserId(loggedInUser.id)}-${selectedLevel.slice(0, 3).toUpperCase()}`,
+        phone: 'Funding Wallet',
+        paymentMethod: 'Wallet',
+        status: 'Payment Successful',
+        message: `Congratulations! You are now a ${selectedLevel} member for ${selectedDuration}.`
+      };
+
+      showPaymentReceipt(receiptData);
     } catch (err) {
       alert(err.message);
       setUpgradeLocked(false);
@@ -1158,6 +1223,31 @@ export default function ProfileSetup() {
                   apiEndpoint="/api/stkpush"
                   onInitiated={() => setUpgradeLocked(true)}
                   onFailure={() => setUpgradeLocked(false)}
+                  onSuccess={() => {
+                    const price = plans[selectedLevel][selectedDuration];
+                    const receiptData = {
+                      type: 'upgrade',
+                      title: 'Membership Upgrade Receipt',
+                      membership: selectedLevel,
+                      duration: selectedDuration,
+                      amount: price,
+                      date: new Date().toLocaleString('en-KE', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                      reference: `UPG-${shortenUserId(loggedInUser.id)}-${selectedLevel.slice(0, 3).toUpperCase()}`,
+                      phone: mpesaPhone,
+                      paymentMethod: 'M-Pesa',
+                      status: 'Payment Successful',
+                      message: `Congratulations! You are now a ${selectedLevel} member for ${selectedDuration}.`
+                    };
+                    showPaymentReceipt(receiptData);
+                    setShowPaymentChoice(false);
+                  }}
                   additionalBody={{
                     userId: loggedInUser.id,
                     type: 'upgrade',
@@ -1457,6 +1547,76 @@ export default function ProfileSetup() {
           <div className={styles.inappropriateBanner}>
             <p>Inappropriate content detected. Use exclusive or change image.</p>
             <button onClick={() => setShowInappropriateBanner(false)}>Dismiss</button>
+          </div>
+        )}
+
+        {/* Professional Receipt Modal */}
+        {showReceiptModal && receipt && (
+          <div className={styles.modal}>
+            <div className={styles.receiptModalContent}>
+              <div className={styles.receiptHeader}>
+                <h2>✅ Payment Receipt</h2>
+                <p className={styles.receiptCompany}>Meet Connect</p>
+                <p className={styles.receiptTagline}>Official Transaction Receipt</p>
+              </div>
+
+              <div className={styles.receiptBody}>
+                <div className={styles.receiptRow}>
+                  <span>Transaction ID</span>
+                  <span className={styles.mono}>{receipt.reference}</span>
+                </div>
+                <div className={styles.receiptRow}>
+                  <span>Date & Time</span>
+                  <span>{receipt.date}</span>
+                </div>
+                <div className={styles.receiptRow}>
+                  <span>Payment Method</span>
+                  <span>{receipt.paymentMethod}</span>
+                </div>
+                <div className={styles.receiptRow}>
+                  <span>Phone / Wallet</span>
+                  <span>{receipt.phone}</span>
+                </div>
+
+                <div className={styles.receiptDivider} />
+
+                <div className={styles.receiptItem}>
+                  <div>
+                    <strong>{receipt.title}</strong><br />
+                    <span className={styles.membershipInfo}>
+                      {receipt.membership} • {receipt.duration}
+                    </span>
+                  </div>
+                  <div className={styles.amount}>
+                    KSh {receipt.amount.toLocaleString()}
+                  </div>
+                </div>
+
+                <div className={styles.receiptTotal}>
+                  <span>Total Paid</span>
+                  <span className={styles.totalAmount}>KSh {receipt.amount.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <p className={styles.receiptMessage}>{receipt.message}</p>
+
+              <div className={styles.receiptFooter}>
+                <p>Thank you for choosing <strong>Meet Connect</strong></p>
+                <p className={styles.small}>This is a computer-generated receipt. No signature required.</p>
+              </div>
+
+              <div className={styles.receiptActions}>
+                <button 
+                  onClick={() => {
+                    setShowReceiptModal(false);
+                    router.push('/');
+                  }}
+                  className={styles.button}
+                >
+                  Continue to Homepage
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </main>

@@ -1,6 +1,6 @@
 // pages/api/callback.js
 import { adminDb } from '@/lib/firebaseAdmin';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       }
 
       if (pending.type === 'activation') {
-        const sevenDaysFromNow = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        const sevenDaysFromNow = Timestamp.fromDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
         await userRef.update({
           activationPaid: true,
           hidden: false,
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       } else if (pending.type === 'upgrade') {
         const daysMap = { '3 Days': 3, '7 Days': 7, '15 Days': 15, '30 Days': 30 };
         const days = daysMap[pending.duration] || 0;
-        const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+        const expiresAt = Timestamp.fromDate(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
         await userRef.update({
           membership: pending.level,
           membershipExpiresAt: expiresAt,
@@ -57,20 +57,38 @@ export default async function handler(req, res) {
           fundingBalance: FieldValue.increment(pending.amount),
         });
       } else if (pending.type === 'subscription') {
-        // ... (your existing subscription logic)
+        const days = pending.durationDays || 0;
+        const expiresAt = Timestamp.fromDate(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
+        const subId = `${pending.userId}_${pending.creatorId}`;
+        await adminDb.collection('subscriptions').doc(subId).set({
+          userId: pending.userId,
+          creatorId: pending.creatorId,
+          amount: pending.amount,
+          durationDays: days,
+          expiresAt,
+          updatedAt: Timestamp.now(),
+          mpesaReceipt,
+          transactionDate,
+        }, { merge: true });
+
+        const creatorRef = adminDb.collection('profiles').doc(pending.creatorId);
+        const earnings = Math.floor(pending.amount * 0.8);
+        await creatorRef.update({
+          earningsBalance: FieldValue.increment(earnings),
+        });
       }
 
       await pendingRef.update({
         status: 'completed',
         mpesaReceipt,
         transactionDate,
-        updatedAt: new Date(),
+        updatedAt: Timestamp.now(),
       });
     } else {
       await pendingRef.update({
         status: 'failed',
         resultDesc: callbackData.ResultDesc,
-        updatedAt: new Date(),
+        updatedAt: Timestamp.now(),
       });
     }
 
