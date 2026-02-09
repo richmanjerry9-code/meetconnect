@@ -1,363 +1,332 @@
+/* ====================== ROOT & CONTAINER ====================== */
 .container {
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif;
-  background-color: var(--background);
-  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background: linear-gradient(135deg, #fff0f5, #ffe4f0);
+  color: #333;
+  padding-bottom: 80px;
 }
 
 .main {
-  max-width: 900px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 1.2rem 1rem;
 }
 
 @media (min-width: 769px) {
-  .main { padding: 2.5rem; }
+  .main {
+    padding: 2.5rem 1.5rem;
+  }
 }
 
-/* Header */
+/* ====================== HEADER ====================== */
 .header {
   text-align: center;
-  margin-bottom: 1.8rem;
+  margin-bottom: 2rem;
+  position: relative;
 }
 
 .picWrapper {
   position: relative;
   display: inline-block;
+  margin-bottom: 1rem;
 }
 
 .profilePic {
-  width: 150px;
-  height: 150px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   object-fit: cover;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  border: 6px solid white;
+  box-shadow: 0 10px 30px rgba(245, 0, 87, 0.25);
+  transition: transform 0.4s ease;
+}
+
+.profilePic:hover {
+  transform: scale(1.04);
 }
 
 @media (min-width: 769px) {
-  .profilePic { width: 180px; height: 180px; }
+  .profilePic {
+    width: 190px;
+    height: 190px;
+  }
 }
 
 .verifiedBadge {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
-  background-color: #f50057;
+  bottom: 12px;
+  right: 12px;
+  background: linear-gradient(135deg, #f50057, #ff4081);
   color: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(245, 0, 87, 0.4);
 }
 
+/* Name & Title */
 .name {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin: 0.8rem 0 0.2rem;
-  color: var(--foreground);
+  font-size: 2.1rem;
+  font-weight: 800;
+  margin: 0.6rem 0 0.3rem;
+  background: linear-gradient(90deg, #f50057, #ff69b4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .username {
-  font-size: 1rem;
-  color: #999;
+  font-size: 1.05rem;
+  color: #888;
+  margin: 0;
 }
 
-/* About Card – smaller text */
+/* ====================== INFO CARD ====================== */
 .infoCard {
-  background: rgba(255,255,255,0.05);
-  padding: 1.3rem;
-  border-radius: 14px;
-  margin-bottom: 1.3rem;
+  background: white;
+  padding: 1.6rem;
+  border-radius: 20px;
+  margin-bottom: 1.6rem;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.06);
+  border: 1px solid #ffe4f0;
 }
 
 .infoCard h3 {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   color: #f50057;
-  margin-bottom: 0.8rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
 }
 
 .infoCard p {
-  font-size: 0.95rem;
-  margin: 0.5rem 0;
-  color: var(--foreground);
+  font-size: 1rem;
+  margin: 0.65rem 0;
+  color: #444;
+  line-height: 1.5;
 }
 
-/* Area – smaller & centered */
-.centeredArea {
-  text-align: center;
-  margin: 1.5rem 0 1.2rem;
-}
-
-.centeredArea h2 {
-  font-size: 1.7rem;
-  font-weight: 700;
-  margin: 0;
-  color: var(--foreground);
-}
-
-/* Pink Labels – smaller */
+/* Nearby Areas */
 .pinkLabel {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.15rem;
+  font-weight: 700;
   color: #f50057;
-  margin: 1.6rem 0 0.6rem 0.5rem;
+  margin: 2rem 0 0.8rem 0.5rem;
 }
 
-/* Tags – smaller & cleaner */
 .tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   padding: 0 0.5rem;
-  margin-bottom: 1.2rem;
 }
 
 .tag {
-  background: rgba(245,0,87,0.1);
+  background: #fff0f5;
   color: #f50057;
-  padding: 6px 12px;
-  border-radius: 16px;
-  font-size: 0.88rem;
-  font-weight: 500;
-  border: 1px solid rgba(245,0,87,0.3);
+  padding: 8px 16px;
+  border-radius: 30px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  border: 1px solid #ffc1e0;
 }
 
-/* CALL BUTTON – smaller, elegant, shows number */
+/* ====================== CALL BUTTON ====================== */
 .callButtonContainer {
   text-align: center;
-  margin: 1.8rem 0 1.8rem;
+  margin: 2rem 0;
 }
 
 .callButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  background-color: #f50057;
+  gap: 10px;
+  background: linear-gradient(135deg, #f50057, #ff69b4);
   color: white;
-  font-size: 1.15rem;
-  font-weight: 600;
-  padding: 12px 28px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 14px 32px;
   border-radius: 50px;
   text-decoration: none;
-  box-shadow: 0 5px 15px rgba(245,0,87,0.3);
+  box-shadow: 0 8px 20px rgba(245, 0, 87, 0.35);
   transition: all 0.3s ease;
 }
 
 .callButton:hover {
-  background-color: #d4004a;
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 28px rgba(245, 0, 87, 0.45);
 }
 
-.callButton::before {
-  content: none !important;
-}
-
-
-/* Tabs */
+/* ====================== TABS ====================== */
 .tabButtons {
   display: flex;
   justify-content: center;
-  gap: 1rem;
-  margin: 1.5rem 0 2rem;
+  gap: 12px;
+  margin: 2rem 0 2.2rem;
+  flex-wrap: wrap;
 }
 
 .tabButtons button {
-  padding: 0.7rem 1.6rem;
-  background: rgba(0,0,0,0.05);
-  color: var(--foreground);
-  border: none;
+  padding: 12px 28px;
+  background: white;
+  color: #555;
+  border: 2px solid #ffe4f0;
   border-radius: 30px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 1.05rem;
   font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.tabButtons button:hover {
+  background: #fff0f5;
+  border-color: #f50057;
 }
 
 .activeTab {
-  background: #f50057 !important;
+  background: linear-gradient(135deg, #f50057, #ff69b4) !important;
   color: white !important;
+  border-color: #f50057 !important;
+  box-shadow: 0 6px 18px rgba(245, 0, 87, 0.3);
 }
 
-/* Feed */
+/* ====================== FEED ====================== */
 .feed {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.6rem;
 }
 
 @media (max-width: 768px) {
-  .feed { grid-template-columns: 1fr; }
+  .feed {
+    grid-template-columns: 1fr;
+    gap: 1.2rem;
+  }
 }
 
 .postItem {
-  border-radius: 14px;
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
   position: relative;
+  aspect-ratio: 1 / 1;
+  background: #f8f8f8;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .postItem:hover {
-  transform: scale(1.02);
-  transition: 0.3s;
+  transform: translateY(-6px);
+  box-shadow: 0 12px 30px rgba(245, 0, 87, 0.18);
 }
 
-.blurred { filter: blur(8px); }
+.postItem img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.blurred {
+  filter: blur(10px) brightness(0.85);
+}
 
 .lockOverlay {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(0,0,0,0.8);
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
   color: white;
-  padding: 1rem 1.8rem;
-  border-radius: 10px;
-  font-size: 1rem;
-  font-weight: 600;
-  border: 2px solid #f50057;
+  font-weight: 700;
+  font-size: 1.1rem;
   text-align: center;
+  padding: 1rem;
 }
 
 .lockOverlay div {
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  margin-top: 8px;
+  opacity: 0.9;
 }
 
-.loading, .notFound {
-  text-align: center;
-  padding: 3rem;
-  font-size: 1.2rem;
-  color: #aaa;
-}
-
-.noPosts {
-  text-align: center;
-  color: #aaa;
-  font-size: 1.2rem;
-  margin: 2rem 0;
-}
-
-/* Payment Modal */
+/* ====================== MODALS ====================== */
 .modalOverlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.7);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 2000;
 }
 
 .modal {
-  background: #ffffff;
-  padding: 2rem;
-  border-radius: 14px;
-  max-width: 600px;
-  width: 90%;
-  color: #000000;
-  text-align: center;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  border: 2px solid #f50057;
+  background: white;
+  padding: 2.2rem;
+  border-radius: 24px;
+  max-width: 520px;
+  width: 92%;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  border: 3px solid #ffe4f0;
 }
 
 .modal h3 {
-  font-size: 1.6rem;
   color: #f50057;
-  margin-bottom: 1.5rem;
-}
-
-.planGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-.planCard {
-  background: #fff0f5;
-  padding: 1.2rem;
-  border-radius: 10px;
-  border: 1px solid #f50057;
-}
-
-.planCard strong {
-  display: block;
-  font-size: 1.2rem;
-  color: #f50057;
-}
-
-.planCard p {
-  font-size: 1.1rem;
-  margin: 0.7rem 0;
-  color: #333333;
-}
-
-.planCard button {
-  background: #f50057;
-  color: white;
-  border: none;
-  padding: 0.6rem 1.2rem;
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: 600;
-  width: 100%;
-  transition: background 0.3s;
-}
-
-.planCard button:hover {
-  background: #d4004a;
-}
-
-.closeButton {
-  background: transparent;
-  color: #f50057;
-  border: 1px solid #f50057;
-  padding: 0.6rem 1.2rem;
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: 600;
-  margin-top: 1rem;
-}
-
-.closeButton:hover {
-  background: #f50057;
-  color: white;
+  font-size: 1.7rem;
+  margin-bottom: 1.8rem;
+  text-align: center;
 }
 
 /* Media Viewer */
 .mediaViewerOverlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0,0,0,0.9);
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 3000;
 }
 
 .mediaViewerContainer {
   position: relative;
-  width: 90%;
-  height: 90%;
-  max-width: 800px;
-  max-height: 800px;
+  width: 94%;
+  max-width: 860px;
+  max-height: 92vh;
 }
 
 .viewerCloseX {
   position: absolute;
-  top: -20px;
-  right: -20px;
-  color: white;
+  top: -18px;
+  right: -18px;
+  background: white;
+  color: #f50057;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 2rem;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
   cursor: pointer;
+  z-index: 10;
 }
 
 .viewerMedia {
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  border-radius: 16px;
+}
+
+/* Loading & Empty States */
+.loading, .notFound, .noPosts {
+  text-align: center;
+  padding: 4rem 1rem;
+  color: #999;
+  font-size: 1.25rem;
 }

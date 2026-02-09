@@ -1,9 +1,9 @@
-// /pages/view-profile/[id].js
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Image from 'next/image';
+import Head from 'next/head';                     // ← Added for font
 import { auth, db } from '../../lib/firebase';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc, arrayUnion } from 'firebase/firestore';
 import {
   onAuthStateChanged,
   signInAnonymously,
@@ -39,7 +39,7 @@ export default function ViewProfile() {
   // Login / Register states
   const [showLogin, setShowLogin] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null); // 'message' | 'subscribe'
+  const [pendingAction, setPendingAction] = useState(null);
   const [loginPrompt, setLoginPrompt] = useState('');
   const [authError, setAuthError] = useState('');
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -52,6 +52,15 @@ export default function ViewProfile() {
     { label: '15 Days', amount: 1999, duration: 15 },
     { label: '30 Days', amount: 4999, duration: 30 }
   ];
+
+  // Create Post states
+  const [showCreatePostModal, setShowCreatePostModal] = useState(false);
+  const [postFiles, setPostFiles] = useState([]);
+  const [postPreviews, setPostPreviews] = useState([]);
+  const [postCaption, setPostCaption] = useState('');
+  const [postIsExclusive, setPostIsExclusive] = useState(false);
+  const [postUploading, setPostUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Auth listener
   useEffect(() => {
@@ -305,6 +314,89 @@ export default function ViewProfile() {
     }
   };
 
+  // Create Post handlers
+  const handlePostFileSelect = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const allowed = files.filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'));
+    const oversize = allowed.find((f) => f.size > 50 * 1024 * 1024);
+    if (oversize) {
+      alert('One of the files exceeds 50MB limit.');
+      return;
+    }
+    const total = postFiles.length + allowed.length;
+    if (total > 10) {
+      alert('Maximum 10 files per post.');
+      return;
+    }
+
+    const newPreviews = allowed.map((f) => URL.createObjectURL(f));
+    setPostFiles((prev) => [...prev, ...allowed]);
+    setPostPreviews((prev) => [...prev, ...newPreviews]);
+  };
+
+  const handleRemovePostPreview = (index) => {
+    setPostPreviews((prev) => {
+      const url = prev[index];
+      if (url) URL.revokeObjectURL(url);
+      return prev.filter((_, i) => i !== index);
+    });
+    setPostFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleCreatePost = async () => {
+    if (postFiles.length === 0) return;
+    setPostUploading(true);
+
+    try {
+      const uploadedUrls = [];
+      for (let i = 0; i < postFiles.length; i++) {
+        const file = postFiles[i];
+        const fd = new FormData();
+        fd.append('media', file);
+        fd.append('userId', id);
+        fd.append('isExclusive', postIsExclusive ? 'true' : 'false');
+        fd.append('caption', postCaption || '');
+
+        const res = await fetch('/api/uploadPost', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (!res.ok || !data.url) {
+          throw new Error(data.error || 'Upload failed');
+        }
+        uploadedUrls.push(data.url);
+      }
+
+      const fieldToUpdate = postIsExclusive ? 'exclusivePics' : 'normalPics';
+
+      await setDoc(
+        doc(db, 'profiles', id),
+        { [fieldToUpdate]: arrayUnion(...uploadedUrls) },
+        { merge: true }
+      );
+
+      const refreshedSnap = await getDoc(doc(db, 'profiles', id));
+      if (refreshedSnap.exists()) {
+        setProfile({ id: refreshedSnap.id, ...refreshedSnap.data() });
+      }
+
+      postPreviews.forEach((u) => URL.revokeObjectURL(u));
+      setPostPreviews([]);
+      setPostFiles([]);
+      setPostCaption('');
+      setPostIsExclusive(false);
+      setShowCreatePostModal(false);
+
+      alert('Post created successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to create post: ' + (err.message || err));
+    } finally {
+      setPostUploading(false);
+    }
+  };
+
   if (loading) return <div className={styles.loading}>Loading profile...</div>;
   if (error) return <div className={styles.notFound}>{error}</div>;
   if (!profile) return <div className={styles.notFound}>Profile not found</div>;
@@ -313,218 +405,344 @@ export default function ViewProfile() {
   const cleanPhone = profile.phone?.replace(/\D/g, '') || '';
   const phoneLink = cleanPhone.startsWith('254') ? cleanPhone : '254' + cleanPhone.replace(/^0/, '');
 
-  // Check if this is the user's own profile (only for authenticated non-anonymous users)
   const isOwnProfile = user && !user.isAnonymous && user.uid === id;
 
   return (
-    <div className={styles.container}>
-      <main className={styles.main}>
-        <div className={styles.backContainer}>
-          <button onClick={() => router.back()} className={styles.backButton}>
-            ← Back
-          </button>
-        </div>
+    <>
+      <Head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
 
-        <div className={styles.header}>
-          <div className={styles.picWrapper}>
-            <Image
-              src={profile.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg=='}
-              alt={profile.name}
-              width={150}
-              height={150}
-              className={styles.profilePic}
-            />
-            {profile.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+      <div className={styles.container}>
+        <main className={styles.main}>
+          <div className={styles.backContainer}>
+            <button onClick={() => router.back()} className={styles.backButton}>
+              ← Back
+            </button>
           </div>
-          <h1 className={styles.name}>{profile.name || 'Anonymous'}</h1>
-          {profile.membership && profile.membership !== 'Regular' && (
-            <span className={`${styles.badge} ${styles[profile.membership.toLowerCase()]}`}>
-              {profile.membership}
-            </span>
+
+          {/* Settings Button - Top Right */}
+          {isOwnProfile && (
+            <button
+              onClick={() => router.push('/profile-setup')}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                zIndex: 100,
+                background: '#ff69b4',
+                color: 'white',
+                border: 'none',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+              }}
+            >
+              ⚙️ Settings
+            </button>
           )}
-        </div>
 
-        <div className={styles.infoCard}>
-          <h3>About</h3>
-          <p><strong>Age:</strong> {profile.age || '—'}</p>
-          <p><strong>Gender:</strong> {profile.gender || '—'}</p>
-          <p><strong>Orientation:</strong> {profile.sexualOrientation || '—'}</p>
-          <p><strong>Nationality:</strong> {profile.nationality || '—'}</p>
-          {profile.area && <p><strong>Area:</strong> {profile.area}</p>}
-          {profile.ward && <p><strong>Ward:</strong> {profile.ward}</p>}
-        </div>
-
-        {nearby.length > 0 && (
-          <>
-            <p className={styles.pinkLabel}>Nearby areas</p>
-            <div className={styles.tags}>
-              {nearby.map((p, i) => <span key={i} className={styles.tag}>{p}</span>)}
+          <div className={styles.header}>
+            <div className={styles.picWrapper}>
+              <Image
+                src={profile.profilePic || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1MCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg=='}
+                alt={profile.name}
+                width={150}
+                height={150}
+                className={styles.profilePic}
+              />
+              {profile.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
             </div>
-          </>
-        )}
-
-        {profile.bio && (
-          <div className={styles.infoCard}>
-            <h3>Bio</h3>
-            <p>{profile.bio}</p>
-          </div>
-        )}
-
-        {/* Phone number and copy button - visible even on own profile */}
-        {cleanPhone && (
-          <div className={styles.callButtonContainer}>
-            <div style={{ display: 'flex', gap: 15, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <a href={`tel:+${phoneLink}`} className={styles.callButton}>{profile.phone}</a>
-              <button onClick={handleCopyPhone} className={styles.callButton} style={{ background: copied ? '#28a745' : '', color: copied ? 'white' : '' }}>
-                {copied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Send Message button - hidden only on own profile */}
-        {!isOwnProfile && (
-          <div className={styles.callButtonContainer}>
-            <button onClick={handleMessage} className={styles.callButton}>💬 Send Message</button>
-          </div>
-        )}
-
-        <div className={styles.tabButtons}>
-          <button onClick={() => setCurrentTab('posts')} className={currentTab === 'posts' ? styles.activeTab : ''}>
-            Posts
-          </button>
-          <button onClick={() => setCurrentTab('exclusive')} className={currentTab === 'exclusive' ? styles.activeTab : ''}>
-            Exclusive {profile.exclusivePics?.length > 0 && !isSubscribed && '(Locked)'}
-          </button>
-        </div>
-
-        <div className={styles.feed}>
-          {posts.length === 0 ? (
-            <p className={styles.noPosts}>No posts available yet.</p>
-          ) : (
-            posts.map((post, i) => {
-              const locked = post.type === 'exclusive_placeholder' || (post.type === 'exclusive' && !isSubscribed);
-              return (
-                <div key={i} className={styles.postItem} onClick={() => handleMediaClick(post)}>
-                  <Image
-                    src={getThumbnail(post.url)}
-                    alt=""
-                    width={400}
-                    height={400}
-                    className={locked ? styles.blurred : ''}
-                  />
-                  {locked && (
-                    <div className={styles.lockOverlay}>
-                      <span>Subscribe to unlock</span>
-                      {post.count > 0 && <div>+{post.count} more</div>}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-      </main>
-
-      {/* Modals remain unchanged */}
-      {showPaymentModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowPaymentModal(false)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <h3>Subscribe to Unlock Exclusive Content</h3>
-            <div className={styles.planGrid}>
-              {subscriptionPlans.map(plan => (
-                <div
-                  key={plan.label}
-                  className={`${styles.planCard} ${selectedPlan?.label === plan.label ? styles.activePlan : ''}`}
-                  onClick={() => setSelectedPlan(plan)}
-                >
-                  <h4>{plan.label}</h4>
-                  <p>KSh {plan.amount.toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-            {selectedPlan && <p className={styles.selectedPlan}>Selected: {selectedPlan.label} – KSh {selectedPlan.amount.toLocaleString()}</p>}
-            <input type="tel" placeholder="07xxxxxxxx" value={phoneNumber} onChange={handlePhoneChange} className={styles.phoneInput} />
-            {phoneError && <p className={styles.phoneError}>{phoneError}</p>}
-            <div className={styles.modalActions}>
-              <button disabled={!selectedPlan || phoneError} onClick={() => handlePay(selectedPlan)}>Pay with M-Pesa</button>
-              <button onClick={() => setShowPaymentModal(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Login Modal */}
-      {showLogin && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
-            <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>×</span>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Welcome Back</h2>
-            {loginPrompt && <p style={{color:'#ff69b4',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
-              Please login to {loginPrompt}
-            </p>}
-            <form onSubmit={handleLogin}>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({ ...loginForm, email: e.target.value })} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
-                <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-              <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                {loginLoading ? 'Logging in...' : 'Login'}
-              </button>
-              <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setShowRegister(true); }}>Create New Account</span>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Register Modal */}
-      {showRegister && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
-            <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
-            <form onSubmit={handleRegister}>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
-                <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({ ...registerForm, name: e.target.value })} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                <input type="email" placeholder="you@example.com" value={registerForm.email} onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password (min 8 chars)</label>
-                <input type="password" placeholder="••••••••" value={registerForm.password} onChange={e => setRegisterForm({ ...registerForm, password: e.target.value })} required minLength={8} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-              </div>
-              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-              <button type="submit" style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)'; }} onMouseOut={(e) => { e.target.style.transform = ''; e.target.style.boxShadow = ''; }} >
-                Register
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Media Viewer */}
-      {showMediaViewer && (
-        <div className={styles.mediaViewerOverlay} onClick={() => setShowMediaViewer(false)}>
-          <div className={styles.mediaViewerContainer} onClick={e => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            <span className={styles.viewerCloseX} onClick={() => setShowMediaViewer(false)}>×</span>
-            {isVideo(selectedGallery[selectedIndex]) ? (
-              <video src={selectedGallery[selectedIndex]} controls autoPlay loop className={styles.viewerMedia} />
-            ) : (
-              <Image src={selectedGallery[selectedIndex]} alt="" fill className={styles.viewerMedia} />
+            <h1 className={styles.name}>{profile.name || 'Anonymous'}</h1>
+            {profile.membership && profile.membership !== 'Regular' && (
+              <span className={`${styles.badge} ${styles[profile.membership.toLowerCase()]}`}>
+                {profile.membership}
+              </span>
             )}
           </div>
-        </div>
-      )}
-    </div>
+
+          <div className={styles.infoCard}>
+            <h3>About</h3>
+            <p><strong>Age:</strong> {profile.age || '—'}</p>
+            <p><strong>Gender:</strong> {profile.gender || '—'}</p>
+            <p><strong>Orientation:</strong> {profile.sexualOrientation || '—'}</p>
+            <p><strong>Nationality:</strong> {profile.nationality || '—'}</p>
+            {profile.area && <p><strong>Area:</strong> {profile.area}</p>}
+            {profile.ward && <p><strong>Ward:</strong> {profile.ward}</p>}
+          </div>
+
+          {nearby.length > 0 && (
+            <>
+              <p className={styles.pinkLabel}>Nearby areas</p>
+              <div className={styles.tags}>
+                {nearby.map((p, i) => <span key={i} className={styles.tag}>{p}</span>)}
+              </div>
+            </>
+          )}
+
+          {profile.bio && (
+            <div className={styles.infoCard}>
+              <h3>Bio</h3>
+              <p>{profile.bio}</p>
+            </div>
+          )}
+
+          {cleanPhone && (
+            <div className={styles.callButtonContainer}>
+              <div style={{ display: 'flex', gap: 15, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <a href={`tel:+${phoneLink}`} className={styles.callButton}>{profile.phone}</a>
+                <button onClick={handleCopyPhone} className={styles.callButton} style={{ background: copied ? '#28a745' : '', color: copied ? 'white' : '' }}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!isOwnProfile && (
+            <div className={styles.callButtonContainer}>
+              <button onClick={handleMessage} className={styles.callButton}>💬 Send Message</button>
+            </div>
+          )}
+
+          <div className={styles.tabButtons}>
+            <button onClick={() => setCurrentTab('posts')} className={currentTab === 'posts' ? styles.activeTab : ''}>
+              Posts
+            </button>
+            <button onClick={() => setCurrentTab('exclusive')} className={currentTab === 'exclusive' ? styles.activeTab : ''}>
+              Exclusive {profile.exclusivePics?.length > 0 && !isSubscribed && '(Locked)'}
+            </button>
+          </div>
+
+          <div className={styles.feed}>
+            {posts.length === 0 ? (
+              <p className={styles.noPosts}>No posts available yet.</p>
+            ) : (
+              posts.map((post, i) => {
+                const locked = post.type === 'exclusive_placeholder' || (post.type === 'exclusive' && !isSubscribed);
+                return (
+                  <div key={i} className={styles.postItem} onClick={() => handleMediaClick(post)}>
+                    <Image
+                      src={getThumbnail(post.url)}
+                      alt=""
+                      width={400}
+                      height={400}
+                      className={locked ? styles.blurred : ''}
+                    />
+                    {locked && (
+                      <div className={styles.lockOverlay}>
+                        <span>Subscribe to unlock</span>
+                        {post.count > 0 && <div>+{post.count} more</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* === Conditional Create Buttons Below Posts === */}
+          {isOwnProfile && (
+            <div style={{ textAlign: 'center', margin: '30px 0', padding: '20px', borderTop: '1px solid #eee' }}>
+              {currentTab === 'posts' && (
+                <button
+                  onClick={() => { setPostIsExclusive(false); setShowCreatePostModal(true); }}
+                  className={styles.button}
+                  style={{ background: '#ff69b4', color: 'white', padding: '14px 32px', fontSize: '1.05rem' }}
+                >
+                  + Create New Post
+                </button>
+              )}
+
+              {currentTab === 'exclusive' && (
+                <button
+                  onClick={() => { setPostIsExclusive(true); setShowCreatePostModal(true); }}
+                  className={styles.button}
+                  style={{ background: '#c2185b', color: 'white', padding: '14px 32px', fontSize: '1.05rem' }}
+                >
+                  + Create Exclusive Post
+                </button>
+              )}
+            </div>
+          )}
+
+        </main>
+
+        {/* Create Post Modal */}
+        {showCreatePostModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
+            <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setShowCreatePostModal(false)} className={styles.modalBack}>
+                ←
+              </button>
+              <h2>{postIsExclusive ? 'Create Exclusive Post' : 'Create Post'}</h2>
+              <p className={styles.tip}>Add photos/videos. {postIsExclusive ? 'Only subscribers will see this.' : 'Visible to all.'}</p>
+
+              <button onClick={() => fileInputRef.current.click()} className={styles.button}>
+                Select Photos/Videos
+              </button>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={handlePostFileSelect}
+                className={styles.hiddenFileInput}
+                ref={fileInputRef}
+              />
+
+              <div className={styles.postPreviewGrid}>
+                {postPreviews.length === 0 && <p>No files selected</p>}
+                {postPreviews.map((preview, i) => (
+                  <div key={i} className={styles.postPreviewItem}>
+                    {postFiles[i] && isVideo(postFiles[i]) ? (
+                      <video src={preview} className={styles.postPreviewImg} controls muted />
+                    ) : (
+                      <Image src={preview} alt={`preview-${i}`} width={100} height={100} className={styles.postPreviewImg} />
+                    )}
+                    <button onClick={() => handleRemovePostPreview(i)} className={styles.removePreview}>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <textarea
+                value={postCaption}
+                onChange={(e) => setPostCaption(e.target.value.slice(0, 500))}
+                placeholder="Caption..."
+                rows={4}
+                style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
+              />
+              <div>{postCaption.length}/500</div>
+
+              <label>
+                Exclusive?
+                <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
+              </label>
+
+              <div style={{ marginTop: 12 }}>
+                <button onClick={handleCreatePost} disabled={postFiles.length === 0 || postUploading} className={styles.button}>
+                  {postUploading ? 'Posting...' : 'Post'}
+                </button>
+                <button
+                  onClick={() => {
+                    postPreviews.forEach((u) => URL.revokeObjectURL(u));
+                    setPostPreviews([]);
+                    setPostFiles([]);
+                    setShowCreatePostModal(false);
+                  }}
+                  className={styles.closeButton}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment, Login, Register, Media Viewer modals remain unchanged below */}
+        {showPaymentModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowPaymentModal(false)}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+              <h3>Subscribe to Unlock Exclusive Content</h3>
+              <div className={styles.planGrid}>
+                {subscriptionPlans.map(plan => (
+                  <div
+                    key={plan.label}
+                    className={`${styles.planCard} ${selectedPlan?.label === plan.label ? styles.activePlan : ''}`}
+                    onClick={() => setSelectedPlan(plan)}
+                  >
+                    <h4>{plan.label}</h4>
+                    <p>KSh {plan.amount.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+              {selectedPlan && <p className={styles.selectedPlan}>Selected: {selectedPlan.label} – KSh {selectedPlan.amount.toLocaleString()}</p>}
+              <input type="tel" placeholder="07xxxxxxxx" value={phoneNumber} onChange={handlePhoneChange} className={styles.phoneInput} />
+              {phoneError && <p className={styles.phoneError}>{phoneError}</p>}
+              <div className={styles.modalActions}>
+                <button disabled={!selectedPlan || phoneError} onClick={() => handlePay(selectedPlan)}>Pay with M-Pesa</button>
+                <button onClick={() => setShowPaymentModal(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Login Modal */}
+        {showLogin && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+              <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => { setShowLogin(false); setPendingAction(null); setLoginPrompt(''); }}>×</span>
+              <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Welcome Back</h2>
+              {loginPrompt && <p style={{color:'#ff69b4',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
+                Please login to {loginPrompt}
+              </p>}
+              <form onSubmit={handleLogin}>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                  <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({ ...loginForm, email: e.target.value })} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
+                  <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({ ...loginForm, password: e.target.value })} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+                <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                  {loginLoading ? 'Logging in...' : 'Login'}
+                </button>
+                <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+                  Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setShowRegister(true); }}>Create New Account</span>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Register Modal */}
+        {showRegister && (
+          <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
+            <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+              <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
+              <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
+              <form onSubmit={handleRegister}>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
+                  <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({ ...registerForm, name: e.target.value })} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                  <input type="email" placeholder="you@example.com" value={registerForm.email} onChange={e => setRegisterForm({ ...registerForm, email: e.target.value })} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password (min 8 chars)</label>
+                  <input type="password" placeholder="••••••••" value={registerForm.password} onChange={e => setRegisterForm({ ...registerForm, password: e.target.value })} required minLength={8} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+                </div>
+                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+                <button type="submit" style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => { e.target.style.transform = 'translateY(-2px)'; e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)'; }} onMouseOut={(e) => { e.target.style.transform = ''; e.target.style.boxShadow = ''; }} >
+                  Register
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Media Viewer */}
+        {showMediaViewer && (
+          <div className={styles.mediaViewerOverlay} onClick={() => setShowMediaViewer(false)}>
+            <div className={styles.mediaViewerContainer} onClick={e => e.stopPropagation()} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+              <span className={styles.viewerCloseX} onClick={() => setShowMediaViewer(false)}>×</span>
+              {isVideo(selectedGallery[selectedIndex]) ? (
+                <video src={selectedGallery[selectedIndex]} controls autoPlay loop className={styles.viewerMedia} />
+              ) : (
+                <Image src={selectedGallery[selectedIndex]} alt="" fill className={styles.viewerMedia} />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

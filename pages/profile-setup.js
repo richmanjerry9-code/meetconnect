@@ -905,6 +905,16 @@ export default function ProfileSetup() {
       <main className={`${styles.main} ${styles.premiumMain}`}>
         <div className={styles.profileSetupContainer}>
           <aside className={`${styles.membershipSection} ${styles.premiumSidebar}`}>
+            {/* ==================== MY PROFILE BUTTON (Added as requested) ==================== */}
+            <button
+              onClick={() => router.push(`/view-profile/${loggedInUser?.id}`)}
+              className={styles.upgradeButton}
+              style={{ marginBottom: '20px', background: 'linear-gradient(135deg, #ff69b4, #ff1493)', color: 'white', fontWeight: 'bold' }}
+            >
+              👤 My Profile
+            </button>
+            {/* ==================== End of added button ==================== */}
+
             <h2 className={styles.sectionTitle}>My Membership</h2>
             <p className={styles.tip}>Upgrade boosts visibility</p>
             <p>
@@ -1137,6 +1147,8 @@ export default function ProfileSetup() {
             </form>
           </div>
         </div>
+
+        {/* All your existing modals and components remain unchanged below */}
         {showMediaViewer && (
           <div className={styles.mediaViewerOverlay}>
             <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
