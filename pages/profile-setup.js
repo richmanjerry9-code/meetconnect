@@ -105,6 +105,9 @@ export default function ProfileSetup() {
   // Guards for snapshot writes
   const didBackfillCreatedAt = useRef(false);
   const didHandleExpiry = useRef(false);
+  // Receipts history
+  const [showReceiptsHistory, setShowReceiptsHistory] = useState(false);
+  const [receipts, setReceipts] = useState([]);
 
   // ----------------------------
   // Lifecycle: load profile & subscriptions
@@ -252,6 +255,21 @@ export default function ProfileSetup() {
         setMySubscriptions(subs.sort((a, b) => new Date(b.date) - new Date(a.date)));
       } catch (e) {
         console.error('Failed to fetch my subscriptions', e);
+      }
+    })();
+    // fetch receipts
+    (async function fetchReceipts() {
+      try {
+        const q = query(collection(db, 'receipts'), where('userId', '==', user.id));
+        const snapshot = await getDocs(q);
+        const recs = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data(),
+          date: d.data().createdAt ? d.data().createdAt.toDate().toLocaleString() : '',
+        }));
+        setReceipts(recs.sort((a, b) => new Date(b.date) - new Date(a.date)));
+      } catch (e) {
+        console.error('Failed to fetch receipts', e);
       }
     })();
     return () => {
@@ -887,26 +905,8 @@ export default function ProfileSetup() {
       <main className={`${styles.main} ${styles.premiumMain}`}>
         <div className={styles.profileSetupContainer}>
           <aside className={`${styles.membershipSection} ${styles.premiumSidebar}`}>
-            <div className={`${styles.walletSection} ${styles.fundingWallet}`}>
-              <div className={styles.walletStripe} />
-              <p className={styles.walletLabel}>Funding Wallet (Non-Withdrawable)</p>
-              <p className={styles.walletBalance}>KSh {fundingBalance}</p>
-              <button onClick={handleAddFund} className={styles.addFundButton}>
-                Add Fund
-              </button>
-            </div>
-            <div className={`${styles.walletSection} ${styles.earningsWallet}`}>
-              <div className={styles.walletStripe} />
-              <p className={styles.walletLabel}>Earnings Wallet</p>
-              <p className={styles.walletBalance}>KSh {earningsBalance}</p>
-              <button onClick={() => setShowWithdrawModal(true)} className={styles.withdrawButton} disabled={earningsBalance <= 0}>
-                Withdraw
-              </button>
-              <button onClick={() => setShowEarningsHistory(true)} className={styles.historyButton}>
-                View Purchases
-              </button>
-            </div>
             <h2 className={styles.sectionTitle}>My Membership</h2>
+            <p className={styles.tip}>Upgrade boosts visibility</p>
             <p>
               Current: {membership}
               {!formData.activationPaid && ' (Hidden until activation)'}
@@ -1087,6 +1087,28 @@ export default function ProfileSetup() {
                 <div className={styles.stepContent}>
                   <h2>Membership & Wallets</h2>
                   <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
+                  <div className={`${styles.walletSection} ${styles.fundingWallet}`}>
+                    <div className={styles.walletStripe} />
+                    <p className={styles.walletLabel}>Funding Wallet (Non-Withdrawable)</p>
+                    <p className={styles.walletBalance}>KSh {fundingBalance}</p>
+                    <button onClick={handleAddFund} className={styles.addFundButton}>
+                      Add Fund
+                    </button>
+                  </div>
+                  <div className={`${styles.walletSection} ${styles.earningsWallet}`}>
+                    <div className={styles.walletStripe} />
+                    <p className={styles.walletLabel}>Earnings Wallet</p>
+                    <p className={styles.walletBalance}>KSh {earningsBalance}</p>
+                    <button onClick={() => setShowWithdrawModal(true)} className={styles.withdrawButton} disabled={earningsBalance <= 0}>
+                      Withdraw
+                    </button>
+                    <button onClick={() => setShowEarningsHistory(true)} className={styles.historyButton}>
+                      View Purchases
+                    </button>
+                  </div>
+                  <button onClick={() => setShowReceiptsHistory(true)} className={styles.historyButton}>
+                    View Receipts
+                  </button>
                   <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
                     {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
                   </button>
@@ -1383,6 +1405,42 @@ export default function ProfileSetup() {
                 </div>
               )}
               <button onClick={() => setShowMySubscriptions(false)} className={styles.closeButton}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+        {showReceiptsHistory && (
+          <div className={styles.modal}>
+            <div className={styles.modalContent}>
+              <h3>Receipt History</h3>
+              {receipts.length === 0 ? (
+                <p>No receipts.</p>
+              ) : (
+                <table className={styles.historyTable}>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>Membership</th>
+                      <th>Amount</th>
+                      <th>Date</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receipts.map((rec) => (
+                      <tr key={rec.id}>
+                        <td>{rec.type}</td>
+                        <td>{rec.membership || 'N/A'}</td>
+                        <td>KSh {rec.amount}</td>
+                        <td>{rec.date}</td>
+                        <td>{rec.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <button onClick={() => setShowReceiptsHistory(false)} className={styles.closeButton}>
                 Close
               </button>
             </div>
