@@ -53,9 +53,7 @@ export default function PrivateChat() {
   useEffect(() => {
     if (!user) return;
 
-    // We no longer request permission here. We just listen.
     const unsubscribe = onMessage(messaging, (payload) => {
-      // If we are NOT currently looking at the chat that sent the message
       if (payload.data?.chatId !== chatId) {
         setToast(payload.notification?.body || 'New message!');
         setTimeout(() => setToast(null), 5000);
@@ -192,7 +190,6 @@ export default function PrivateChat() {
           { merge: true }
         );
 
-        // Send push notification via Cloud Function
         const functions = getFunctions();
         const sendNotif = httpsCallable(functions, 'sendMessageNotification');
         await sendNotif({
@@ -209,7 +206,7 @@ export default function PrivateChat() {
     }
   };
 
-  // TYPING HANDLER (call from ChatInput onChange)
+  // TYPING HANDLER (called from ChatInput on input change)
   const handleTyping = async (isTypingNow) => {
     if (!chatId || !user) return;
     const chatRef = doc(db, "privateChats", chatId);
@@ -238,7 +235,6 @@ export default function PrivateChat() {
         });
       }
 
-      // UPDATE LAST MESSAGE FOR INBOX
       const q = query(
         collection(db, "privateChats", chatId, "messages"),
         orderBy("timestamp", "desc"),
@@ -302,7 +298,7 @@ export default function PrivateChat() {
       <MessageList
         messages={messages}
         currentUserId={user.uid}
-        onReply={setReplyingTo}  // Updated to direct set (match if ChatInput uses it)
+        onReply={setReplyingTo}
         onDelete={handleDelete}
         onPin={handlePin}
         pinnedMessages={pinnedMessages}
@@ -319,7 +315,7 @@ export default function PrivateChat() {
         </div>
       )}
 
-      <ChatInput onSend={handleSend} onTyping={handleTyping} />  // Pass for input change
+      <ChatInput onSend={handleSend} onTyping={handleTyping} />
 
       {selectedImage && (
         <div
