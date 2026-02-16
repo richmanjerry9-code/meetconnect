@@ -534,3 +534,71 @@
   max-height: 90%;
   border-radius: 10px;
 }
+
+/* The Message Bubble */
+.audioWrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #f0f0f0; /* Light grey for "received" or change to your pink for "sent" */
+  border-radius: 20px 20px 20px 4px; /* WhatsApp style tail */
+  padding: 8px 14px;
+  min-width: 220px;
+  max-width: 300px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  transition: transform 0.1s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.audioWrapper:active {
+  transform: scale(0.98); /* Tactile press feel */
+}
+
+/* Play/Pause Toggle */
+.audioButton {
+  background: #D81B60;
+  color: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0; /* Prevents squishing */
+  transition: background 0.2s ease;
+}
+
+.audioButton:hover {
+  background: #C2185B;
+}
+
+/* Visualizing the "Track" */
+.audioTrack {
+  flex-grow: 1;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+  position: relative;
+}
+
+.audioProgress {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: 40%; /* Dynamic via JS */
+  background: #D81B60;
+  border-radius: 2px;
+}
+
+/* Timestamp */
+.audioDuration {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.75rem;
+  color: #666;
+  font-variant-numeric: tabular-nums; /* Prevents jittering numbers */
+  margin-left: 4px;
+}

@@ -1,4 +1,3 @@
-// inbox/[chatId].js
 "use client";  // For client-side FCM
 
 import { useState, useEffect } from "react";
@@ -158,13 +157,15 @@ export default function PrivateChat() {
   }, [messages, user, chatId]);
 
   // SEND MESSAGE
-  const handleSend = async (text, imageFile) => {
-    if (!text && !imageFile) return;
+  const handleSend = async (text, imageFile, audioBlob) => {
+    if (!text && !imageFile && !audioBlob) return;
     if (!user || !chatId) return;
 
     try {
       let imageUrl = null;
+      let audioUrl = null;
       if (imageFile) imageUrl = await uploadMedia(imageFile, "chatImages");
+      if (audioBlob) audioUrl = await uploadMedia(audioBlob, "chatAudio");
 
       await sendMessage(
         `privateChats/${chatId}/messages`,
@@ -172,7 +173,8 @@ export default function PrivateChat() {
         imageUrl,
         user.uid,
         user.displayName || "User",
-        replyingTo
+        replyingTo,
+        audioUrl
       );
 
       if (otherUserId) {
@@ -184,7 +186,7 @@ export default function PrivateChat() {
             unreadCounts: {
               [otherUserId]: increment(1),
             },
-            lastMessage: text || "📷 Image",
+            lastMessage: text || (imageUrl ? "📷 Image" : "🎤 Audio"),
             timestamp: serverTimestamp(),
           },
           { merge: true }
@@ -195,7 +197,7 @@ export default function PrivateChat() {
         await sendNotif({
           recipientId: otherUserId,
           senderName: user.displayName || 'Someone',
-          messageText: text || 'You have a new image!',
+          messageText: text || (imageUrl ? 'You have a new image!' : 'You have a new audio message!'),
           chatId,
         });
       }
@@ -251,7 +253,7 @@ export default function PrivateChat() {
       } else {
         const lastMsg = snap.docs[0].data();
         await updateDoc(chatRef, {
-          lastMessage: lastMsg.text || "📷 Image",
+          lastMessage: lastMsg.text || (lastMsg.imageUrl ? "📷 Image" : "🎤 Audio"),
           timestamp: lastMsg.timestamp || serverTimestamp(),
         });
       }

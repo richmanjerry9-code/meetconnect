@@ -11,16 +11,15 @@ import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimesta
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { createOrGetChat } from '../lib/chat';
 
-/**
- * Custom hook for debouncing values.
+/**Custom hook for debouncing values.
  */
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-    return () => clearTimeout(handler);
+ const handler = setTimeout(() => {
+   setDebouncedValue(value);
+ }, delay);
+ return () => clearTimeout(handler);
   }, [value, delay]);
   return debouncedValue;
 }
@@ -29,9 +28,7 @@ function useDebounce(value, delay) {
 const isProfileComplete = (p) => {
   if (!p) return false;
   const numericAge = parseInt(p.age, 10);
-  const cleanPhone = (p.phone || '').replace(/[^\d]/g, '');
-
-  return (
+  const cleanPhone = (p.phone || '').replace(/[^\d]/g, '');  return (
     p.username?.trim() &&
     p.name?.trim().length > 1 &&
     cleanPhone.length >= 9 &&
@@ -44,9 +41,7 @@ const isProfileComplete = (p) => {
     p.active !== false &&
     p.hidden !== true
   );
-};
-
-const convertTimestamps = (obj) => {
+};const convertTimestamps = (obj) => {
   if (!obj) return obj;
   if (typeof obj.toDate === 'function') return obj.toDate().toISOString();
   if (Array.isArray(obj)) return obj.map(convertTimestamps);
@@ -56,42 +51,29 @@ const convertTimestamps = (obj) => {
     return result;
   }
   return obj;
-};
-
-const sortProfiles = (profiles) => {
-  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };
-
-  const premium = [];
-  const regular = [];
-
-  profiles.forEach(p => {
+};const sortProfiles = (profiles) => {
+  const membershipPriority = { VVIP: 4, VIP: 3, Prime: 2, Regular: 1 };  const premium = [];
+  const regular = [];  profiles.forEach(p => {
     const mem = p.effectiveMembership;
     if (membershipPriority[mem] > 1) {
       premium.push(p);
     } else {
       regular.push(p);
     }
-  });
-
-  premium.sort((a, b) => {
+  });  premium.sort((a, b) => {
     const priA = membershipPriority[a.effectiveMembership];
     const priB = membershipPriority[b.effectiveMembership];
     if (priA !== priB) return priB - priA;
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
-
-  regular.sort((a, b) => {
+  });  regular.sort((a, b) => {
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
-
-  return [...premium, ...regular];
-};
-
-export default function Home({ initialProfiles = [] }) {
+  });  return [...premium, ...regular];
+};export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
   const [allProfiles, setAllProfiles] = useState(initialProfiles);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState(''); // New state for success messages
   const [user, setUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
   const [selectedCounty, setSelectedCounty] = useState('');
@@ -118,9 +100,7 @@ export default function Home({ initialProfiles = [] }) {
   const registerModalRef = useRef(null);
   const unsubscribeRef = useRef(null);
   const allProfilesRef = useRef(allProfiles);
-  useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);
-
-  // Session storage restore
+  useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);  // Session storage restore
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
     const saved = sessionStorage.getItem(KEY);
@@ -138,9 +118,7 @@ export default function Home({ initialProfiles = [] }) {
         sessionStorage.removeItem(KEY);
       }
     }
-  }, []);
-
-  // Save scroll + profiles on navigation
+  }, []);  // Save scroll + profiles on navigation
   useEffect(() => {
     const KEY = 'meetconnect_home_state_final_2025';
     const saveState = () => {
@@ -152,9 +130,7 @@ export default function Home({ initialProfiles = [] }) {
     };
     router.events.on('routeChangeStart', saveState);
     return () => router.events.off('routeChangeStart', saveState);
-  }, [router]);
-
-  // Auth state
+  }, [router]);  // Auth state
   useEffect(() => {
     setUserLoading(true);
     const storedUser = localStorage.getItem('loggedInUser');
@@ -191,9 +167,7 @@ export default function Home({ initialProfiles = [] }) {
       setUserLoading(false);
     });
     return unsubscribe;
-  }, []);
-
-  // Real-time profiles
+  }, []);  // Real-time profiles
   useEffect(() => {
     const timer = setTimeout(() => {
       const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
@@ -225,35 +199,28 @@ export default function Home({ initialProfiles = [] }) {
       clearTimeout(timer);
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
-  }, []);
-
-  // Real-time unread total
+  }, []);  // Real-time unread total
   useEffect(() => {
     if (!user?.uid) {
       setUnreadTotal(0);
       return;
-    }
+    }const q = query(
+  collection(firestore, 'privateChats'),
+  where('participants', 'array-contains', user.uid)
+);
 
-    const q = query(
-      collection(firestore, 'privateChats'),
-      where('participants', 'array-contains', user.uid)
-    );
+const unsubscribe = onSnapshot(q, (snapshot) => {
+  let total = 0;
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    total += data.unreadCounts?.[user.uid] || 0;
+  });
+  setUnreadTotal(total);
+}, (err) => {
+  console.error('Unread snapshot error:', err);
+});
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      let total = 0;
-      snapshot.docs.forEach((docSnap) => {
-        const data = docSnap.data();
-        total += data.unreadCounts?.[user.uid] || 0;
-      });
-      setUnreadTotal(total);
-    }, (err) => {
-      console.error('Unread snapshot error:', err);
-    });
-
-    return () => unsubscribe();
-  }, [user?.uid]);
-
-  // Location search filtering
+return () => unsubscribe();  }, [user?.uid]);  // Location search filtering
   useEffect(() => {
     if (!debouncedSearchLocation) return setFilteredLocations([]);
     const matches = [];
@@ -269,9 +236,7 @@ export default function Home({ initialProfiles = [] }) {
       });
     });
     setFilteredLocations(matches.slice(0, 5));
-  }, [debouncedSearchLocation]);
-
-  // Auto-set ward or area-based ward if partial match
+  }, [debouncedSearchLocation]);  // Auto-set ward or area-based ward if partial match
   useEffect(() => {
     if (!debouncedSearchLocation) {
       setSelectedWard('');
@@ -301,17 +266,13 @@ export default function Home({ initialProfiles = [] }) {
       setSelectedArea('');
       setFilteredLocations([]);
     }
-  }, [debouncedSearchLocation]);
-
-  const handleLocationSelect = (ward, area, county) => {
+  }, [debouncedSearchLocation]);  const handleLocationSelect = (ward, area, county) => {
     setSelectedCounty(county);
     setSelectedWard(ward);
     setSelectedArea(area);
     setSearchLocation(`${county}, ${ward}${area ? `, ${area}` : ''}`);
     setFilteredLocations([]);
-  };
-
-  const filteredProfiles = useMemo(() => {
+  };  const filteredProfiles = useMemo(() => {
     const searchTerm = debouncedSearchLocation.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ');
     let filtered = allProfiles.filter(p => {
       const countyMatch = selectedCounty ? p.county === selectedCounty : true;
@@ -323,9 +284,7 @@ export default function Home({ initialProfiles = [] }) {
       return countyMatch && wardMatch && areaMatch && searchMatch;
     });
     return filtered;
-  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);
-
-  const handleAccessProtected = (path, featureName) => {
+  }, [allProfiles, debouncedSearchLocation, selectedWard, selectedArea, selectedCounty]);  const handleAccessProtected = (path, featureName) => {
     if (user) {
       router.push(path);
     } else {
@@ -333,9 +292,7 @@ export default function Home({ initialProfiles = [] }) {
       setProtectedFeature(featureName);
       setShowLogin(true);
     }
-  };
-
-  const handleMessageClick = async (e, profileId) => {
+  };  const handleMessageClick = async (e, profileId) => {
     e.preventDefault();
     e.stopPropagation();
     if (user) {
@@ -350,36 +307,50 @@ export default function Home({ initialProfiles = [] }) {
       setProtectedFeature('Messaging');
       setShowLogin(true);
     }
-  };
-
-  const handleGoogleAuth = async (customName = '') => {
+  };  const handleGoogleAuth = async (customName = '') => {
     setAuthError('');
+    setAuthSuccess(''); // Clear previous success
     setLoginLoading(true);
     try {
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const firebaseUser = result.user;
-      const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
+
       let profileData;
       let isNewUser = false;
-      if (profileDoc.exists()) {
-        profileData = { id: profileDoc.id, ...profileDoc.data() };
-      } else {
-        const basicProfile = {
-          uid: firebaseUser.uid,
+
+      try {
+        const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
+        if (profileDoc.exists()) {
+          profileData = { id: profileDoc.id, ...profileDoc.data() };
+        } else {
+          const basicProfile = {
+            uid: firebaseUser.uid,
+            name: customName || firebaseUser.displayName || firebaseUser.email.split('@')[0],
+            email: firebaseUser.email,
+            username: firebaseUser.email.split('@')[0],
+            membership: 'Regular',
+            createdAt: serverTimestamp(),
+          };
+          await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
+          profileData = { id: firebaseUser.uid, ...basicProfile };
+          isNewUser = true;
+        }
+      } catch (profileErr) {
+        console.error('Profile creation/fetch error:', profileErr);
+        // Fallback to basic user data without full profile
+        profileData = {
+          id: firebaseUser.uid,
           name: customName || firebaseUser.displayName || firebaseUser.email.split('@')[0],
           email: firebaseUser.email,
           username: firebaseUser.email.split('@')[0],
-          membership: 'Regular',
-          createdAt: serverTimestamp(),
         };
-        await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
-        profileData = { id: firebaseUser.uid, ...basicProfile };
-        isNewUser = true;
+        isNewUser = true; // Assume new if profile ops failed
       }
+
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
-      setAuthError('Success!');
+      setAuthSuccess('Login successful!'); // Set success message
       setTimeout(async () => {
         setShowLogin(false);
         setShowRegister(false);
@@ -399,7 +370,7 @@ export default function Home({ initialProfiles = [] }) {
         if (isNewUser) {
           setTimeout(() => alert('Welcome! Please complete your profile to appear in searches.'), 800);
         }
-      }, 1500);
+      }, 1000); // Shortened timeout for better UX
     } catch (err) {
       console.error('Google auth error:', err);
       let msg = 'Authentication failed. Please try again.';
@@ -412,11 +383,10 @@ export default function Home({ initialProfiles = [] }) {
     } finally {
       setLoginLoading(false);
     }
-  };
-
-  const handleLogin = async (e) => {
+  };  const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
+    setAuthSuccess(''); // Clear previous success
     setLoginLoading(true);
     const trimmedEmail = loginForm.email.trim().toLowerCase();
     const trimmedPassword = loginForm.password.trim();
@@ -432,27 +402,42 @@ export default function Home({ initialProfiles = [] }) {
     }
     try {
       const { user: firebaseUser } = await signInWithEmailAndPassword(auth, trimmedEmail, trimmedPassword);
-      const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
+
       let profileData;
       let isNewUser = false;
-      if (profileDoc.exists()) {
-        profileData = { id: profileDoc.id, ...profileDoc.data() };
-      } else {
-        const basicProfile = {
-          uid: firebaseUser.uid,
+
+      try {
+        const profileDoc = await getDoc(doc(firestore, 'profiles', firebaseUser.uid));
+        if (profileDoc.exists()) {
+          profileData = { id: profileDoc.id, ...profileDoc.data() };
+        } else {
+          const basicProfile = {
+            uid: firebaseUser.uid,
+            name: firebaseUser.email.split('@')[0],
+            email: firebaseUser.email,
+            username: firebaseUser.email.split('@')[0],
+            membership: 'Regular',
+            createdAt: serverTimestamp(),
+          };
+          await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
+          profileData = { id: firebaseUser.uid, ...basicProfile };
+          isNewUser = true;
+        }
+      } catch (profileErr) {
+        console.error('Profile creation/fetch error:', profileErr);
+        // Fallback to basic user data
+        profileData = {
+          id: firebaseUser.uid,
           name: firebaseUser.email.split('@')[0],
           email: firebaseUser.email,
           username: firebaseUser.email.split('@')[0],
-          membership: 'Regular',
-          createdAt: serverTimestamp(),
         };
-        await setDoc(doc(firestore, 'profiles', firebaseUser.uid), basicProfile);
-        profileData = { id: firebaseUser.uid, ...basicProfile };
         isNewUser = true;
       }
+
       localStorage.setItem('loggedInUser', JSON.stringify(profileData));
       setUser(profileData);
-      setAuthError('Login successful!');
+      setAuthSuccess('Login successful!'); // Set success message
       setTimeout(async () => {
         setShowLogin(false);
         let target = pendingPath || '/';
@@ -471,7 +456,7 @@ export default function Home({ initialProfiles = [] }) {
         if (isNewUser) {
           setTimeout(() => alert('Welcome! Please complete your profile to appear in searches.'), 800);
         }
-      }, 1500);
+      }, 1000); // Shortened timeout for better UX
     } catch (err) {
       console.error('Login error:', err);
       let msg = 'Login failed. Please try again.';
@@ -486,9 +471,7 @@ export default function Home({ initialProfiles = [] }) {
     } finally {
       setLoginLoading(false);
     }
-  };
-
-  const handleForgotPassword = async (e) => {
+  };  const handleForgotPassword = async (e) => {
     e.preventDefault();
     setForgotMessage('');
     setAuthError('');
@@ -514,14 +497,10 @@ export default function Home({ initialProfiles = [] }) {
     } finally {
       setForgotLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
+  };  const handleLogout = async () => {
     localStorage.removeItem('loggedInUser');
     await signOut(auth);
-  };
-
-  const closeLoginModal = () => {
+  };  const closeLoginModal = () => {
     setShowLogin(false);
     setPendingPath(null);
     setPendingAction(null);
@@ -530,9 +509,8 @@ export default function Home({ initialProfiles = [] }) {
     setShowEmailForm(false);
     setForgotEmail('');
     setForgotMessage('');
-  };
-
-  useEffect(() => {
+    setAuthSuccess(''); // Clear success on close
+  };  useEffect(() => {
     const handler = (e) => {
       if (e.key === 'Escape') {
         setShowLogin(false);
@@ -546,99 +524,84 @@ export default function Home({ initialProfiles = [] }) {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, []);
-
-  useEffect(() => {
+  }, []);  useEffect(() => {
     const handler = (e) => {
       if (showLogin && loginModalRef.current && !loginModalRef.current.contains(e.target)) closeLoginModal();
       if (showRegister && registerModalRef.current && !registerModalRef.current.contains(e.target)) setShowRegister(false);
     };
     if (showLogin || showRegister) document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [showLogin, showRegister]);
-
-  const countyOptions = Object.keys(counties);
+  }, [showLogin, showRegister]);  const countyOptions = Object.keys(counties);
   const wardOptions = selectedCounty && counties[selectedCounty] ? Object.keys(counties[selectedCounty]) : [];
-  const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];
-
-  const handleLogoClick = () => {
+  const areaOptions = selectedCounty && selectedWard && counties[selectedCounty][selectedWard] ? counties[selectedCounty][selectedWard] : [];  const handleLogoClick = () => {
     if (router.pathname === '/') {
       window.location.reload();
     } else {
       router.push('/');
     }
-  };
-
-  // SAFE PROFILE CARD
+  };  // SAFE PROFILE CARD
   const ProfileCard = memo(({ p }) => {
-    if (!p?.username?.trim()) return null;
+    if (!p?.username?.trim()) return null;const handlePhoneClick = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (p.phone) window.location.href = `tel:${p.phone}`;
+};
 
-    const handlePhoneClick = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (p.phone) window.location.href = `tel:${p.phone}`;
-    };
+const defaultSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1NCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg==';
+const blurData = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q==";
+const hasCustomPic = !!p.profilePic;
 
-    const defaultSrc = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPGNpcmNsZSBjeD0iMTAwIiBjeT0iNjAiIHI9IjUwIiBmaWxsPSIjQkRCREJEIiAvPgogIDxwYXRoIGQ9Ik01MCAxNTAgUTEwMCAxMTAgMTUwIDE1NCBRMTUwIDIwMCA1MCAyMDAgWiIgZmlsbD0iI0JEQkRCRCIgLz4KPC9zdmc+Cg==';
-    const blurData = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8Alt4mM5mC4RnhUFm0GM1iWySHWP/AEYX/xAAUEQEAAAAAAAAAAAAAAAAAAAAQ/9oADAMBAAIAAwAAABAL/ztt/8QAGxABAAIDAQAAAAAAAAAAAAAAAQACEhEhMVGh/9oACAEBAAE/It5l0M8wCjQ7Yg6Q6q5h8V4f/2gAIAQMBAT8B1v/EABYRAQEBAAAAAAAAAAAAAAAAAAERIf/aAAgBAgEBPwGG/8QAJBAAAQMCAwQDAAAAAAAAAAAAAAARECEiIxQQNRYXGRsfgZH/2gAIAQEABj8C4yB5W9w0rY4S5x2mY0g1j0lL8Z6W/9oADAMBAAIAAwAAABDUL/zlt/8QAFBEBAAAAAAAAAAAAAAAAAAAAEP/aAAgBAwEBPxAX/8QAFxEBAAMAAAAAAAAAAAAAAAAAAAARIf/aAAgBAgEBPxBIf//EAB0QAQEAAgIDAAAAAAAAAAAAAAERACExQVFhcYGR/9oADABGAAMAAAAK4nP/2gAIAQMBAT8Q1v/EABkRAAMBAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/8QAJxAAAQQCAwADAAAAAAAAAAAAAAARESExQVFhcYHh8EHR0f/aAAwDAQACEAMAAAAQ+9P/2gAIAQMBAT8Q4v/EABkRAQADAQEAAAAAAAAAAAAAAAEAESExQVFx/9oACAECAQE/EMkY6H/xAAaEAEAAwEBAQAAAAAAAAAAAAABAhEhMUFRwdHw/9oADABGAAMAABAMG1v/2Q==";
-    const hasCustomPic = !!p.profilePic;
+const isOwnProfile = user && (p.id === user.id || p.id === user.uid);
 
-    const isOwnProfile = user && (p.id === user.id || p.id === user.uid);
-
-    return (
-      <Link href={`/view-profile/${p.id}`} className={styles.profileLink}>
-        <div className={styles.profileCard} role="listitem">
-          <div className={styles.imageContainer}>
-            <Image
-              src={hasCustomPic ? p.profilePic : defaultSrc}
-              alt={`${p.name || 'Profile'} Profile`}
-              width={150}
-              height={150}
-              className={styles.profileImage}
-              loading="lazy"
-              sizes="(max-width: 768px) 100vw, 150px"
-              quality={75}
-              placeholder={hasCustomPic ? "blur" : "empty"}
-              blurDataURL={hasCustomPic ? blurData : undefined}
-            />
-            {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
-          </div>
-          <div className={styles.profileInfo}>
-            <h3>{p.name || 'Anonymous'}</h3>
-            {p.effectiveMembership && p.effectiveMembership !== 'Regular' && (
-              <span className={`${styles.badge} ${styles[p.effectiveMembership.toLowerCase()]}`}>{p.effectiveMembership}</span>
-            )}
-          </div>
-          <p className={styles.location}>
-            {(p.ward || '').toLowerCase()}/{(p.area || '').toLowerCase()}
-          </p>
-          <div className={styles.profileSummary}>
-            <p>
-              {p.age ? `${p.age} year old` : 'Adult'} {(p.gender || 'lady').toLowerCase()}
-            </p>
-            <p>from {p.ward || '—'}, {p.county || '—'} in {p.area || '—'}</p>
-          </div>
-          {!isOwnProfile && (
-            <button 
-              className={styles.messageButton}
-              onClick={(e) => handleMessageClick(e, p.id)}
-            >
-              💬 Send Message
-            </button>
-          )}
-          {p.phone && (
-            <p>
-              <span className={styles.phoneLink} onClick={handlePhoneClick}>{p.phone}</span>
-            </p>
-          )}
-        </div>
-      </Link>
-    );
-  });
-
-  ProfileCard.displayName = 'ProfileCard';
-
-  const Modal = forwardRef(({ children, title, onClose }, ref) => (
+return (
+  <Link href={`/view-profile/${p.id}`} className={styles.profileLink}>
+    <div className={styles.profileCard} role="listitem">
+      <div className={styles.imageContainer}>
+        <Image
+          src={hasCustomPic ? p.profilePic : defaultSrc}
+          alt={`${p.name || 'Profile'} Profile`}
+          width={150}
+          height={150}
+          className={styles.profileImage}
+          loading="lazy"
+          sizes="(max-width: 768px) 100vw, 150px"
+          quality={75}
+          placeholder={hasCustomPic ? "blur" : "empty"}
+          blurDataURL={hasCustomPic ? blurData : undefined}
+        />
+        {p.verified && <span className={styles.verifiedBadge}>✓ Verified</span>}
+      </div>
+      <div className={styles.profileInfo}>
+        <h3>{p.name || 'Anonymous'}</h3>
+        {p.effectiveMembership && p.effectiveMembership !== 'Regular' && (
+          <span className={`${styles.badge} ${styles[p.effectiveMembership.toLowerCase()]}`}>{p.effectiveMembership}</span>
+        )}
+      </div>
+      <p className={styles.location}>
+        {(p.ward || '').toLowerCase()}/{(p.area || '').toLowerCase()}
+      </p>
+      <div className={styles.profileSummary}>
+        <p>
+          {p.age ? `${p.age} year old` : 'Adult'} {(p.gender || 'lady').toLowerCase()}
+        </p>
+        <p>from {p.ward || '—'}, {p.county || '—'} in {p.area || '—'}</p>
+      </div>
+      {!isOwnProfile && (
+        <button 
+          className={styles.messageButton}
+          onClick={(e) => handleMessageClick(e, p.id)}
+        >
+           Send Message
+        </button>
+      )}
+      {p.phone && (
+        <p>
+          <span className={styles.phoneLink} onClick={handlePhoneClick}>{p.phone}</span>
+        </p>
+      )}
+    </div>
+  </Link>
+);  });  ProfileCard.displayName = 'ProfileCard';  const Modal = forwardRef(({ children, title, onClose }, ref) => (
     <div className={styles.modal} ref={ref}>
       <div className={styles.modalContent}>
         <h2>{title}</h2>
@@ -647,9 +610,7 @@ export default function Home({ initialProfiles = [] }) {
       </div>
     </div>
   ));
-  Modal.displayName = 'Modal';
-
-  if (userLoading) {
+  Modal.displayName = 'Modal';  if (userLoading) {
     return (
       <div className={styles.container}>
         <header className={styles.header}>
@@ -689,9 +650,7 @@ export default function Home({ initialProfiles = [] }) {
         </footer>
       </div>
     );
-  }
-
-  return (
+  }  return (
     <div className={styles.container}>
       <Head>
         <title>Meet Connect Ladies - For Gentlemen</title>
@@ -765,105 +724,103 @@ export default function Home({ initialProfiles = [] }) {
             <p className={styles.noProfiles}>No ladies found. Complete your profile to appear in searches.</p>
           )}
         </div>
-      </main>
-
-      {/* Full Login Modal */}
-      {showLogin && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={closeLoginModal}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
-            <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={closeLoginModal}>×</span>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>{forgotPasswordMode ? 'Reset Password' : 'Welcome Back'}</h2>
-            {protectedFeature && !forgotPasswordMode && (
-              <p style={{color:'#ff69b4',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
-                Please login to access {protectedFeature}
-              </p>
-            )}
-            {forgotPasswordMode ? (
-              <form onSubmit={handleForgotPassword}>
-                <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                  <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                  <input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required disabled={forgotLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-                </div>
-                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-                {forgotMessage && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{forgotMessage}</p>}
-                <button type="submit" disabled={forgotLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: forgotLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !forgotLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !forgotLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
-                </button>
-                <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                  <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(false)}>Back to Login</span>
-                </div>
-              </form>
-            ) : showEmailForm ? (
-              <>
-                <form onSubmit={handleLogin}>
-                  <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                    <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
-                    <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-                  </div>
-                  <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-                    <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
-                    <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
-                  </div>
-                  {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-                  <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                    {loginLoading ? 'Logging in...' : 'Login'}
-                  </button>
-                  <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#444' }}>
-                    <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(true)}>Forgot Password?</span>
-                  </div>
-                  <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                    <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setShowEmailForm(false)}>Back</span>
-                  </div>
-                </form>
-              </>
-            ) : (
-              <>
-                <button onClick={handleGoogleAuth} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                  {loginLoading ? 'Authenticating...' : 'Continue with Google'}
-                </button>
-                <p style={{ margin: '10px 0', color: '#666' }}>or</p>
-                <button onClick={() => setShowEmailForm(true)} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
-                  Continue with Email
-                </button>
-                {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-                <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
-                  Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>Create New Account</span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Full Register Modal */}
-      {showRegister && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
-          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
-            <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
-            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
+      </main>  {/* Full Login Modal */}
+  {showLogin && (
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={closeLoginModal}>
+      <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+        <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={closeLoginModal}>×</span>
+        <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>{forgotPasswordMode ? 'Reset Password' : 'Welcome Back'}</h2>
+        {protectedFeature && !forgotPasswordMode && (
+          <p style={{color:'#ff69b4',fontWeight:'bold',textAlign:'center',margin:'0 0 15px 0'}}>
+            Please login to access {protectedFeature}
+          </p>
+        )}
+        {forgotPasswordMode ? (
+          <form onSubmit={handleForgotPassword}>
             <div style={{ marginBottom: '20px', textAlign: 'left' }}>
-              <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
-              <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({...registerForm, name: e.target.value})} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+              <input type="email" placeholder="you@example.com" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} required disabled={forgotLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
             </div>
-            <button onClick={() => handleGoogleAuth(registerForm.name)} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+            {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+            {forgotMessage && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{forgotMessage}</p>}
+            <button type="submit" disabled={forgotLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: forgotLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !forgotLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !forgotLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+              {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+            </button>
+            <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+              <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(false)}>Back to Login</span>
+            </div>
+          </form>
+        ) : showEmailForm ? (
+          <>
+            <form onSubmit={handleLogin}>
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Email Address</label>
+                <input type="email" placeholder="you@example.com" value={loginForm.email} onChange={e => setLoginForm({...loginForm, email: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+                <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Password</label>
+                <input type="password" placeholder="••••••••" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} required disabled={loginLoading} style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+              </div>
+              {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+              {authSuccess && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authSuccess}</p>} {/* Display success */}
+              <button type="submit" disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+                {loginLoading ? 'Logging in...' : 'Login'}
+              </button>
+              <div style={{ marginTop: '10px', fontSize: '0.9rem', color: '#444' }}>
+                <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setForgotPasswordMode(true)}>Forgot Password?</span>
+              </div>
+              <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+                <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setShowEmailForm(false)}>Back</span>
+              </div>
+            </form>
+          </>
+        ) : (
+          <>
+            <button onClick={() => handleGoogleAuth()} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
               {loginLoading ? 'Authenticating...' : 'Continue with Google'}
             </button>
+            <p style={{ margin: '10px 0', color: '#666' }}>or</p>
+            <button onClick={() => setShowEmailForm(true)} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+              Continue with Email
+            </button>
             {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
-          </div>
-        </div>
-      )}
-
-      <footer className={styles.footer}>
-        <div className={styles.footerLinks}>
-          <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
-          <Link href="/terms" className={styles.footerLink}>Terms of Service</Link>
-        </div>
-      </footer>
+            {authSuccess && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authSuccess}</p>} {/* Display success */}
+            <div style={{ marginTop: '20px', fontSize: '0.9rem', color: '#444' }}>
+              Don't have an account? <span style={{ color: '#ff69b4', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setShowLogin(false); setTimeout(() => setShowRegister(true), 100); }}>Create New Account</span>
+            </div>
+          </>
+        )}
+      </div>
     </div>
-  );
-}
+  )}
 
-export async function getStaticProps() {
+  {/* Full Register Modal */}
+  {showRegister && (
+    <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowRegister(false)}>
+      <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }} onClick={e => e.stopPropagation()} >
+        <span style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '24px', cursor: 'pointer', color: '#ff69b4' }} onClick={() => setShowRegister(false)}>×</span>
+        <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Create Account</h2>
+        <div style={{ marginBottom: '20px', textAlign: 'left' }}>
+          <label style={{ fontWeight: 400, marginBottom: '8px', display: 'block', fontSize: '0.9rem', color: '#444' }}>Full Name</label>
+          <input type="text" placeholder="Full Name" value={registerForm.name} onChange={e => setRegisterForm({...registerForm, name: e.target.value})} required style={{ width: '100%', padding: '12px', border: '1px solid #ddd', borderRadius: '8px', fontSize: '1rem', boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.1)', transition: 'border 0.3s, box-shadow 0.3s' }} onFocus={(e) => { e.target.style.border = '1px solid #ff69b4'; e.target.style.boxShadow = '0 0 8px rgba(255,105,180,0.5)'; }} onBlur={(e) => { e.target.style.border = '1px solid #ddd'; e.target.style.boxShadow = 'inset 0 1px 4px rgba(0,0,0,0.1)'; }} />
+        </div>
+        <button onClick={() => handleGoogleAuth(registerForm.name)} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+          {loginLoading ? 'Authenticating...' : 'Continue with Google'}
+        </button>
+        {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+        {authSuccess && <p style={{ color: '#388e3c', background: '#e8f5e9', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authSuccess}</p>} {/* Display success in register modal too */}
+      </div>
+    </div>
+  )}
+
+  <footer className={styles.footer}>
+    <div className={styles.footerLinks}>
+      <Link href="/privacy" className={styles.footerLink}>Privacy Policy</Link>
+      <Link href="/terms" className={styles.footerLink}>Terms of Service</Link>
+    </div>
+  </footer>
+</div>  );
+}export async function getStaticProps() {
   let initialProfiles = [];
   try {
     const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
