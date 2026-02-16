@@ -1,9 +1,10 @@
-// admin.js
+// pages/admin.js (or wherever your admin page is)
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Image from 'next/image';
 import * as locations from '../data/locations';
 import { db } from '../lib/firebase.js';
+import { auth } from '../lib/firebase.js'; // Assuming auth is exported from lib/firebase.js
 import {
   collection,
   addDoc,
@@ -14,13 +15,20 @@ import {
   where,
   updateDoc,
   serverTimestamp,
+  getDoc,
+  setDoc,
 } from 'firebase/firestore';
-
-const ADMIN_PASSWORD = '447962Pa$$word';
+import {
+  signInWithPopup,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signOut,
+} from 'firebase/auth';
 
 export default function AdminPanel() {
   const [loggedIn, setLoggedIn] = useState(false);
-  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [refresh, setRefresh] = useState(false);
   const [form, setForm] = useState({
@@ -59,7 +67,40 @@ export default function AdminPanel() {
   const [receipts, setReceipts] = useState([]);
   const [showReceipts, setShowReceipts] = useState(false);
 
+  // Auth state management with Google restriction
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        try {
+          const configRef = doc(db, 'config', 'admin');
+          const configSnap = await getDoc(configRef);
+          const allowedEmail = configSnap.exists() ? configSnap.data().allowedEmail : null;
+
+          if (allowedEmail && currentUser.email === allowedEmail) {
+            setLoggedIn(true);
+            setAuthError('');
+          } else {
+            await signOut(auth);
+            setLoggedIn(false);
+            setAuthError('Access denied: This Google account is not authorized for admin access.');
+          }
+        } catch (error) {
+          console.error('Error checking admin config:', error);
+          await signOut(auth);
+          setLoggedIn(false);
+          setAuthError('Failed to verify admin access. Please try again.');
+        }
+      } else {
+        setLoggedIn(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+
     const fetchUsers = async () => {
       const q = query(collection(db, 'profiles'));
       const querySnapshot = await getDocs(q);
@@ -103,7 +144,7 @@ export default function AdminPanel() {
     const handleUnload = () => setCurrentViewers((prev) => Math.max(prev - 1, 0));
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
-  }, [refresh]);
+  }, [loggedIn, refresh]);
 
   const logActivity = async (action, details = {}) => {
     try {
@@ -124,19 +165,55 @@ export default function AdminPanel() {
     }
   };
 
-  const handleLogin = () => {
-    if (passwordInput === ADMIN_PASSWORD) {
-      setLoggedIn(true);
-      setPasswordInput('');
-      logActivity('admin_login', { timestamp: new Date().toISOString() });
-    } else {
-      alert('Wrong password!');
+  const handleGoogleLogin = async () => {
+    setAuthError('');
+    setLoginLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Check and set allowed email if first time
+      const configRef = doc(db, 'config', 'admin');
+      const configSnap = await getDoc(configRef);
+      let allowedEmail = configSnap.exists() ? configSnap.data().allowedEmail : null;
+
+      if (!allowedEmail) {
+        // First login: Set this email as the official one
+        await setDoc(configRef, { allowedEmail: user.email });
+        allowedEmail = user.email;
+        logActivity('admin_first_google_login', { email: user.email, timestamp: new Date().toISOString() });
+      }
+
+      if (user.email === allowedEmail) {
+        setLoggedIn(true);
+        logActivity('admin_google_login', { email: user.email, timestamp: new Date().toISOString() });
+      } else {
+        await signOut(auth);
+        setAuthError('Access denied: This Google account is not the authorized admin account.');
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      let msg = 'Login failed. Please try again.';
+      switch (error.code) {
+        case 'auth/popup-closed-by-user': msg = 'Popup closed. Try again.'; break;
+        case 'auth/account-exists-with-different-credential': msg = 'Account exists with different credential.'; break;
+        default: msg = 'Something went wrong.';
+      }
+      setAuthError(msg);
+    } finally {
+      setLoginLoading(false);
     }
   };
 
-  const handleLogout = () => {
-    logActivity('admin_logout', { timestamp: new Date().toISOString() });
-    setLoggedIn(false);
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      logActivity('admin_logout', { timestamp: new Date().toISOString() });
+      setLoggedIn(false);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const handleChange = (e) => {
@@ -421,14 +498,18 @@ export default function AdminPanel() {
   });
 
   if (!loggedIn) {
-    // ... (login screen same as original)
     return (
       <div style={{ padding: '10px', fontFamily: 'Arial', background: '#f0f0f0', textAlign: 'center' }}>
         <Head><title>Admin Login</title></Head>
-        <h1 style={{ color: '#e91e63' }}>Admin Login</h1>
-        <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} style={{ padding: '8px', margin: '5px 0', width: '200px', fontSize: '0.9rem' }} />
-        <br />
-        <button onClick={handleLogin} style={{ padding: '8px 16px', background: '#4CAF50', color: 'white', border: 'none', fontSize: '0.9rem' }}>Login</button>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'rgba(255, 255, 255, 0.9)', backdropFilter: 'blur(10px)', borderRadius: '12px', padding: '40px 30px', boxShadow: '0 8px 15px rgba(0, 0, 0, 0.2)', textAlign: 'center', width: '100%', maxWidth: '380px', color: '#333', position: 'relative' }}>
+            <h2 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '20px', color: '#ff69b4' }}>Admin Login</h2>
+            <button onClick={handleGoogleLogin} disabled={loginLoading} style={{ width: '100%', background: 'linear-gradient(115deg, #4285f4, #db4437)', border: 'none', padding: '12px 16px', fontSize: '1rem', color: '#fff', borderRadius: '8px', cursor: loginLoading ? 'not-allowed' : 'pointer', transition: 'transform 0.2s ease, box-shadow 0.3s ease', marginBottom: '20px' }} onMouseOver={(e) => !loginLoading && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)')} onMouseOut={(e) => !loginLoading && (e.target.style.transform = '', e.target.style.boxShadow = '') }>
+              {loginLoading ? 'Authenticating...' : 'Continue with Google'}
+            </button>
+            {authError && <p style={{ color: '#d32f2f', background: '#ffebee', padding: '12px', borderRadius: '8px', marginBottom: '20px' }}>{authError}</p>}
+          </div>
+        </div>
       </div>
     );
   }
