@@ -4,9 +4,6 @@ import Head from 'next/head';
 import Script from 'next/script';
 import { useRouter } from 'next/router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-import { getFirestore, doc, setDoc, arrayUnion } from 'firebase/firestore';
-import { app } from '../lib/firebase';
 import '../styles/globals.css';
 
 // --- SUB-COMPONENT (inside Auth context) ---
@@ -24,12 +21,6 @@ const AppContent = ({ Component, pageProps }) => {
   // SERVICE WORKER + INSTALL LOGIC
   // -------------------------------
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        .then(() => console.log('SW Registered'))
-        .catch(err => console.error('SW registration failed:', err));
-    }
-
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       window.navigator.standalone;
@@ -56,29 +47,6 @@ const AppContent = ({ Component, pageProps }) => {
   }, [user]);
 
   // -------------------------------
-  // FOREGROUND PUSH NOTIFICATIONS
-  // -------------------------------
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        const messaging = getMessaging(app);
-        onMessage(messaging, (payload) => {
-          console.log('Foreground message:', payload);
-          const title = payload.notification?.title || 'New message';
-          const options = {
-            body: payload.notification?.body || 'You have a new message',
-            icon: '/favicon-192x192.png',
-            data: payload.data,
-          };
-          new Notification(title, options);
-        });
-      } catch (err) {
-        console.error('Foreground messaging error:', err);
-      }
-    }
-  }, []);
-
-  // -------------------------------
   // GOOGLE ANALYTICS SPA TRACKING
   // -------------------------------
   useEffect(() => {
@@ -94,6 +62,37 @@ const AppContent = ({ Component, pageProps }) => {
     router.events.on('routeChangeComplete', handleRouteChange);
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
+
+  // -------------------------------
+  // ONESIGNAL USER LINKING
+  // -------------------------------
+  useEffect(() => {
+    if (user && window.OneSignal) {
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.login(user.uid);
+      });
+    }
+  }, [user]);
+
+  // -------------------------------
+  // NOTIFICATION CLICK HANDLER
+  // -------------------------------
+  useEffect(() => {
+    if (window.OneSignal) {
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        OneSignal.Notifications.addEventListener('click', (event) => {
+          const data = event.notification.data;
+          if (data && data.action === 'open_chat' && data.chatId) {
+            router.push(`/inbox/${data.chatId}`);
+          } else {
+            router.push('/inbox');
+          }
+        });
+      });
+    }
+  }, [router]);
 
   // -------------------------------
   // INSTALL BUTTON HANDLER
@@ -115,33 +114,14 @@ const AppContent = ({ Component, pageProps }) => {
   const handleEnableNotifications = async () => {
     if (!('Notification' in window)) return;
 
-    const permission = await Notification.requestPermission();
-    setShowNotificationPrompt(false);
-
-    if (permission === 'granted' && user) {
-      try {
-        const messaging = getMessaging(app);
-        const token = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-        });
-
-        if (token) {
-          const db = getFirestore(app);
-          const userRef = doc(db, 'profiles', user.uid);
-          await setDoc(
-            userRef,
-            {
-              fcmToken: token,
-              fcmTokens: arrayUnion(token),
-            },
-            { merge: true }
-          );
-          console.log('FCM token saved');
-        }
-      } catch (err) {
-        console.error('Failed to get FCM token:', err);
-      }
+    if (window.OneSignal) {
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.showSlidedownPrompt();
+      });
     }
+
+    setShowNotificationPrompt(false);
   };
 
   return (
@@ -368,6 +348,22 @@ export default function App({ Component, pageProps }) {
           gtag('js', new Date());
           gtag('config', 'G-TBN1ZJECDJ', {
             send_page_view: false
+          });
+        `}
+      </Script>
+
+      {/* OneSignal SDK */}
+      <Script
+        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+        strategy="afterInteractive"
+      />
+      <Script id="onesignal-init" strategy="afterInteractive">
+        {`
+          window.OneSignalDeferred = window.OneSignalDeferred || [];
+          OneSignalDeferred.push(async function(OneSignal) {
+            await OneSignal.init({
+              appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7",
+            });
           });
         `}
       </Script>

@@ -8,20 +8,16 @@ import {
   getFirestore,
   collection,
   doc,
-  addDoc,
   deleteDoc,
   onSnapshot,
   query,
   orderBy,
-  serverTimestamp,
   updateDoc,
   arrayUnion,
   arrayRemove,
   getDoc,
-  setDoc,
   getDocs,
   limit,
-  increment,
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import styles from "../../styles/chat.module.css"; // Assuming similar styles
@@ -190,7 +186,7 @@ export default function PrivateChatPage() {
     });
   }, [messages, user, chatId]);
 
-  // SEND MESSAGE (with upload support, viewOnce, and unread increment)
+  // SEND MESSAGE (with upload support, viewOnce, and API call for save + push)
   const handleSend = async (text = "", imageFile = null, audioBlob = null, viewOnce = false) => {
     if (!user || (!text.trim() && !imageFile && !audioBlob)) return;
 
@@ -209,11 +205,11 @@ export default function PrivateChatPage() {
       }
       if (audioBlob) audioUrl = await uploadMedia(audioBlob, "chatAudio");
 
-      let chosenName = "User";
+      let senderName = "User";
       const profileSnap = await getDoc(doc(db, "profiles", user.uid));
       if (profileSnap.exists()) {
         const p = profileSnap.data();
-        chosenName = p.name || p.username || "User";
+        senderName = p.name || p.username || "User";
       }
 
       const replyToObj = replyingTo ? {
@@ -223,29 +219,21 @@ export default function PrivateChatPage() {
         senderId: replyingTo.senderId
       } : null;
 
-      const payload = {
-        text: text.trim(),
-        imageUrl: imageUrl || null,
-        audioUrl: audioUrl || null,
-        senderId: user.uid,
-        senderName: chosenName,
-        senderPhoto: user.photoURL || "/default-profile.png",
-        timestamp: serverTimestamp(),
-        seenBy: [user.uid],
-        replyTo: replyToObj,
-        deletedFor: [],
-        viewOnce: (imageUrl && viewOnce) ? true : false,
-        viewedBy: (imageUrl && viewOnce) ? [] : [],
-      };
-
-      await addDoc(collection(db, "privateChats", chatId, "messages"), payload);
-
-      const chatRef = doc(db, "privateChats", chatId);
-      const otherUserId = otherUser?.id;
-      await updateDoc(chatRef, {
-        lastMessage: text || (audioUrl ? "Voice message" : imageUrl ? "Photo" : "Message"),
-        timestamp: serverTimestamp(),
-        [`unreadCounts.${otherUserId}`]: increment(1),
+      // Call API to save message and send push
+      await fetch('/api/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderUid: user.uid,
+          receiverUid: otherUser?.id,
+          messageText: text.trim(),
+          senderName,
+          chatId,
+          imageUrl,
+          audioUrl,
+          viewOnce,
+          replyTo: replyToObj,
+        }),
       });
 
       setReplyingTo(null);
