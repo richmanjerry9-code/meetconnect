@@ -136,8 +136,8 @@ export default function Inbox() {
 
   return (
     <div className={styles.inboxContainer}>
-      {/* ✅ Back Arrow + Title */}
-      <div className={styles.inboxHeader}>
+      {/* ✅ Back Arrow + Title + Group Chat Button */}
+      <div className={styles.inboxHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <button
           onClick={() => router.push("/")}
           className={styles.backBtn}
@@ -152,6 +152,12 @@ export default function Inbox() {
           ←
         </button>
         <h2 className={styles.inboxTitle}>Inbox</h2>
+<button
+          onClick={() => router.push("/group-chat")}
+          className={styles.groupChatBtn}
+        >
+          Group Chat
+        </button>
       </div>
 
       {chats.length === 0 && (

@@ -23,6 +23,9 @@ import {
   GoogleAuthProvider,
   onAuthStateChanged,
   signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateEmail,
 } from 'firebase/auth';
 
 export default function AdminPanel() {
@@ -284,6 +287,23 @@ export default function AdminPanel() {
 
     try {
       if (isEdit) {
+        const oldUser = users.find(u => u.id === editId);
+        if (form.email && form.email !== oldUser.email) {
+          if (!oldUser.password) {
+            alert('Cannot change email without stored password!');
+            return;
+          }
+          try {
+            const credential = await signInWithEmailAndPassword(auth, oldUser.email, oldUser.password);
+            await updateEmail(credential.user, form.email);
+            await signOut(auth);
+          } catch (updateErr) {
+            console.error('Email update error:', updateErr);
+            alert('Failed to update email in auth: ' + updateErr.message);
+            return;
+          }
+        }
+
         await updateDoc(doc(db, 'profiles', editId), { 
           ...form, 
           hidden,
@@ -300,13 +320,15 @@ export default function AdminPanel() {
           return;
         }
 
-        const fakeEmail = form.email || `${form.username.toLowerCase()}@meetconnect.fake`;
-        const fakePassword = Math.random().toString(36).slice(-8);
+        const email = form.email || `${form.username.toLowerCase()}@meetconnect.fake`;
+        const password = Math.random().toString(36).slice(-8);
+
+        const { user } = await createUserWithEmailAndPassword(auth, email, password);
 
         const profileData = {
           ...form,
-          email: fakeEmail,
-          password: fakePassword,
+          email,
+          password, // Store plain password for display (not secure, but for this app)
           createdAt: serverTimestamp(),
           bio: form.bio || '',
           normalPics: [],
@@ -317,10 +339,10 @@ export default function AdminPanel() {
           regularLifetime: false,
         };
 
-        const docRef = await addDoc(collection(db, 'profiles'), profileData);
-        alert(`✅ Profile saved!\nFake Email: ${fakeEmail}\nPassword: ${fakePassword}`);
-        setUsers((prev) => [...prev, { id: docRef.id, ...profileData }]);
-        logActivity('profile_create', { userId: docRef.id, username: form.username });
+        await setDoc(doc(db, 'profiles', user.uid), profileData);
+        alert(`✅ Profile saved!\nEmail: ${email}\nPassword: ${password}`);
+        setUsers((prev) => [...prev, { id: user.uid, ...profileData }]);
+        logActivity('profile_create', { userId: user.uid, username: form.username });
       }
 
       setForm({
@@ -348,7 +370,65 @@ export default function AdminPanel() {
       setRefresh(!refresh);
     } catch (error) {
       console.error('Error saving profile:', error);
-      alert('Failed to save profile.');
+      if (error.code === 'auth/email-already-in-use') {
+        alert('Email already in use!');
+      } else {
+        alert('Failed to save profile: ' + error.message);
+      }
+    }
+  };
+
+  const handleMigrateUser = async (oldId) => {
+    if (!confirm('Migrate this user to auth? This will create an auth user and move the profile to new UID.')) return;
+
+    try {
+      const oldProfileRef = doc(db, 'profiles', oldId);
+      const oldProfileSnap = await getDoc(oldProfileRef);
+      if (!oldProfileSnap.exists()) {
+        alert('Profile not found!');
+        return;
+      }
+      const profileData = oldProfileSnap.data();
+
+      if (!profileData.email) {
+        alert('Missing email in profile!');
+        return;
+      }
+
+      let password = profileData.password;
+      if (!password) {
+        password = Math.random().toString(36).slice(-8);
+      }
+
+      const { user } = await createUserWithEmailAndPassword(auth, profileData.email, password);
+
+      const updatedProfileData = { ...profileData, password }; // Update or add password
+
+      await setDoc(doc(db, 'profiles', user.uid), { ...updatedProfileData, uid: user.uid });
+
+      await deleteDoc(oldProfileRef);
+
+      // TODO: Update any references like chats, receipts, etc., to use user.uid instead of oldId
+      // For example, for receipts:
+      const receiptsQuery = query(collection(db, 'receipts'), where('userId', '==', oldId));
+      const receiptsSnap = await getDocs(receiptsQuery);
+      for (const receiptDoc of receiptsSnap.docs) {
+        await updateDoc(receiptDoc.ref, { userId: user.uid });
+      }
+
+      // Similarly for activity logs, privateChats, etc., if applicable
+
+      alert(`✅ User migrated! New UID: ${user.uid}${!profileData.password ? `\nNew Password: ${password}` : ''}`);
+      logActivity('user_migration', { oldId, newId: user.uid, username: profileData.username });
+
+      setRefresh(!refresh);
+    } catch (error) {
+      console.error('Migration error:', error);
+      if (error.code === 'auth/email-already-in-use') {
+        alert('Email already in use! Perhaps already migrated.');
+      } else {
+        alert('Failed to migrate: ' + error.message);
+      }
     }
   };
 
