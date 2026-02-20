@@ -1,5 +1,4 @@
-
-/* /styles/chat.module.css - Redesigned for Premium, Elegant Vibe: Glassmorphism, Soft Pink Palette, Smooth Animations, Mobile-First */
+/* /styles/chat.module.css - Premium Elegant Vibe: Glassmorphism, Soft Pink Palette, Smooth Animations, Mobile-First */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
 .chatContainer {
@@ -8,16 +7,15 @@
   height: 100vh;
   font-family: 'Poppins', sans-serif;
   background: linear-gradient(to bottom, #F8BBD0, #F48FB1);
-  color: #333333;
+  color: #333;
   box-sizing: border-box;
 }
 
-/* Update the existing .chatHeader */
 .chatHeader {
   display: flex;
   align-items: center;
-  justify-content: flex-start; /* Aligns everything to the left */
-  padding: 0.5rem 0.8rem; /* Tighter padding for mobile feel */
+  justify-content: flex-start;
+  padding: 0.5rem 0.8rem;
   background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
@@ -27,15 +25,13 @@
   z-index: 1000;
 }
 
-/* Container for Arrow + Avatar + Name */
 .headerLeftSection {
   display: flex;
   align-items: center;
-  gap: 4px; /* Tight gap between arrow and profile */
+  gap: 4px;
   flex: 1;
 }
 
-/* WhatsApp style Back Button */
 .backBtn {
   background: transparent;
   border: none;
@@ -47,7 +43,6 @@
   border-radius: 50%;
 }
 
-/* Grouping Avatar and Name to be one clickable unit */
 .headerUserGroup {
   display: flex;
   align-items: center;
@@ -59,7 +54,7 @@
 }
 
 .headerUserGroup:active {
-  background: rgba(0, 0, 0, 0.05); /* Tap feedback */
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .avatarWrapper {
@@ -93,6 +88,7 @@
   color: #666;
   font-weight: 400;
 }
+
 .messageList {
   flex: 1;
   overflow-y: auto;
@@ -119,9 +115,9 @@
 }
 
 .messageItem.own {
-  background: rgba(220, 248, 198, 0.6); /* Soft green for own messages */
+  background: rgba(220, 248, 198, 0.6);
   align-self: flex-end;
-  color: #333333;
+  color: #333;
 }
 
 .chatImage {
@@ -149,7 +145,6 @@
   z-index: 1000;
 }
 
-/* ✅ ICON BUTTONS (emoji, attach, camera, mic) */
 .chatInput .iconBtn {
   background: transparent;
   border: none;
@@ -163,7 +158,6 @@
   transform: scale(1.15);
 }
 
-/* ✅ TEXT INPUT */
 .chatInput input[type="text"] {
   flex: 1;
   padding: 0.9rem 1.25rem;
@@ -181,13 +175,12 @@
   outline: none;
 }
 
-/* ✅ SEND BUTTON */
 .chatInput .sendBtn {
   padding: 0.75rem 1.3rem;
   border: none;
   border-radius: 30px;
   background: linear-gradient(135deg, #D81B60, #F06292);
-  color: #ffffff;
+  color: #fff;
   cursor: pointer;
   font-size: 1rem;
   font-weight: 600;
@@ -199,7 +192,6 @@
   box-shadow: 0 4px 12px rgba(216, 27, 96, 0.3);
 }
 
-/* ✅ EMOJI PANEL */
 .emojiPanel {
   position: absolute;
   bottom: 70px;
@@ -256,7 +248,6 @@
   color: #F06292;
 }
 
-/* Mobile responsiveness */
 @media (max-width: 768px) {
   .chatContainer {
     font-size: 14px;
@@ -288,7 +279,6 @@
   }
 }
 
-/* Tablet & Desktop Overrides */
 @media (min-width: 769px) {
   .chatContainer {
     padding: 0 2rem;
@@ -310,7 +300,6 @@
   }
 }
 
-/* ✅ INBOX AVATAR */
 .avatar {
   width: 52px;
   height: 52px;
@@ -321,7 +310,6 @@
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
-/* ✅ NAME + MESSAGE WRAPPER */
 .chatInfo {
   display: flex;
   flex-direction: column;
@@ -329,13 +317,11 @@
   overflow: hidden;
 }
 
-/* ✅ NAME ROW WITH UNREAD DOT */
 .chatNameRow {
   display: flex;
   align-items: center;
 }
 
-/* ✅ USER NAME */
 .chatName {
   font-size: 15px;
   font-weight: 600;
@@ -345,7 +331,6 @@
   text-overflow: ellipsis;
 }
 
-/* ✅ UNREAD DOT */
 .unreadDot {
   width: 8px;
   height: 8px;
@@ -356,7 +341,6 @@
   box-shadow: 0 0 4px rgba(216, 27, 96, 0.5);
 }
 
-/* ✅ LAST MESSAGE TEXT */
 .chatLastMessage {
   font-size: 13px;
   color: #555;
@@ -366,7 +350,6 @@
   text-overflow: ellipsis;
 }
 
-/* ✅ MESSAGE TIME */
 .chatTime {
   font-size: 12px;
   color: #999;
@@ -374,7 +357,6 @@
   white-space: nowrap;
 }
 
-/* ✅ INBOX HEADER WITH LOGO */
 .inboxHeader {
   display: flex;
   align-items: center;
@@ -388,14 +370,12 @@
   z-index: 1000;
 }
 
-/* ✅ MEETCONNECT LOGO */
 .logo {
   width: 42px;
   height: auto;
   object-fit: contain;
 }
 
-/* ✅ INBOX TITLE */
 .inboxTitle {
   font-size: 1.3rem;
   font-weight: 600;
@@ -403,7 +383,6 @@
   letter-spacing: 0.5px;
 }
 
-/* ✅ MESSAGE ACTION BUTTONS */
 .reactButton,
 .replyButton,
 .deleteButton {
@@ -423,7 +402,6 @@
   transform: scale(1.05);
 }
 
-/* ✅ REACTIONS ROW */
 .reactions {
   display: flex;
   gap: 6px;
@@ -431,7 +409,6 @@
   font-size: 1.1rem;
 }
 
-/* ✅ MESSAGE TIMESTAMP */
 .timestamp {
   display: block;
   margin-top: 6px;
@@ -439,7 +416,6 @@
   color: #777;
 }
 
-/* ✅ CHAT HEADER USER (from ChatHeader.js) */
 .chatHeaderUser {
   display: flex;
   align-items: center;
@@ -447,7 +423,6 @@
   cursor: pointer;
 }
 
-/* ✅ BACK BUTTON */
 .backButton {
   background: transparent;
   border: none;
@@ -535,13 +510,12 @@
   border-radius: 10px;
 }
 
-/* The Message Bubble */
 .audioWrapper {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #f0f0f0; /* Light grey for "received" or change to your pink for "sent" */
-  border-radius: 20px 20px 20px 4px; /* WhatsApp style tail */
+  background: #f0f0f0;
+  border-radius: 20px 20px 20px 4px;
   padding: 8px 14px;
   min-width: 220px;
   max-width: 300px;
@@ -552,10 +526,9 @@
 }
 
 .audioWrapper:active {
-  transform: scale(0.98); /* Tactile press feel */
+  transform: scale(0.98);
 }
 
-/* Play/Pause Toggle */
 .audioButton {
   background: #D81B60;
   color: white;
@@ -567,7 +540,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  flex-shrink: 0; /* Prevents squishing */
+  flex-shrink: 0;
   transition: background 0.2s ease;
 }
 
@@ -575,7 +548,6 @@
   background: #C2185B;
 }
 
-/* Visualizing the "Track" */
 .audioTrack {
   flex-grow: 1;
   height: 4px;
@@ -589,23 +561,21 @@
   left: 0;
   top: 0;
   height: 100%;
-  width: 40%; /* Dynamic via JS */
   background: #D81B60;
   border-radius: 2px;
 }
 
-/* Timestamp */
 .audioDuration {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 0.75rem;
   color: #666;
-  font-variant-numeric: tabular-nums; /* Prevents jittering numbers */
+  font-variant-numeric: tabular-nums;
   margin-left: 4px;
 }
 
 .groupChatBtn {
   background-color: #D81B60;
-  color: #ffffff;
+  color: #fff;
   border: none;
   border-radius: 20px;
   padding: 8px 16px;
@@ -617,7 +587,7 @@
 }
 
 .groupChatBtn:hover {
-  background-color: #b81752; /* Slightly darker pink */
+  background-color: #b81752;
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(216, 27, 96, 0.3);
 }
@@ -625,4 +595,19 @@
 .groupChatBtn:active {
   transform: translateY(1px);
   box-shadow: 0 1px 3px rgba(216, 27, 96, 0.2);
+}
+
+.dateHeader {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  padding: 8px 16px;
+  margin: 20px auto 10px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 20px;
+  max-width: fit-content;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(10px);
 }
