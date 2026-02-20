@@ -611,3 +611,14 @@
   z-index: 10;
   backdrop-filter: blur(10px);
 }
+
+.messageList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px); /* Optional: If scroll still lags on low-end devices, reduce to blur(2px) or remove */
+  -webkit-overflow-scrolling: touch; /* Native smooth/momentum scrolling on iOS */
+  touch-action: pan-y; /* Prioritizes vertical scroll, blocks accidental horizontal */
+  overscroll-behavior: contain; /* No pull-to-refresh or bounce overshoot */
+}
