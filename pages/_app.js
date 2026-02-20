@@ -353,20 +353,19 @@ export default function App({ Component, pageProps }) {
       </Script>
 
       {/* OneSignal SDK */}
-      <Script
-        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-        strategy="afterInteractive"
-      />
       <Script id="onesignal-init" strategy="afterInteractive">
-        {`
-          window.OneSignalDeferred = window.OneSignalDeferred || [];
-          OneSignalDeferred.push(async function(OneSignal) {
-            await OneSignal.init({
-              appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7",
-            });
-          });
-        `}
-      </Script>
+  {`
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    OneSignalDeferred.push(async function(OneSignal) {
+      await OneSignal.init({
+        appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7",
+        serviceWorkerPath: "OneSignalSDKWorker.js",
+        serviceWorkerUpdaterPath: "OneSignalSDKUpdaterWorker.js",
+        serviceWorkerParam: { scope: "/" }
+      });
+    });
+  `}
+</Script>
 
       <AppContent Component={Component} pageProps={pageProps} />
     </AuthProvider>

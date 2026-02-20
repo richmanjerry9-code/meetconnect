@@ -9,6 +9,21 @@
   background: linear-gradient(to bottom, #F8BBD0, #F48FB1);
   color: #333;
   box-sizing: border-box;
+  overflow: hidden; /* Prevent body scroll leaks */
+  position: relative; /* For pseudo blur */
+}
+
+/* Add subtle fixed blur background without affecting scrolling */
+.chatContainer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(5px);
+  z-index: -1; /* Behind content */
 }
 
 .chatHeader {
@@ -92,9 +107,11 @@
 .messageList {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(5px);
+  -webkit-overflow-scrolling: touch; /* Smooth iOS momentum scrolling */
+  touch-action: auto; /* Allow natural gestures */
+  user-select: text; /* Ensure selectable for copy-paste */
 }
 
 .messageItem {
@@ -502,6 +519,7 @@
   justify-content: center;
   align-items: center;
   z-index: 9999;
+  pointer-events: auto; /* Ensure it doesn't block underlying scrolls when closed */
 }
 
 .fullImage {
@@ -609,16 +627,5 @@
   position: sticky;
   top: 0;
   z-index: 10;
-  backdrop-filter: blur(10px);
 }
 
-.messageList {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(5px); /* Optional: If scroll still lags on low-end devices, reduce to blur(2px) or remove */
-  -webkit-overflow-scrolling: touch; /* Native smooth/momentum scrolling on iOS */
-  touch-action: pan-y; /* Prioritizes vertical scroll, blocks accidental horizontal */
-  overscroll-behavior: contain; /* No pull-to-refresh or bounce overshoot */
-}

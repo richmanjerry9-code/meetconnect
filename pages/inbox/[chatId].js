@@ -44,6 +44,7 @@ export default function PrivateChatPage() {
   const [otherUser, setOtherUser] = useState(null);
   const [isOnline, setIsOnline] = useState(false); // New: Online status for other user
   const [pinnedMessages, setPinnedMessages] = useState([]); // For pinning if needed
+  const messagesEndRef = useRef(null); // Add this ref
 
   // Handle browser back button for image modal
   useEffect(() => {
@@ -187,6 +188,13 @@ export default function PrivateChatPage() {
       [`unreadCounts.${user.uid}`]: 0
     });
   }, [messages, user, chatId]);
+
+  // Add this new useEffect for auto-scrolling
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]); // Trigger on messages change
 
   // SEND MESSAGE (with upload support, viewOnce, and API call for save + push)
   const handleSend = async (text = "", imageFile = null, audioBlob = null, viewOnce = false) => {
@@ -334,6 +342,9 @@ export default function PrivateChatPage() {
           pinnedMessages={pinnedMessages}
           onImageClick={handleImageClick}
         />
+
+        {/* Add this invisible div at the end for scrolling reference */}
+        <div ref={messagesEndRef} />
       </main>
 
       {isTyping && <div className={styles.typing}>Typing...</div>}
