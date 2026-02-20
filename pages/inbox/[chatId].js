@@ -1,4 +1,4 @@
-// pages/inbox/[chatId].js (updated to use MessageList for date headers; nothing else changed)
+// pages/inbox/[chatId].js
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -20,13 +20,13 @@ import {
   limit,
 } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
-import styles from "../../styles/chat.module.css"; // Assuming similar styles
-import ChatInput from "../../lib/chat/ChatInput"; // Your updated ChatInput
-import { uploadMedia } from "../../lib/chat/"; // Import uploadMedia
+import styles from "../../styles/chat.module.css";
+import ChatInput from "../../lib/chat/ChatInput";
+import { uploadMedia } from "../../lib/chat/";
 import imageCompression from 'browser-image-compression';
-import ChatHeader from "../../lib/chat/ChatHeader"; // Your ChatHeader component
+import ChatHeader from "../../lib/chat/ChatHeader";
 import { getDatabase, ref, onValue, set, onDisconnect, ServerValue } from "firebase/database";
-import MessageList from "../../lib/chat/MessageList"; // Import your MessageList
+import MessageList from "../../lib/chat/MessageList"; // Import the MessageList
 
 const db = getFirestore();
 const database = getDatabase();
@@ -43,6 +43,7 @@ export default function PrivateChatPage() {
   const [isTyping, setIsTyping] = useState(false); // Typing indicator
   const [otherUser, setOtherUser] = useState(null);
   const [isOnline, setIsOnline] = useState(false); // New: Online status for other user
+  const [pinnedMessages, setPinnedMessages] = useState([]); // For pinning if needed
 
   // Handle browser back button for image modal
   useEffect(() => {
@@ -301,6 +302,11 @@ export default function PrivateChatPage() {
     }
   };
 
+  const handlePin = async (messageId) => {
+    // Implement pinning logic if needed, e.g., update Firestore
+    console.log("Pin message:", messageId);
+  };
+
   if (!user) {
     return <div style={{ padding: "2rem", textAlign: "center" }}>Please log in</div>;
   }
@@ -322,11 +328,11 @@ export default function PrivateChatPage() {
         <MessageList
           messages={messages}
           currentUserId={user.uid}
-          onDelete={handleDelete}
           onReply={setReplyingTo}
+          onDelete={handleDelete}
+          onPin={handlePin}
+          pinnedMessages={pinnedMessages}
           onImageClick={handleImageClick}
-          onPin={() => {}} // Stub if not implemented
-          pinnedMessages={[]} // Stub if not implemented
         />
       </main>
 
