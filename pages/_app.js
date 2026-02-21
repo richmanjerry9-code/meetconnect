@@ -1,4 +1,3 @@
-// /pages/_app.js
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Script from 'next/script';
@@ -25,7 +24,10 @@ const AppContent = ({ Component, pageProps }) => {
       window.matchMedia('(display-mode: standalone)').matches ||
       window.navigator.standalone;
 
+    console.log('Is app in standalone mode?', isStandalone); // Debug log
+
     if (isStandalone) {
+      setShowInstallButton(false); // Explicitly ensure banner is hidden
       // Ask for notifications only if installed + logged in
       if (user && 'Notification' in window && Notification.permission === 'default') {
         setTimeout(() => setShowNotificationPrompt(true), 2000);
@@ -64,10 +66,10 @@ const AppContent = ({ Component, pageProps }) => {
   }, [router.events]);
 
   // -------------------------------
-  // ONESIGNAL USER LINKING
+  // ONESIGNAL USER LINKING (with guard)
   // -------------------------------
   useEffect(() => {
-    if (user && window.OneSignal) {
+    if (user && window.OneSignal && !window.OneSignal.initialized) { // Guard against multiple inits
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       window.OneSignalDeferred.push(async function(OneSignal) {
         await OneSignal.login(user.uid);
@@ -123,6 +125,23 @@ const AppContent = ({ Component, pageProps }) => {
 
     setShowNotificationPrompt(false);
   };
+
+  // -------------------------------
+  // AUTO-UNREGISTER FIREBASE SW
+  // -------------------------------
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        registrations.forEach(reg => {
+          if (reg.active && reg.active.scriptURL.includes('firebase-messaging-sw.js')) { // More precise check
+            reg.unregister().then(() => {
+              console.log('Firebase SW unregistered successfully');
+            }).catch(err => console.error('Unregister error:', err));
+          }
+        });
+      }).catch(err => console.error('Get registrations error:', err));
+    }
+  }, []);
 
   return (
     <>
@@ -325,49 +344,61 @@ const IOSPopup = ({ onClose }) => (
 );
 
 // -------------------------------
-// ROOT APP
-// -------------------------------
-export default function App({ Component, pageProps }) {
-  return (
-    <AuthProvider>
-      <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-        <link rel="manifest" href="/manifest.json" />
-      </Head>
+  // ROOT APP
+  // -------------------------------
+  export default function App({ Component, pageProps }) {
+    return (
+      <AuthProvider>
+        <Head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+          <link rel="manifest" href="/manifest.json" />
+        </Head>
 
-      {/* Google Analytics */}
-      <Script
-        src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
-        strategy="afterInteractive"
-      />
-      <Script id="ga-init" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          function gtag(){dataLayer.push(arguments);}
-          window.gtag = gtag;
-          gtag('js', new Date());
-          gtag('config', 'G-TBN1ZJECDJ', {
-            send_page_view: false
-          });
-        `}
-      </Script>
+        {/* Google Analytics */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
+          strategy="afterInteractive"
+        />
+        <Script id="ga-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            window.gtag = gtag;
+            gtag('js', new Date());
+            gtag('config', 'G-TBN1ZJECDJ', {
+              send_page_view: false
+            });
+          `}
+        </Script>
 
-      {/* OneSignal SDK */}
-      <Script id="onesignal-init" strategy="afterInteractive">
+        {/* OneSignal SDK */}
+        <Script
+          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+          strategy="afterInteractive"
+        />
+
+        {/* OneSignal Init (Deferred) */}
+<Script id="onesignal-init" strategy="afterInteractive">
   {`
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     OneSignalDeferred.push(async function(OneSignal) {
-      await OneSignal.init({
-        appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7",
-        serviceWorkerPath: "OneSignalSDKWorker.js",
-        serviceWorkerUpdaterPath: "OneSignalSDKUpdaterWorker.js",
-        serviceWorkerParam: { scope: "/" }
-      });
+      try {
+        await OneSignal.init({
+          appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7", // Verify in your OneSignal dashboard
+          safari_web_id: null, // Add if supporting Safari
+          notifyButton: { enable: true },
+          allowLocalhostAsSecureOrigin: true, // For dev testing
+          serviceWorkerPath: "OneSignalSDKWorker.js",
+          serviceWorkerParam: { scope: "/" }
+        });
+        console.log('OneSignal initialized successfully');
+      } catch (error) {
+        console.error('OneSignal init error:', error);
+      }
     });
   `}
 </Script>
-
-      <AppContent Component={Component} pageProps={pageProps} />
-    </AuthProvider>
-  );
-}
+        <AppContent Component={Component} pageProps={pageProps} />
+      </AuthProvider>
+    );
+  }

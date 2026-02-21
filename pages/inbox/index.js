@@ -1,4 +1,3 @@
-// /pages/inbox/index.js
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
@@ -27,7 +26,6 @@ export default function Inbox() {
 
   useEffect(() => {
     if (!user) return;
-
     const db = getFirestore();
 
     const q = query(
@@ -63,17 +61,17 @@ export default function Inbox() {
             lastMessage: data.lastMessage || "No message",
             timestamp: data.timestamp || null,
             pinnedBy: data.pinnedBy || [],
-            unreadCounts: data.unreadCounts || {},   // ✅ ADD THIS
+            unreadCounts: data.unreadCounts || {},
             otherUserId,
             otherUser,
           };
         })
       );
 
-      // ✅ Filter out chats without messages (no timestamp) and null entries
+      // Filter out chats without messages (no timestamp) and null entries
       const filteredChats = chatList.filter(chat => chat && chat.timestamp);
 
-      // ✅ Sort: pinned first → newest first
+      // Sort: pinned first → newest first
       setChats(
         filteredChats.sort((a, b) => {
           const aPinned = a.pinnedBy.includes(user.uid) ? 1 : 0;
@@ -91,7 +89,7 @@ export default function Inbox() {
     return () => unsubscribe();
   }, [user]);
 
-  // ✅ Pin / Unpin
+  // Pin / Unpin
   const handlePin = async (chatId, isPinned) => {
     const db = getFirestore();
     const chatRef = doc(db, "privateChats", chatId);
@@ -101,7 +99,7 @@ export default function Inbox() {
     setOpenMenuId(null);
   };
 
-  // ✅ Delete chat
+  // Delete chat
   const handleDelete = async (chatId) => {
     if (confirm("Are you sure you want to delete this conversation?")) {
       const db = getFirestore();
@@ -122,7 +120,7 @@ export default function Inbox() {
     }
   };
 
-  // ✅ Handle chat click: Mark as read then navigate
+  // Handle chat click: Mark as read then navigate
   const handleChatClick = async (chatId) => {
     const db = getFirestore();
     const chatRef = doc(db, "privateChats", chatId);
@@ -136,7 +134,7 @@ export default function Inbox() {
 
   return (
     <div className={styles.inboxContainer}>
-      {/* ✅ Back Arrow + Title + Group Chat Button */}
+      {/* Back Arrow + Title + Group Chat Button */}
       <div className={styles.inboxHeader} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <button
           onClick={() => router.push("/")}
@@ -152,7 +150,7 @@ export default function Inbox() {
           ←
         </button>
         <h2 className={styles.inboxTitle}>Inbox</h2>
-<button
+        <button
           onClick={() => router.push("/group-chat")}
           className={styles.groupChatBtn}
         >
@@ -209,7 +207,7 @@ export default function Inbox() {
               }) || "--"}
             </div>
 
-            {/* ✅ 3-Dot Menu */}
+            {/* 3-Dot Menu */}
             <div className={styles.chatActions}>
               <button
                 onClick={(e) => {
