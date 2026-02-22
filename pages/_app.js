@@ -28,9 +28,24 @@ const AppContent = ({ Component, pageProps }) => {
 
     if (isStandalone) {
       setShowInstallButton(false); // Explicitly ensure banner is hidden
-      // Ask for notifications only if installed + logged in
-      if (user && 'Notification' in window && Notification.permission === 'default') {
-        setTimeout(() => setShowNotificationPrompt(true), 2000);
+      // Auto-subscribe or prompt for notifications if installed + logged in
+      if (user && 'Notification' in window) {
+        setTimeout(() => {
+          if (Notification.permission === 'granted') {
+            // Auto-subscribe if permission already granted in settings
+            if (window.OneSignal) {
+              window.OneSignalDeferred = window.OneSignalDeferred || [];
+              window.OneSignalDeferred.push(async function(OneSignal) {
+                await OneSignal.registerForPushNotifications();
+                await OneSignal.login(user.uid); // Ensure linked to user
+                console.log('Auto-subscribed to notifications (permission already granted)');
+              });
+            }
+          } else if (Notification.permission === 'default') {
+            setShowNotificationPrompt(true); // Show banner to prompt
+          }
+          // If 'denied', do nothing—respect user choice
+        }, 2000);
       }
     } else {
       const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -142,6 +157,11 @@ const AppContent = ({ Component, pageProps }) => {
       }).catch(err => console.error('Get registrations error:', err));
     }
   }, []);
+
+  // Extra log for banner visibility (temporary debug)
+  useEffect(() => {
+    console.log('Install banner visible?', showInstallButton);
+  }, [showInstallButton]);
 
   return (
     <>
@@ -344,61 +364,62 @@ const IOSPopup = ({ onClose }) => (
 );
 
 // -------------------------------
-  // ROOT APP
-  // -------------------------------
-  export default function App({ Component, pageProps }) {
-    return (
-      <AuthProvider>
-        <Head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-          <link rel="manifest" href="/manifest.json" />
-        </Head>
+// ROOT APP
+// -------------------------------
+export default function App({ Component, pageProps }) {
+  return (
+    <AuthProvider>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <link rel="manifest" href="/manifest.json" />
+      </Head>
 
-        {/* Google Analytics */}
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
-          strategy="afterInteractive"
-        />
-        <Script id="ga-init" strategy="afterInteractive">
-          {`
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            window.gtag = gtag;
-            gtag('js', new Date());
-            gtag('config', 'G-TBN1ZJECDJ', {
-              send_page_view: false
-            });
-          `}
-        </Script>
+      {/* Google Analytics */}
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
+        strategy="afterInteractive"
+      />
+      <Script id="ga-init" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          window.gtag = gtag;
+          gtag('js', new Date());
+          gtag('config', 'G-TBN1ZJECDJ', {
+            send_page_view: false
+          });
+        `}
+      </Script>
 
-        {/* OneSignal SDK */}
-        <Script
-          src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-          strategy="afterInteractive"
-        />
+      {/* OneSignal SDK */}
+      <Script
+        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
+        strategy="afterInteractive"
+      />
 
-        {/* OneSignal Init (Deferred) */}
-<Script id="onesignal-init" strategy="afterInteractive">
-  {`
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    OneSignalDeferred.push(async function(OneSignal) {
-      try {
-        await OneSignal.init({
-          appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7", // Verify in your OneSignal dashboard
-          safari_web_id: null, // Add if supporting Safari
-          notifyButton: { enable: true },
-          allowLocalhostAsSecureOrigin: true, // For dev testing
-          serviceWorkerPath: "OneSignalSDKWorker.js",
-          serviceWorkerParam: { scope: "/" }
-        });
-        console.log('OneSignal initialized successfully');
-      } catch (error) {
-        console.error('OneSignal init error:', error);
-      }
-    });
-  `}
-</Script>
-        <AppContent Component={Component} pageProps={pageProps} />
-      </AuthProvider>
-    );
-  }
+      {/* OneSignal Init (Deferred) */}
+      <Script id="onesignal-init" strategy="afterInteractive">
+        {`
+          window.OneSignalDeferred = window.OneSignalDeferred || [];
+          OneSignalDeferred.push(async function(OneSignal) {
+            try {
+              await OneSignal.init({
+                appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7", // Verify in your OneSignal dashboard
+                safari_web_id: null, // Add if supporting Safari
+                notifyButton: { enable: true },
+                allowLocalhostAsSecureOrigin: true, // For dev testing
+                serviceWorkerPath: "OneSignalSDKWorker.js",
+                serviceWorkerParam: { scope: "/" }
+              });
+              console.log('OneSignal initialized successfully');
+            } catch (error) {
+              console.error('OneSignal init error:', error);
+            }
+          });
+        `}
+      </Script>
+
+      <AppContent Component={Component} pageProps={pageProps} />
+    </AuthProvider>
+  );
+}

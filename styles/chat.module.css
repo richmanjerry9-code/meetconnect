@@ -531,64 +531,63 @@
 .audioWrapper {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: #f0f0f0;
-  border-radius: 20px 20px 20px 4px;
-  padding: 8px 14px;
-  min-width: 220px;
-  max-width: 300px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  gap: 10px;
+  background: #f8f8f8;
+  border-radius: 18px 18px 18px 6px;
+  padding: 10px 12px;
+  width: 100%;
+  max-width: 100%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   transition: transform 0.1s ease;
   cursor: pointer;
   user-select: none;
+  box-sizing: border-box;
 }
 
 .audioWrapper:active {
   transform: scale(0.98);
 }
 
+/* Play Button */
 .audioButton {
   background: #D81B60;
   color: white;
   border: none;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.2s ease;
 }
 
-.audioButton:hover {
-  background: #C2185B;
-}
-
+/* Track */
 .audioTrack {
-  flex-grow: 1;
+  flex: 1;
   height: 4px;
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
   position: relative;
+  overflow: hidden;
 }
 
+/* Progress */
 .audioProgress {
   position: absolute;
   left: 0;
   top: 0;
   height: 100%;
   background: #D81B60;
-  border-radius: 2px;
+  border-radius: 4px;
 }
 
+/* Duration */
 .audioDuration {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 0.75rem;
-  color: #666;
-  font-variant-numeric: tabular-nums;
-  margin-left: 4px;
+  color: #777;
+  min-width: 38px;
+  text-align: right;
 }
 
 .groupChatBtn {
