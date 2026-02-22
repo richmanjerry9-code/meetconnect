@@ -6,7 +6,7 @@ import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
 import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { signOut, getIdToken } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
 const ACTIVATION_FEE = 300;
@@ -107,9 +107,7 @@ export default function ProfileSetup() {
   const didHandleExpiry = useRef(false);
   // Receipts history
   const [showReceiptsHistory, setShowReceiptsHistory] = useState(false);
-  const [receipts, setReceipts] = useState([]);
-
-  // ----------------------------
+  const [receipts, setReceipts] = useState([]);  // ----------------------------
   // Lifecycle: load profile & subscriptions
   // ----------------------------
   useEffect(() => {
@@ -280,26 +278,19 @@ export default function ProfileSetup() {
       if (pollingInterval.current) clearInterval(pollingInterval.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
-
-  // ----------------------------
+  }, [router]);  // ----------------------------
   // Receipt Helper
   // ----------------------------
   const showPaymentReceipt = (receiptData) => {
     setReceipt(receiptData);
-    setShowReceiptModal(true);
-
-    if (loggedInUser) {
-      setDoc(doc(collection(db, 'receipts'), `rec_${Date.now()}`), {
-        userId: loggedInUser.id,
-        username: loggedInUser.username,
-        ...receiptData,
-        createdAt: serverTimestamp(),
-      }).catch(console.error);
-    }
-  };
-
-  // ----------------------------
+    setShowReceiptModal(true);if (loggedInUser) {
+  setDoc(doc(collection(db, 'receipts'), `rec_${Date.now()}`), {
+    userId: loggedInUser.id,
+    username: loggedInUser.username,
+    ...receiptData,
+    createdAt: serverTimestamp(),
+  }).catch(console.error);
+}  };  // ----------------------------
   // Polling for payment status
   // ----------------------------
   useEffect(() => {
@@ -312,50 +303,45 @@ export default function ProfileSetup() {
             // Success
             setPaymentStatus('idle');
             clearInterval(pollingInterval.current);
-            setShowActivationModal(false);
+            setShowActivationModal(false);        const receiptData = {
+          type: 'activation',
+          title: 'Account Activation Receipt',
+          membership: 'Prime',
+          duration: '7 Days (Welcome Bonus) + Lifetime Visibility',
+          amount: ACTIVATION_FEE,
+          date: new Date().toLocaleString('en-KE', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          reference: `ACT-${shortenUserId(loggedInUser?.id || '').toUpperCase()}`,
+          phone: mpesaPhone || formData.phone,
+          paymentMethod: 'M-Pesa',
+          status: 'Payment Successful',
+          message: 'Thank you! Your profile is now visible to all users. You have also received 7 days Prime membership as a welcome bonus.'
+        };
 
-            const receiptData = {
-              type: 'activation',
-              title: 'Account Activation Receipt',
-              membership: 'Prime',
-              duration: '7 Days (Welcome Bonus) + Lifetime Visibility',
-              amount: ACTIVATION_FEE,
-              date: new Date().toLocaleString('en-KE', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              }),
-              reference: `ACT-${shortenUserId(loggedInUser?.id || '').toUpperCase()}`,
-              phone: mpesaPhone || formData.phone,
-              paymentMethod: 'M-Pesa',
-              status: 'Payment Successful',
-              message: 'Thank you! Your profile is now visible to all users. You have also received 7 days Prime membership as a welcome bonus.'
-            };
-
-            showPaymentReceipt(receiptData);
-          } else if (data.ResultCode !== '4999') {
-            // Failure (not processing)
-            setPaymentStatus('failed');
-            clearInterval(pollingInterval.current);
-            setActivationLocked(false);
-          }
-          // If 4999 (processing), continue polling
-        } catch (err) {
-          console.error('Polling error', err);
-          setPaymentStatus('failed');
-          clearInterval(pollingInterval.current);
-          setActivationLocked(false);
-        }
-      }, 10000); // Poll every 10 seconds
-
-      return () => clearInterval(pollingInterval.current);
+        showPaymentReceipt(receiptData);
+      } else if (data.ResultCode !== '4999') {
+        // Failure (not processing)
+        setPaymentStatus('failed');
+        clearInterval(pollingInterval.current);
+        setActivationLocked(false);
+      }
+      // If 4999 (processing), continue polling
+    } catch (err) {
+      console.error('Polling error', err);
+      setPaymentStatus('failed');
+      clearInterval(pollingInterval.current);
+      setActivationLocked(false);
     }
-  }, [paymentStatus, checkoutRequestID, router, mpesaPhone, formData.phone]);
+  }, 10000); // Poll every 10 seconds
 
-  // ----------------------------
+  return () => clearInterval(pollingInterval.current);
+}  }, [paymentStatus, checkoutRequestID, router, mpesaPhone, formData.phone]);  // ----------------------------
   // Helpers
   // ----------------------------
   const formatPhoneForMpesa = (phone) => {
@@ -666,28 +652,25 @@ export default function ProfileSetup() {
         exclusivePics: formData.exclusivePics,
         // Explicitly no sensitive fields like activationPaid, hidden, membership, balances, etc.
         hidden: formData.activationPaid ? false : true,
-      };
+      };  await setDoc(
+    doc(db, 'profiles', loggedInUser.id),
+    profileUpdates,
+    { merge: true }
+  );
+  localStorage.setItem('profileSaved', 'true');
 
-      await setDoc(
-        doc(db, 'profiles', loggedInUser.id),
-        profileUpdates,
-        { merge: true }
-      );
-      localStorage.setItem('profileSaved', 'true');
-
-      if (!formData.activationPaid) {
-        setShowActivationModal(true); // Immediate prompt
-      } else {
-        alert('Successful! Your profile is now live!');
-        router.push('/');
-      }
-    } catch (err) {
-      console.error('save profile failed', err);
-      setError('Failed to save.');
-    } finally {
-      setSaveLoading(false);
-    }
-  };
+  if (!formData.activationPaid) {
+    setShowActivationModal(true); // Immediate prompt
+  } else {
+    alert('Successful! Your profile is now live!');
+    router.push('/');
+  }
+} catch (err) {
+  console.error('save profile failed', err);
+  setError('Failed to save.');
+} finally {
+  setSaveLoading(false);
+}  };
   // ----------------------------
   // Verification, membership, payments
   // ----------------------------
@@ -725,46 +708,47 @@ export default function ProfileSetup() {
       return;
     }
     try {
+      const token = await getIdToken(auth.currentUser);
       const res = await fetch('/api/upgradeMembership', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({ level: selectedLevel, duration: selectedDuration }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.error || 'Upgrade failed');
-      }
-
-      const receiptData = {
-        type: 'upgrade',
-        title: 'Membership Upgrade Receipt',
-        membership: selectedLevel,
-        duration: selectedDuration,
-        amount: price,
-        date: new Date().toLocaleString('en-KE', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        reference: `UPG-${shortenUserId(loggedInUser.id)}-${selectedLevel.slice(0, 3).toUpperCase()}`,
-        phone: 'Funding Wallet',
-        paymentMethod: 'Wallet',
-        status: 'Payment Successful',
-        message: `Congratulations! You are now a ${selectedLevel} member for ${selectedDuration}.`
-      };
-
-      showPaymentReceipt(receiptData);
-    } catch (err) {
-      alert(err.message);
-      setUpgradeLocked(false);
-    } finally {
-      setShowPaymentChoice(false);
-      setSelectedDuration('');
-    }
+      }  const receiptData = {
+    type: 'upgrade',
+    title: 'Membership Upgrade Receipt',
+    membership: selectedLevel,
+    duration: selectedDuration,
+    amount: price,
+    date: new Date().toLocaleString('en-KE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    reference: `UPG-${shortenUserId(loggedInUser.id)}-${selectedLevel.slice(0, 3).toUpperCase()}`,
+    phone: 'Funding Wallet',
+    paymentMethod: 'Wallet',
+    status: 'Payment Successful',
+    message: `Congratulations! You are now a ${selectedLevel} member for ${selectedDuration}.`
   };
+
+  showPaymentReceipt(receiptData);
+} catch (err) {
+  alert(err.message);
+  setUpgradeLocked(false);
+} finally {
+  setShowPaymentChoice(false);
+  setSelectedDuration('');
+}  };
   const handleAddFund = () => {
     setShowAddFundModal(true);
   };
@@ -858,8 +842,8 @@ export default function ProfileSetup() {
   const plans = useMemo(
     () => ({
       Prime: { '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
-      VIP: { '3 Days': 300, '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },
-      VVIP: { '3 Days': 400, '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
+      VIP: { '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },
+      VVIP: { '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
     }),
     []
   );
@@ -911,785 +895,769 @@ export default function ProfileSetup() {
               className={styles.upgradeButton}
               style={{ marginBottom: '20px', background: 'linear-gradient(135deg, #ff69b4, #ff1493)', color: 'white', fontWeight: 'bold' }}
             >
-              👤 My Profile
+               My Profile
             </button>
-            {/* ==================== End of added button ==================== */}
-
-            <h2 className={styles.sectionTitle}>My Membership</h2>
-            <p className={styles.tip}>Upgrade boosts visibility</p>
-            <p>
-              Current: {membership}
-              {!formData.activationPaid && ' (Hidden until activation)'}
-            </p>
-            <p>Regular: Free</p>
-            <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
-              Upgrade to Prime
+            {/* ==================== End of added button ==================== */}        <h2 className={styles.sectionTitle}>My Membership</h2>
+        <p className={styles.tip}>Upgrade boosts visibility</p>
+        <p>
+          Current: {membership}
+          {!formData.activationPaid && ' (Hidden until activation)'}
+        </p>
+        <p>Regular: Free</p>
+        <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
+          Upgrade to Prime
+        </button>
+        <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
+          Upgrade to VIP
+        </button>
+        <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
+          Upgrade to VVIP
+        </button>
+      </aside>
+      <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
+        <h1 className={styles.setupTitle}>My Profile Setup</h1>
+        <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
+        <div className={styles.stepper}>
+          {steps.map((s, idx) => (
+            <button
+              key={s}
+              onClick={() => {
+                if (idx < activeStep || isStepValid(activeStep - 1)) setActiveStep(idx);
+              }}
+              className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
+            >
+              {s}
             </button>
-            <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
-              Upgrade to VIP
-            </button>
-            <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
-              Upgrade to VVIP
-            </button>
-          </aside>
-          <div className={`${styles.profileFormContainer} ${styles.premiumForm}`}>
-            <h1 className={styles.setupTitle}>My Profile Setup</h1>
-            <p className={styles.tip}>Complete one step at a time. We&apos;ll guide you!</p>
-            <div className={styles.stepper}>
-              {steps.map((s, idx) => (
-                <button
-                  key={s}
-                  onClick={() => {
-                    if (idx < activeStep || isStepValid(activeStep - 1)) setActiveStep(idx);
-                  }}
-                  className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
-                >
-                  {s}
+          ))}
+        </div>
+        {error && <p className={styles.error}>{error}</p>}
+        <form onSubmit={handleSubmit} className={styles.profileForm}>
+          {activeStep === 0 && (
+            <div className={styles.stepContent}>
+              <h2>Basics</h2>
+              <label className={styles.label}>
+                Profile Picture (Required)
+                <button type="button" onClick={() => profilePicInputRef.current.click()} className={styles.button}>
+                  Upload Profile Picture
                 </button>
-              ))}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className={styles.profilePicInput}
+                  ref={profilePicInputRef}
+                  style={{ display: 'none' }}
+                />
+                {(profilePicPreview || formData.profilePic) && (
+                  profilePicPreview ? (
+                    <Image src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
+                  ) : (
+                    <Image src={formData.profilePic} alt="Profile" width={150} height={150} className={styles.profilePic} />
+                  )
+                )}
+              </label>
+              <label className={styles.label}>
+                Name
+                <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
+              </label>
+              <label className={styles.label}>
+                Phone (e.g., 0712345678)
+                <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
+              </label>
+              <label className={styles.label}>
+                Gender
+                <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
+                  <option value="Female">Female</option>
+                  <option value="Male">Male</option>
+                </select>
+              </label>
+              <label className={styles.label}>
+                Sexual Orientation
+                <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
+                  <option value="Straight">Straight</option>
+                  <option value="Gay">Gay</option>
+                  <option value="Bisexual">Bisexual</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+              <label className={styles.label}>
+                Age (18+)
+                <input type="number" name="age" min="18" max="90" value={formData.age} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
+              </label>
+              <label className={styles.label}>
+                Nationality
+                <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
+              </label>
             </div>
-            {error && <p className={styles.error}>{error}</p>}
-            <form onSubmit={handleSubmit} className={styles.profileForm}>
-              {activeStep === 0 && (
-                <div className={styles.stepContent}>
-                  <h2>Basics</h2>
-                  <label className={styles.label}>
-                    Profile Picture (Required)
-                    <button type="button" onClick={() => profilePicInputRef.current.click()} className={styles.button}>
-                      Upload Profile Picture
-                    </button>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className={styles.profilePicInput}
-                      ref={profilePicInputRef}
-                      style={{ display: 'none' }}
-                    />
-                    {(profilePicPreview || formData.profilePic) && (
-                      profilePicPreview ? (
-                        <Image src={profilePicPreview} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
-                      ) : (
-                        <Image src={formData.profilePic} alt="Profile" width={150} height={150} className={styles.profilePic} />
-                      )
-                    )}
-                  </label>
-                  <label className={styles.label}>
-                    Name
-                    <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
-                  </label>
-                  <label className={styles.label}>
-                    Phone (e.g., 0712345678)
-                    <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
-                  </label>
-                  <label className={styles.label}>
-                    Gender
-                    <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
-                      <option value="Female">Female</option>
-                      <option value="Male">Male</option>
-                    </select>
-                  </label>
-                  <label className={styles.label}>
-                    Sexual Orientation
-                    <select name="sexualOrientation" value={formData.sexualOrientation} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
-                      <option value="Straight">Straight</option>
-                      <option value="Gay">Gay</option>
-                      <option value="Bisexual">Bisexual</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  </label>
-                  <label className={styles.label}>
-                    Age (18+)
-                    <input type="number" name="age" min="18" max="90" value={formData.age} onChange={handleChange} className={styles.input} required style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
-                  </label>
-                  <label className={styles.label}>
-                    Nationality
-                    <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }} />
-                  </label>
-                </div>
-              )}
-              {activeStep === 1 && (
-                <div className={styles.stepContent}>
-                  <h2>Location</h2>
-                  <label className={styles.label}>
-                    County
-                    <select name="county" value={formData.county} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
-                      <option value="">Select County</option>
-                      {countyList.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={styles.label}>
-                    City/Town
-                    <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
-                      <option value="">Select City/Town</option>
-                      {wards.map((w) => (
-                        <option key={w} value={w}>{w}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={styles.label}>
-                    Area
-                    <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
-                      <option value="">Select Area</option>
-                      {areas.map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                  </label>
-                  {formData.area && (
-                    <label className={styles.label}>
-                      Nearby Places (up to 4)
-                      <div className={styles.checkboxGroup}>
-                        {areas.map((place) => (
-                          <div key={place}>
-                            <input
-                              type="checkbox"
-                              value={place}
-                              checked={(formData.nearby || []).includes(place)}
-                              onChange={handleChange}
-                              name="nearby"
-                            />
-                            <span>{place}</span>
-                          </div>
-                        ))}
+          )}
+          {activeStep === 1 && (
+            <div className={styles.stepContent}>
+              <h2>Location</h2>
+              <label className={styles.label}>
+                County
+                <select name="county" value={formData.county} onChange={handleChange} className={styles.select} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
+                  <option value="">Select County</option>
+                  {countyList.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.label}>
+                City/Town
+                <select name="ward" value={selectedWard} onChange={handleWardChange} className={styles.select} disabled={!formData.county} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
+                  <option value="">Select City/Town</option>
+                  {wards.map((w) => (
+                    <option key={w} value={w}>{w}</option>
+                  ))}
+                </select>
+              </label>
+              <label className={styles.label}>
+                Area
+                <select name="area" value={formData.area} onChange={handleAreaChange} className={styles.select} disabled={!selectedWard} style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}>
+                  <option value="">Select Area</option>
+                  {areas.map((a) => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </label>
+              {formData.area && (
+                <label className={styles.label}>
+                  Nearby Places (up to 4)
+                  <div className={styles.checkboxGroup}>
+                    {areas.map((place) => (
+                      <div key={place}>
+                        <input
+                          type="checkbox"
+                          value={place}
+                          checked={(formData.nearby || []).includes(place)}
+                          onChange={handleChange}
+                          name="nearby"
+                        />
+                        <span>{place}</span>
                       </div>
-                    </label>
-                  )}
-                </div>
-              )}
-              {activeStep === 2 && (
-                <div className={styles.stepContent}>
-                  <h2>Bio</h2>
-                  <label className={styles.label}>
-                    Write a short bio about yourself (optional, max 100 words)
-                    <textarea
-                      name="bio"
-                      value={formData.bio}
-                      onChange={handleChange}
-                      rows={6}
-                      className={styles.input}
-                      style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
-                    />
-                  </label>
-                  <div>{formData.bio.trim().split(/\s+/).length} / 100 words</div>
-                </div>
-              )}
-              {activeStep === 3 && (
-                <div className={styles.stepContent}>
-                  <h2>Media</h2>
-                  <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>
-                    + Create Post
-                  </button>
-                  <div className={styles.viewButtonsContainer}>
-                    <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>
-                      View Posts
-                    </button>
-                    <button type="button" onClick={() => setShowExclusiveModal(true)} className={styles.viewExclusiveButton}>
-                      View Exclusive
-                    </button>
+                    ))}
                   </div>
-                  <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
-                </div>
+                </label>
               )}
-              {activeStep === 4 && (
-                <div className={styles.stepContent}>
-                  <h2>Membership & Wallets</h2>
-                  <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
-                  <div className={`${styles.walletSection} ${styles.fundingWallet}`}>
-                    <div className={styles.walletStripe} />
-                    <p className={styles.walletLabel}>Funding Wallet (Non-Withdrawable)</p>
-                    <p className={styles.walletBalance}>KSh {fundingBalance}</p>
-                    <button onClick={handleAddFund} className={styles.addFundButton}>
-                      Add Fund
-                    </button>
-                  </div>
-                  <div className={`${styles.walletSection} ${styles.earningsWallet}`}>
-                    <div className={styles.walletStripe} />
-                    <p className={styles.walletLabel}>Earnings Wallet</p>
-                    <p className={styles.walletBalance}>KSh {earningsBalance}</p>
-                    <button onClick={() => setShowWithdrawModal(true)} className={styles.withdrawButton} disabled={earningsBalance <= 0}>
-                      Withdraw
-                    </button>
-                    <button onClick={() => setShowEarningsHistory(true)} className={styles.historyButton}>
-                      View Purchases
-                    </button>
-                  </div>
-                  <button onClick={() => setShowReceiptsHistory(true)} className={styles.historyButton}>
-                    View Receipts
-                  </button>
-                  <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
-                    {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
-                  </button>
-                </div>
-              )}
-              <div className={styles.stepButtons}>
-                {activeStep > 0 && formData.activationPaid && (
-                  <button type="button" onClick={handlePrevStep} className={styles.button}>
-                    Previous
-                  </button>
-                )}
-                {activeStep < steps.length - 1 && (
-                  <button type="button" onClick={handleNextStep} className={styles.button}>
-                    Next
-                  </button>
-                )}
-                <button type="submit" className={styles.button} disabled={saveLoading}>
-                  {saveLoading ? 'Saving...' : 'Save Profile'}
+            </div>
+          )}
+          {activeStep === 2 && (
+            <div className={styles.stepContent}>
+              <h2>Bio</h2>
+              <label className={styles.label}>
+                Write a short bio about yourself (optional, max 100 words)
+                <textarea
+                  name="bio"
+                  value={formData.bio}
+                  onChange={handleChange}
+                  rows={6}
+                  className={styles.input}
+                  style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
+                />
+              </label>
+              <div>{formData.bio.trim().split(/\s+/).length} / 100 words</div>
+            </div>
+          )}
+          {activeStep === 3 && (
+            <div className={styles.stepContent}>
+              <h2>Media</h2>
+              <button type="button" onClick={() => setShowCreatePostModal(true)} className={styles.createPostButton}>
+                + Create Post
+              </button>
+              <div className={styles.viewButtonsContainer}>
+                <button type="button" onClick={() => setShowPostsModal(true)} className={styles.viewPostsButton}>
+                  View Posts
                 </button>
-                {!formData.activationPaid && (
-                  <button type="button" onClick={handleActivate} className={styles.button}>
-                    Activate
-                  </button>
-                )}
+                <button type="button" onClick={() => setShowExclusiveModal(true)} className={styles.viewExclusiveButton}>
+                  View Exclusive
+                </button>
               </div>
-            </form>
+              <p className={styles.tip}>Tip: Public posts visible to all; exclusive for subscribers. Avoid inappropriate content in public.</p>
+            </div>
+          )}
+          {activeStep === 4 && (
+            <div className={styles.stepContent}>
+              <h2>Membership & Wallets</h2>
+              <p>Manage your membership and wallets here. Upgrades boost visibility!</p>
+              <div className={`${styles.walletSection} ${styles.fundingWallet}`}>
+                <div className={styles.walletStripe} />
+                <p className={styles.walletLabel}>Funding Wallet (Non-Withdrawable)</p>
+                <p className={styles.walletBalance}>KSh {fundingBalance}</p>
+                <button onClick={handleAddFund} className={styles.addFundButton}>
+                  Add Fund
+                </button>
+              </div>
+              <div className={`${styles.walletSection} ${styles.earningsWallet}`}>
+                <div className={styles.walletStripe} />
+                <p className={styles.walletLabel}>Earnings Wallet</p>
+                <p className={styles.walletBalance}>KSh {earningsBalance}</p>
+                <button onClick={() => setShowWithdrawModal(true)} className={styles.withdrawButton} disabled={earningsBalance <= 0}>
+                  Withdraw
+                </button>
+                <button onClick={() => setShowEarningsHistory(true)} className={styles.historyButton}>
+                  View Purchases
+                </button>
+              </div>
+              <button onClick={() => setShowReceiptsHistory(true)} className={styles.historyButton}>
+                View Receipts
+              </button>
+              <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
+                {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
+              </button>
+            </div>
+          )}
+          <div className={styles.stepButtons}>
+            {activeStep > 0 && formData.activationPaid && (
+              <button type="button" onClick={handlePrevStep} className={styles.button}>
+                Previous
+              </button>
+            )}
+            {activeStep < steps.length - 1 && (
+              <button type="button" onClick={handleNextStep} className={styles.button}>
+                Next
+              </button>
+            )}
+            <button type="submit" className={styles.button} disabled={saveLoading}>
+              {saveLoading ? 'Saving...' : 'Save Profile'}
+            </button>
+            {!formData.activationPaid && (
+              <button type="button" onClick={handleActivate} className={styles.button}>
+                Activate
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {/* All your existing modals and components remain unchanged below */}
+    {showMediaViewer && (
+      <div className={styles.mediaViewerOverlay}>
+        <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+          <button className={styles.viewerClose} onClick={() => setShowMediaViewer(false)} aria-label="Close">
+            ×
+          </button>
+          <button className={styles.viewerLeft} onClick={() => setSelectedIndex(prev => prev > 0 ? prev - 1 : selectedGallery.length - 1)} aria-label="Previous">
+            ‹
+          </button>
+          <button className={styles.viewerRight} onClick={() => setSelectedIndex(prev => prev < selectedGallery.length - 1 ? prev + 1 : 0)} aria-label="Next">
+            ›
+          </button>
+          <div className={styles.viewerContent}>
+            {isVideo(selectedGallery[selectedIndex]) ? (
+              <video src={selectedGallery[selectedIndex]} controls autoPlay playsInline className={styles.viewerMedia} />
+            ) : (
+              <div className={styles.imageWrapper}>
+                <Image
+                  src={selectedGallery[selectedIndex]}
+                  alt="Full view"
+                  fill
+                  sizes="95vw"
+                  style={{ objectFit: 'contain' }}
+                  priority
+                />
+              </div>
+            )}
           </div>
         </div>
-
-        {/* All your existing modals and components remain unchanged below */}
-        {showMediaViewer && (
-          <div className={styles.mediaViewerOverlay}>
-            <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-              <button className={styles.viewerClose} onClick={() => setShowMediaViewer(false)} aria-label="Close">
-                ×
+      </div>
+    )}
+    {showActivationModal && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Activate Your Profile</h3>
+          <p>Activate your profile by choosing a membership plan. When your plan expires, you'll automatically continue on our free Regular tier — your profile stays visible on regular till you upgrade to a higher membership again.</p>
+          <button onClick={() => handleUpgrade('Prime')} className={styles.upgradeButton}>
+            Upgrade to Prime
+          </button>
+          <button onClick={() => handleUpgrade('VIP')} className={styles.upgradeButton}>
+            Upgrade to VIP
+          </button>
+          <button onClick={() => handleUpgrade('VVIP')} className={styles.upgradeButton}>
+            Upgrade to VVIP
+          </button>
+          <button onClick={() => setShowActivationModal(false)} className={styles.closeButton}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showModal && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Upgrade to {selectedLevel}</h3>
+          <div className={styles.durationOptions}>
+            {Object.keys(plans[selectedLevel] || {}).map((d) => (
+              <button
+                key={d}
+                onClick={() => handleDurationSelect(d)}
+                className={selectedDuration === d ? styles.selectedDuration : ''}
+              >
+                {d} - KSh {plans[selectedLevel][d]}
               </button>
-              <button className={styles.viewerLeft} onClick={() => setSelectedIndex(prev => prev > 0 ? prev - 1 : selectedGallery.length - 1)} aria-label="Previous">
-                ‹
-              </button>
-              <button className={styles.viewerRight} onClick={() => setSelectedIndex(prev => prev < selectedGallery.length - 1 ? prev + 1 : 0)} aria-label="Next">
-                ›
-              </button>
-              <div className={styles.viewerContent}>
-                {isVideo(selectedGallery[selectedIndex]) ? (
-                  <video src={selectedGallery[selectedIndex]} controls autoPlay playsInline className={styles.viewerMedia} />
-                ) : (
-                  <div className={styles.imageWrapper}>
-                    <Image
-                      src={selectedGallery[selectedIndex]}
-                      alt="Full view"
-                      fill
-                      sizes="95vw"
-                      style={{ objectFit: 'contain' }}
-                      priority
-                    />
+            ))}
+          </div>
+          <button onClick={() => setShowModal(false)} className={styles.closeButton}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showPaymentChoice && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Payment for {selectedLevel} - {selectedDuration}</h3>
+          <p>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
+          <div>
+            <label>
+              <input type="radio" name="paymentMethod" value="wallet" checked={selectedPaymentMethod === 'wallet'} onChange={() => handlePaymentMethodChange('wallet')} />
+              Wallet (KSh {fundingBalance})
+            </label>
+            <label>
+              <input type="radio" name="paymentMethod" value="mpesa" checked={selectedPaymentMethod === 'mpesa'} onChange={() => handlePaymentMethodChange('mpesa')} />
+              M-Pesa
+            </label>
+          </div>
+          {selectedPaymentMethod === 'mpesa' && (
+            <StkPushForm
+              initialPhone={mpesaPhone}
+              initialAmount={plans[selectedLevel][selectedDuration]}
+              readOnlyAmount={true}
+              apiEndpoint="/api/stkpush"
+              onInitiated={() => setUpgradeLocked(true)}
+              onFailure={() => setUpgradeLocked(false)}
+              onSuccess={() => {
+                const price = plans[selectedLevel][selectedDuration];
+                const receiptData = {
+                  type: 'upgrade',
+                  title: 'Membership Upgrade Receipt',
+                  membership: selectedLevel,
+                  duration: selectedDuration,
+                  amount: price,
+                  date: new Date().toLocaleString('en-KE', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                  reference: `UPG-${shortenUserId(loggedInUser.id)}-${selectedLevel.slice(0, 3).toUpperCase()}`,
+                  phone: mpesaPhone,
+                  paymentMethod: 'M-Pesa',
+                  status: 'Payment Successful',
+                  message: `Congratulations! You are now a ${selectedLevel} member for ${selectedDuration}.`
+                };
+                showPaymentReceipt(receiptData);
+                setShowPaymentChoice(false);
+              }}
+              additionalBody={{
+                userId: loggedInUser.id,
+                type: 'upgrade',
+                level: selectedLevel,
+                duration: selectedDuration,
+                accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
+                transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
+              }}
+            />
+          )}
+          {selectedPaymentMethod === 'wallet' && (
+            <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton} disabled={upgradeLocked}>
+              Confirm
+            </button>
+          )}
+          <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton} disabled={upgradeLocked}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showAddFundModal && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Add Funds</h3>
+          <p>Phone: {formData.phone}</p>
+          <StkPushForm
+            initialPhone={mpesaPhone}
+            apiEndpoint="/api/stkpush"
+            onInitiated={() => setAddFundLocked(true)}
+            onFailure={() => setAddFundLocked(false)}
+            additionalBody={{
+              userId: loggedInUser.id,
+              type: 'addfund',
+              accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
+              transactionDesc: 'Add funds',
+            }}
+          />
+          <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton} disabled={addFundLocked}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showWithdrawModal && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Withdraw</h3>
+          <p>Available: KSh {earningsBalance}</p>
+          <input
+            type="number"
+            value={withdrawAmount}
+            onChange={(e) => setWithdrawAmount(e.target.value)}
+            min="1"
+            max={earningsBalance}
+            className={styles.input}
+            style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
+          />
+          <button onClick={handleWithdraw} className={styles.withdrawButton} disabled={withdrawLoading}>
+            {withdrawLoading ? 'Processing...' : 'Withdraw'}
+          </button>
+          <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton} disabled={withdrawLoading}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
+    {showEarningsHistory && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Purchase History</h3>
+          {transactions.length === 0 ? (
+            <p>No subscriptions.</p>
+          ) : (
+            <table className={styles.historyTable}>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Amount</th>
+                  <th>Duration</th>
+                  <th>Date</th>
+                  <th>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((tx) => (
+                  <tr key={tx.id}>
+                    <td>{tx.userName}</td>
+                    <td>{tx.amount}</td>
+                    <td>{tx.duration}</td>
+                    <td>{tx.date}</td>
+                    <td>{tx.expiresAt}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>
+            My Exclusive Subscriptions
+          </button>
+          <button onClick={() => setShowEarningsHistory(false)} className={styles.closeButton}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showMySubscriptions && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>My Exclusive Subscriptions</h3>
+          {mySubscriptions.length === 0 ? (
+            <p>No active subscriptions.</p>
+          ) : (
+            <div className={styles.subscriptionList}>
+              {mySubscriptions.map((sub) => (
+                <div key={sub.id} className={styles.subscriptionItem} onClick={() => handleViewCreatorProfile(sub.creatorId)}>
+                  {sub.creatorPic ? (
+                    <Image src={sub.creatorPic} alt={sub.creatorName} width={50} height={50} className={styles.subProfilePic} />
+                  ) : (
+                    <div className={styles.subPlaceholderPic}>No Pic</div>
+                  )}
+                  <div className={styles.subDetails}>
+                    <h4>{sub.creatorName}</h4>
+                    <p>Amount: KSh {sub.amount}</p>
+                    <p>Duration: {sub.duration} days</p>
+                    <p>Subscribed on: {sub.date}</p>
+                    <p>Expires: {sub.expiresAt}</p>
+                    <p>Status: {sub.isActive ? 'Active' : 'Expired'}</p>
                   </div>
+                  <button className={styles.viewButton}>View Profile & Exclusive Content</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setShowMySubscriptions(false)} className={styles.closeButton}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showReceiptsHistory && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Receipt History</h3>
+          {receipts.length === 0 ? (
+            <p>No receipts.</p>
+          ) : (
+            <table className={styles.historyTable}>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Membership</th>
+                  <th>Amount</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {receipts.map((rec) => (
+                  <tr key={rec.id}>
+                    <td>{rec.type}</td>
+                    <td>{rec.membership || 'N/A'}</td>
+                    <td>KSh {rec.amount}</td>
+                    <td>{rec.date}</td>
+                    <td>{rec.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <button onClick={() => setShowReceiptsHistory(false)} className={styles.closeButton}>
+            Close
+          </button>
+        </div>
+      </div>
+    )}
+    {showDeactivationModal && (
+      <div className={styles.modal}>
+        <div className={styles.modalContent}>
+          <h3>Deactivate Account?</h3>
+          <p>Please select the reason(s) for deactivating your account. Note that deactivation will render your profile invisible to other users, and reactivation will require payment of the activation fee again.</p>
+          <div className={styles.checkboxGroup}>
+            {reasons.map((reason) => (
+              <div key={reason}>
+                <input
+                  type="checkbox"
+                  id={reason}
+                  checked={deactivateReasons.includes(reason)}
+                  onChange={(e) => handleReasonChange(e, reason)}
+                />
+                <label htmlFor={reason}>{reason}</label>
+                {reason === 'Other' && deactivateReasons.includes('Other') && (
+                  <textarea
+                    value={otherReason}
+                    onChange={(e) => setOtherReason(e.target.value)}
+                    placeholder="Please specify"
+                    className={styles.input}
+                    style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
+                  />
                 )}
               </div>
-            </div>
+            ))}
           </div>
-        )}
-        {showActivationModal && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3> Profile Created Successfully!</h3>
-              <p>Pay a one-time KES 300 to activate lifetime visibility and start connecting with gentlemen.</p>
-              <p>Serious members only — ensures better matches!</p>
-              {paymentStatus === 'initiated' ? (
-                <p>Waiting for payment confirmation... This may take a few moments.</p>
-              ) : (
-                <StkPushForm
-                  initialPhone={mpesaPhone}
-                  initialAmount={ACTIVATION_FEE}
-                  readOnlyAmount={true}
-                  apiEndpoint="/api/stkpush"
-                  onInitiated={(requestId) => handlePaymentInitiated(requestId)}
-                  onFailure={handlePaymentFailure}
-                  additionalBody={{
-                    userId: loggedInUser.id,
-                    type: 'activation',
-                    accountReference: `act_${loggedInUser.id.slice(0, 8)}`,
-                    transactionDesc: 'Payment for Prime 7 days activation',
-                  }}
-                />
-              )}
-              {paymentStatus === 'failed' && (
-                <p>Payment failed. Please try again.</p>
-              )}
-              <button onClick={() => setShowActivationModal(false)} className={styles.closeButton} disabled={activationLocked || paymentStatus === 'initiated'}>
-                Later (profile stays hidden)
-              </button>
-            </div>
-          </div>
-        )}
-        {showModal && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Upgrade to {selectedLevel}</h3>
-              <div className={styles.durationOptions}>
-                {Object.keys(plans[selectedLevel] || {}).map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => handleDurationSelect(d)}
-                    className={selectedDuration === d ? styles.selectedDuration : ''}
-                  >
-                    {d} - KSh {plans[selectedLevel][d]}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => setShowModal(false)} className={styles.closeButton}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showPaymentChoice && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Payment for {selectedLevel} - {selectedDuration}</h3>
-              <p>Total: KSh {plans[selectedLevel][selectedDuration]}</p>
-              <div>
-                <label>
-                  <input type="radio" name="paymentMethod" value="wallet" checked={selectedPaymentMethod === 'wallet'} onChange={() => handlePaymentMethodChange('wallet')} />
-                  Wallet (KSh {fundingBalance})
-                </label>
-                <label>
-                  <input type="radio" name="paymentMethod" value="mpesa" checked={selectedPaymentMethod === 'mpesa'} onChange={() => handlePaymentMethodChange('mpesa')} />
-                  M-Pesa
-                </label>
-              </div>
-              {selectedPaymentMethod === 'mpesa' && (
-                <StkPushForm
-                  initialPhone={mpesaPhone}
-                  initialAmount={plans[selectedLevel][selectedDuration]}
-                  readOnlyAmount={true}
-                  apiEndpoint="/api/stkpush"
-                  onInitiated={() => setUpgradeLocked(true)}
-                  onFailure={() => setUpgradeLocked(false)}
-                  onSuccess={() => {
-                    const price = plans[selectedLevel][selectedDuration];
-                    const receiptData = {
-                      type: 'upgrade',
-                      title: 'Membership Upgrade Receipt',
-                      membership: selectedLevel,
-                      duration: selectedDuration,
-                      amount: price,
-                      date: new Date().toLocaleString('en-KE', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      }),
-                      reference: `UPG-${shortenUserId(loggedInUser.id)}-${selectedLevel.slice(0, 3).toUpperCase()}`,
-                      phone: mpesaPhone,
-                      paymentMethod: 'M-Pesa',
-                      status: 'Payment Successful',
-                      message: `Congratulations! You are now a ${selectedLevel} member for ${selectedDuration}.`
-                    };
-                    showPaymentReceipt(receiptData);
-                    setShowPaymentChoice(false);
-                  }}
-                  additionalBody={{
-                    userId: loggedInUser.id,
-                    type: 'upgrade',
-                    level: selectedLevel,
-                    duration: selectedDuration,
-                    accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
-                    transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
-                  }}
-                />
-              )}
-              {selectedPaymentMethod === 'wallet' && (
-                <button onClick={handleConfirmWalletUpgrade} className={styles.upgradeButton} disabled={upgradeLocked}>
-                  Confirm
+          <button onClick={handleDeactivateAccount} className={styles.button}>
+            Confirm Deactivation
+          </button>
+          <button onClick={() => setShowDeactivationModal(false)} className={styles.closeButton}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    )}
+    {showCreatePostModal && (
+      <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
+        <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => setShowCreatePostModal(false)} className={styles.modalBack}>
+            ←
+          </button>
+          <h2>Create Post</h2>
+          <p className={styles.tip}>Add photos/videos. Exclusive for subscribers only.</p>
+          <button onClick={() => fileInputRef.current.click()} className={styles.button}>
+            Select Photos/Videos
+          </button>
+          <input
+            type="file"
+            accept="image/*,video/*"
+            multiple
+            onChange={handlePostFileSelect}
+            className={styles.hiddenFileInput}
+            ref={fileInputRef}
+          />
+          <div className={styles.postPreviewGrid}>
+            {postPreviews.length === 0 && <p>No files selected</p>}
+            {postPreviews.map((preview, i) => (
+              <div key={i} className={styles.postPreviewItem}>
+                {postFiles[i] && isVideo(postFiles[i]) ? (
+                  <video src={preview} className={styles.postPreviewImg} controls muted />
+                ) : (
+                  <Image src={preview} alt={`preview-${i}`} width={100} height={100} className={styles.postPreviewImg} />
+                )}
+                <button onClick={() => handleRemovePostPreview(i)} className={styles.removePreview}>
+                  ×
                 </button>
-              )}
-              <button onClick={() => setShowPaymentChoice(false)} className={styles.closeButton} disabled={upgradeLocked}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showAddFundModal && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Add Funds</h3>
-              <p>Phone: {formData.phone}</p>
-              <StkPushForm
-                initialPhone={mpesaPhone}
-                apiEndpoint="/api/stkpush"
-                onInitiated={() => setAddFundLocked(true)}
-                onFailure={() => setAddFundLocked(false)}
-                additionalBody={{
-                  userId: loggedInUser.id,
-                  type: 'addfund',
-                  accountReference: `wal_${shortenUserId(loggedInUser.id)}`,
-                  transactionDesc: 'Add funds',
-                }}
-              />
-              <button onClick={() => setShowAddFundModal(false)} className={styles.closeButton} disabled={addFundLocked}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showWithdrawModal && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Withdraw</h3>
-              <p>Available: KSh {earningsBalance}</p>
-              <input
-                type="number"
-                value={withdrawAmount}
-                onChange={(e) => setWithdrawAmount(e.target.value)}
-                min="1"
-                max={earningsBalance}
-                className={styles.input}
-                style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
-              />
-              <button onClick={handleWithdraw} className={styles.withdrawButton} disabled={withdrawLoading}>
-                {withdrawLoading ? 'Processing...' : 'Withdraw'}
-              </button>
-              <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton} disabled={withdrawLoading}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-        {showEarningsHistory && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Purchase History</h3>
-              {transactions.length === 0 ? (
-                <p>No subscriptions.</p>
-              ) : (
-                <table className={styles.historyTable}>
-                  <thead>
-                    <tr>
-                      <th>User</th>
-                      <th>Amount</th>
-                      <th>Duration</th>
-                      <th>Date</th>
-                      <th>Expires</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactions.map((tx) => (
-                      <tr key={tx.id}>
-                        <td>{tx.userName}</td>
-                        <td>{tx.amount}</td>
-                        <td>{tx.duration}</td>
-                        <td>{tx.date}</td>
-                        <td>{tx.expiresAt}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>
-                My Exclusive Subscriptions
-              </button>
-              <button onClick={() => setShowEarningsHistory(false)} className={styles.closeButton}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showMySubscriptions && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>My Exclusive Subscriptions</h3>
-              {mySubscriptions.length === 0 ? (
-                <p>No active subscriptions.</p>
-              ) : (
-                <div className={styles.subscriptionList}>
-                  {mySubscriptions.map((sub) => (
-                    <div key={sub.id} className={styles.subscriptionItem} onClick={() => handleViewCreatorProfile(sub.creatorId)}>
-                      {sub.creatorPic ? (
-                        <Image src={sub.creatorPic} alt={sub.creatorName} width={50} height={50} className={styles.subProfilePic} />
-                      ) : (
-                        <div className={styles.subPlaceholderPic}>No Pic</div>
-                      )}
-                      <div className={styles.subDetails}>
-                        <h4>{sub.creatorName}</h4>
-                        <p>Amount: KSh {sub.amount}</p>
-                        <p>Duration: {sub.duration} days</p>
-                        <p>Subscribed on: {sub.date}</p>
-                        <p>Expires: {sub.expiresAt}</p>
-                        <p>Status: {sub.isActive ? 'Active' : 'Expired'}</p>
-                      </div>
-                      <button className={styles.viewButton}>View Profile & Exclusive Content</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button onClick={() => setShowMySubscriptions(false)} className={styles.closeButton}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showReceiptsHistory && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Receipt History</h3>
-              {receipts.length === 0 ? (
-                <p>No receipts.</p>
-              ) : (
-                <table className={styles.historyTable}>
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th>Membership</th>
-                      <th>Amount</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {receipts.map((rec) => (
-                      <tr key={rec.id}>
-                        <td>{rec.type}</td>
-                        <td>{rec.membership || 'N/A'}</td>
-                        <td>KSh {rec.amount}</td>
-                        <td>{rec.date}</td>
-                        <td>{rec.status}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-              <button onClick={() => setShowReceiptsHistory(false)} className={styles.closeButton}>
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-        {showDeactivationModal && (
-          <div className={styles.modal}>
-            <div className={styles.modalContent}>
-              <h3>Deactivate Account?</h3>
-              <p>Please select the reason(s) for deactivating your account. Note that deactivation will render your profile invisible to other users, and reactivation will require payment of the activation fee again.</p>
-              <div className={styles.checkboxGroup}>
-                {reasons.map((reason) => (
-                  <div key={reason}>
-                    <input
-                      type="checkbox"
-                      id={reason}
-                      checked={deactivateReasons.includes(reason)}
-                      onChange={(e) => handleReasonChange(e, reason)}
-                    />
-                    <label htmlFor={reason}>{reason}</label>
-                    {reason === 'Other' && deactivateReasons.includes('Other') && (
-                      <textarea
-                        value={otherReason}
-                        onChange={(e) => setOtherReason(e.target.value)}
-                        placeholder="Please specify"
-                        className={styles.input}
-                        style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
-                      />
-                    )}
-                  </div>
-                ))}
               </div>
-              <button onClick={handleDeactivateAccount} className={styles.button}>
-                Confirm Deactivation
-              </button>
-              <button onClick={() => setShowDeactivationModal(false)} className={styles.closeButton}>
-                Cancel
-              </button>
-            </div>
+            ))}
           </div>
-        )}
-        {showCreatePostModal && (
-          <div className={styles.modalOverlay} onClick={() => setShowCreatePostModal(false)}>
-            <div className={styles.createPostModal} onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => setShowCreatePostModal(false)} className={styles.modalBack}>
-                ←
-              </button>
-              <h2>Create Post</h2>
-              <p className={styles.tip}>Add photos/videos. Exclusive for subscribers only.</p>
-              <button onClick={() => fileInputRef.current.click()} className={styles.button}>
-                Select Photos/Videos
-              </button>
-              <input
-                type="file"
-                accept="image/*,video/*"
-                multiple
-                onChange={handlePostFileSelect}
-                className={styles.hiddenFileInput}
-                ref={fileInputRef}
-              />
-              <div className={styles.postPreviewGrid}>
-                {postPreviews.length === 0 && <p>No files selected</p>}
-                {postPreviews.map((preview, i) => (
-                  <div key={i} className={styles.postPreviewItem}>
-                    {postFiles[i] && isVideo(postFiles[i]) ? (
-                      <video src={preview} className={styles.postPreviewImg} controls muted />
-                    ) : (
-                      <Image src={preview} alt={`preview-${i}`} width={100} height={100} className={styles.postPreviewImg} />
-                    )}
-                    <button onClick={() => handleRemovePostPreview(i)} className={styles.removePreview}>
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <textarea
-                value={postCaption}
-                onChange={(e) => setPostCaption(e.target.value.slice(0, 500))}
-                placeholder="Caption..."
-                rows={4}
-                style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
-              />
-              <div>{postCaption.length}/500</div>
-              <label>
-                Exclusive?
-                <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
-              </label>
-              <div style={{ marginTop: 12 }}>
-                <button onClick={handleCreatePost} disabled={postFiles.length === 0 || postUploading} className={styles.button}>
-                  {postUploading ? 'Posting...' : 'Post'}
-                </button>
+          <textarea
+            value={postCaption}
+            onChange={(e) => setPostCaption(e.target.value.slice(0, 500))}
+            placeholder="Caption..."
+            rows={4}
+            style={{ backgroundColor: "#ffffff", color: "#000000", WebkitTextFillColor: "#000000", colorScheme: "light" }}
+          />
+          <div>{postCaption.length}/500</div>
+          <label>
+            Exclusive?
+            <input type="checkbox" checked={postIsExclusive} onChange={(e) => setPostIsExclusive(e.target.checked)} />
+          </label>
+          <div style={{ marginTop: 12 }}>
+            <button onClick={handleCreatePost} disabled={postFiles.length === 0 || postUploading} className={styles.button}>
+              {postUploading ? 'Posting...' : 'Post'}
+            </button>
+            <button
+              onClick={() => {
+                postPreviews.forEach((u) => URL.revokeObjectURL(u));
+                setPostPreviews([]);
+                setPostFiles([]);
+                setShowCreatePostModal(false);
+              }}
+              className={styles.closeButton}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    {showPostsModal && (
+      <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
+        <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => setShowPostsModal(false)} className={styles.modalBack}>
+            ←
+          </button>
+          <h2>Posts</h2>
+          <div className={styles.gallery}>
+            {(formData.normalPics || []).map((url, index) => (
+              <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.normalPics, index)}>
+                <Image src={getThumbnail(url)} alt="" fill sizes="140px" style={{ objectFit: 'cover' }} loading="lazy" />
+                {isVideo(url) && <div className={styles.playIcon}></div>}
                 <button
-                  onClick={() => {
-                    postPreviews.forEach((u) => URL.revokeObjectURL(u));
-                    setPostPreviews([]);
-                    setPostFiles([]);
-                    setShowCreatePostModal(false);
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveNormalPic(index);
                   }}
-                  className={styles.closeButton}
+                  className={styles.removeButton}
                 >
-                  Cancel
+                  ×
                 </button>
               </div>
-            </div>
+            ))}
           </div>
-        )}
-        {showPostsModal && (
-          <div className={styles.modalOverlay} onClick={() => setShowPostsModal(false)}>
-            <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => setShowPostsModal(false)} className={styles.modalBack}>
-                ←
-              </button>
-              <h2>Posts</h2>
-              <div className={styles.gallery}>
-                {(formData.normalPics || []).map((url, index) => (
-                  <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.normalPics, index)}>
-                    <Image src={getThumbnail(url)} alt="" fill sizes="140px" style={{ objectFit: 'cover' }} loading="lazy" />
-                    {isVideo(url) && <div className={styles.playIcon}></div>}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveNormalPic(index);
-                      }}
-                      className={styles.removeButton}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-        {showExclusiveModal && (
-          <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
-            <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => setShowExclusiveModal(false)} className={styles.modalBack}>
-                ←
-              </button>
-              <h2>Exclusive Content</h2>
-              <div className={styles.gallery}>
-                {(formData.exclusivePics || []).map((url, index) => (
-                  <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.exclusivePics, index)}>
-                    <Image src={getThumbnail(url)} alt="" fill sizes="140px" style={{ objectFit: 'cover' }} loading="lazy" />
-                    {isVideo(url) && <div className={styles.playIcon}></div>}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveExclusivePic(index);
-                      }}
-                      className={styles.removeButton}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-        {showInappropriateBanner && (
-          <div className={styles.inappropriateBanner}>
-            <p>Inappropriate content detected. Use exclusive or change image.</p>
-            <button onClick={() => setShowInappropriateBanner(false)}>Dismiss</button>
-          </div>
-        )}
-
-        {/* Professional Receipt Modal */}
-        {showReceiptModal && receipt && (
-          <div className={styles.modal}>
-            <div className={styles.receiptModalContent}>
-              <div className={styles.receiptHeader}>
-                <h2>✅ Payment Receipt</h2>
-                <p className={styles.receiptCompany}>Meet Connect</p>
-                <p className={styles.receiptTagline}>Official Transaction Receipt</p>
-              </div>
-
-              <div className={styles.receiptBody}>
-                <div className={styles.receiptRow}>
-                  <span>Transaction ID</span>
-                  <span className={styles.mono}>{receipt.reference}</span>
-                </div>
-                <div className={styles.receiptRow}>
-                  <span>Date & Time</span>
-                  <span>{receipt.date}</span>
-                </div>
-                <div className={styles.receiptRow}>
-                  <span>Payment Method</span>
-                  <span>{receipt.paymentMethod}</span>
-                </div>
-                <div className={styles.receiptRow}>
-                  <span>Phone / Wallet</span>
-                  <span>{receipt.phone}</span>
-                </div>
-
-                <div className={styles.receiptDivider} />
-
-                <div className={styles.receiptItem}>
-                  <div>
-                    <strong>{receipt.title}</strong><br />
-                    <span className={styles.membershipInfo}>
-                      {receipt.membership} • {receipt.duration}
-                    </span>
-                  </div>
-                  <div className={styles.amount}>
-                    KSh {receipt.amount.toLocaleString()}
-                  </div>
-                </div>
-
-                <div className={styles.receiptTotal}>
-                  <span>Total Paid</span>
-                  <span className={styles.totalAmount}>KSh {receipt.amount.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <p className={styles.receiptMessage}>{receipt.message}</p>
-
-              <div className={styles.receiptFooter}>
-                <p>Thank you for choosing <strong>Meet Connect</strong></p>
-                <p className={styles.small}>This is a computer-generated receipt. No signature required.</p>
-              </div>
-
-              <div className={styles.receiptActions}>
-                <button 
-                  onClick={() => {
-                    setShowReceiptModal(false);
-                    router.push('/');
+        </div>
+      </div>
+    )}
+    {showExclusiveModal && (
+      <div className={styles.modalOverlay} onClick={() => setShowExclusiveModal(false)}>
+        <div className={styles.galleryModal} onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => setShowExclusiveModal(false)} className={styles.modalBack}>
+            ←
+          </button>
+          <h2>Exclusive Content</h2>
+          <div className={styles.gallery}>
+            {(formData.exclusivePics || []).map((url, index) => (
+              <div key={index} className={styles.galleryItem} onClick={() => handleMediaClick(formData.exclusivePics, index)}>
+                <Image src={getThumbnail(url)} alt="" fill sizes="140px" style={{ objectFit: 'cover' }} loading="lazy" />
+                {isVideo(url) && <div className={styles.playIcon}></div>}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveExclusivePic(index);
                   }}
-                  className={styles.button}
+                  className={styles.removeButton}
                 >
-                  Continue to Homepage
+                  ×
                 </button>
               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )}
+    {showInappropriateBanner && (
+      <div className={styles.inappropriateBanner}>
+        <p>Inappropriate content detected. Use exclusive or change image.</p>
+        <button onClick={() => setShowInappropriateBanner(false)}>Dismiss</button>
+      </div>
+    )}
+
+    {/* Professional Receipt Modal */}
+    {showReceiptModal && receipt && (
+      <div className={styles.modal}>
+        <div className={styles.receiptModalContent}>
+          <div className={styles.receiptHeader}>
+            <h2> Payment Receipt</h2>
+            <p className={styles.receiptCompany}>Meet Connect</p>
+            <p className={styles.receiptTagline}>Official Transaction Receipt</p>
+          </div>
+
+          <div className={styles.receiptBody}>
+            <div className={styles.receiptRow}>
+              <span>Transaction ID</span>
+              <span className={styles.mono}>{receipt.reference}</span>
+            </div>
+            <div className={styles.receiptRow}>
+              <span>Date & Time</span>
+              <span>{receipt.date}</span>
+            </div>
+            <div className={styles.receiptRow}>
+              <span>Payment Method</span>
+              <span>{receipt.paymentMethod}</span>
+            </div>
+            <div className={styles.receiptRow}>
+              <span>Phone / Wallet</span>
+              <span>{receipt.phone}</span>
+            </div>
+
+            <div className={styles.receiptDivider} />
+
+            <div className={styles.receiptItem}>
+              <div>
+                <strong>{receipt.title}</strong><br />
+                <span className={styles.membershipInfo}>
+                  {receipt.membership} • {receipt.duration}
+                </span>
+              </div>
+              <div className={styles.amount}>
+                KSh {receipt.amount.toLocaleString()}
+              </div>
+            </div>
+
+            <div className={styles.receiptTotal}>
+              <span>Total Paid</span>
+              <span className={styles.totalAmount}>KSh {receipt.amount.toLocaleString()}</span>
             </div>
           </div>
-        )}
-      </main>
-    </div>
-  );
+
+          <p className={styles.receiptMessage}>{receipt.message}</p>
+
+          <div className={styles.receiptFooter}>
+            <p>Thank you for choosing <strong>Meet Connect</strong></p>
+            <p className={styles.small}>This is a computer-generated receipt. No signature required.</p>
+          </div>
+
+          <div className={styles.receiptActions}>
+            <button 
+              onClick={() => {
+                setShowReceiptModal(false);
+                router.push('/');
+              }}
+              className={styles.button}
+            >
+              Continue to Homepage
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </main>
+</div>  );
 }

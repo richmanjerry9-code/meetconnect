@@ -21,11 +21,11 @@ const db = getFirestore();
 
 const plans = {
   Prime: { '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
-  VIP: { '3 Days': 300, '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },
-  VVIP: { '3 Days': 400, '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },
+  VIP: { '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },     // ← 3 Days removed
+  VVIP: { '7 Days': 900, '15 Days': 1500, '30 Days': 3000 },    // ← 3 Days removed
 };
 
-const daysMap = { '3 Days': 3, '7 Days': 7, '15 Days': 15, '30 Days': 30 };
+const daysMap = { '7 Days': 7, '15 Days': 15, '30 Days': 30 };   // ← 3 Days removed here too
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -69,14 +69,19 @@ export default async function handler(req, res) {
   const days = daysMap[duration] || 0;
   const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
-  await profileRef.update({
+  let updates = {
     fundingBalance: profile.fundingBalance - price,
     membership: level,
     membershipExpiresAt: Timestamp.fromDate(expiresAt),
-    hidden: false,
-    activationPaid: true,
-    regularLifetime: true,
-  });
+  };
+
+  if (!profile.activationPaid) {
+    updates.hidden = false;
+    updates.activationPaid = true;
+    updates.regularLifetime = true;
+  }
+
+  await profileRef.update(updates);
 
   res.status(200).json({ success: true });
 }
