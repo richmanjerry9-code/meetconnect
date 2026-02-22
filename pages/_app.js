@@ -42,7 +42,10 @@ const AppContent = ({ Component, pageProps }) => {
               });
             }
           } else if (Notification.permission === 'default') {
-            setShowNotificationPrompt(true); // Show banner to prompt
+            const dismissed = localStorage.getItem('notificationsPromptDismissed');
+            if (!dismissed) {
+              setShowNotificationPrompt(true); // Show banner to prompt only if not dismissed
+            }
           }
           // If 'denied', do nothing—respect user choice
         }, 2000);
@@ -138,6 +141,14 @@ const AppContent = ({ Component, pageProps }) => {
       });
     }
 
+    setShowNotificationPrompt(false);
+  };
+
+  // -------------------------------
+  // DISMISS NOTIFICATIONS HANDLER
+  // -------------------------------
+  const handleDismissNotifications = () => {
+    localStorage.setItem('notificationsPromptDismissed', 'true');
     setShowNotificationPrompt(false);
   };
 
@@ -246,7 +257,7 @@ const AppContent = ({ Component, pageProps }) => {
           btnText="Enable"
           btnColor="linear-gradient(45deg, #4785ff, #5de59b)"
           onAction={handleEnableNotifications}
-          onDismiss={() => setShowNotificationPrompt(false)}
+          onDismiss={handleDismissNotifications}
         />
       )}
 
