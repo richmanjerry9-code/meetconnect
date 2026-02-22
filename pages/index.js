@@ -169,8 +169,7 @@ const isProfileComplete = (p) => {
     return unsubscribe;
   }, []);  // Real-time profiles
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
       unsubscribeRef.current = onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
         const profilesWithEffective = data.map(p => {
@@ -194,9 +193,7 @@ const isProfileComplete = (p) => {
         console.error('Snapshot error:', err);
         setError('Failed to load profiles in real-time. Please refresh.');
       });
-    }, 1000);
     return () => {
-      clearTimeout(timer);
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
   }, []);  // Real-time unread total
