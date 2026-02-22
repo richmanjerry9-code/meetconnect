@@ -12,7 +12,6 @@ const AppContent = ({ Component, pageProps }) => {
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showInstallButton, setShowInstallButton] = useState(false);
-  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
@@ -42,10 +41,7 @@ const AppContent = ({ Component, pageProps }) => {
               });
             }
           } else if (Notification.permission === 'default') {
-            const dismissed = localStorage.getItem('notificationsPromptDismissed');
-            if (!dismissed) {
-              setShowNotificationPrompt(true); // Show banner to prompt only if not dismissed
-            }
+            handleEnableNotifications(); // Directly prompt without custom banner
           }
           // If 'denied', do nothing—respect user choice
         }, 2000);
@@ -140,16 +136,6 @@ const AppContent = ({ Component, pageProps }) => {
         await OneSignal.showSlidedownPrompt();
       });
     }
-
-    setShowNotificationPrompt(false);
-  };
-
-  // -------------------------------
-  // DISMISS NOTIFICATIONS HANDLER
-  // -------------------------------
-  const handleDismissNotifications = () => {
-    localStorage.setItem('notificationsPromptDismissed', 'true');
-    setShowNotificationPrompt(false);
   };
 
   // -------------------------------
@@ -177,7 +163,7 @@ const AppContent = ({ Component, pageProps }) => {
   return (
     <>
       {/* INSTALL BANNER */}
-      {showInstallButton && !showNotificationPrompt && (
+      {showInstallButton && (
         <div style={{
           position: 'fixed',
           bottom: '20px',
@@ -248,19 +234,6 @@ const AppContent = ({ Component, pageProps }) => {
         </div>
       )}
 
-      {/* NOTIFICATION BANNER */}
-      {showNotificationPrompt && (
-        <Banner
-          icon="🔔"
-          title="Enable Inbox Alerts"
-          subtitle="Get notified for new messages"
-          btnText="Enable"
-          btnColor="linear-gradient(45deg, #4785ff, #5de59b)"
-          onAction={handleEnableNotifications}
-          onDismiss={handleDismissNotifications}
-        />
-      )}
-
       {/* IOS INSTALL INSTRUCTIONS */}
       {showIOSInstructions && <IOSPopup onClose={() => setShowIOSInstructions(false)} />}
 
@@ -272,58 +245,6 @@ const AppContent = ({ Component, pageProps }) => {
 // -------------------------------
 // UI COMPONENTS
 // -------------------------------
-const Banner = ({ icon, title, subtitle, btnText, btnColor, onAction, onDismiss }) => (
-  <div style={{
-    position: 'fixed',
-    bottom: '20px',
-    left: '50%',
-    transform: 'translateX(-50%)',
-    zIndex: 9999,
-    width: '90%',
-    maxWidth: '420px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '16px 20px',
-    gap: '15px',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    backdropFilter: 'blur(12px)',
-    borderRadius: '20px',
-    boxShadow: '0 20px 40px -10px rgba(0,0,0,0.15)',
-  }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-      <div style={{ fontSize: '24px', background: '#f0f2f5', padding: '10px', borderRadius: '12px' }}>{icon}</div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        <span style={{ fontWeight: 800, fontSize: '15px' }}>{title}</span>
-        <span style={{ fontSize: '12px', color: '#666' }}>{subtitle}</span>
-      </div>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-      <button onClick={onAction} style={{
-        background: btnColor,
-        color: 'white',
-        border: 'none',
-        borderRadius: '30px',
-        padding: '10px 20px',
-        fontWeight: 700,
-        fontSize: '13px',
-        cursor: 'pointer',
-      }}>
-        {btnText}
-      </button>
-      <button onClick={onDismiss} style={{
-        background: 'transparent',
-        border: 'none',
-        fontSize: '20px',
-        cursor: 'pointer',
-        color: '#999',
-      }}>
-        &times;
-      </button>
-    </div>
-  </div>
-);
-
 const IOSPopup = ({ onClose }) => (
   <div
     style={{
