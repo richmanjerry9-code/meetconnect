@@ -1,14 +1,13 @@
-import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useInView } from 'react-intersection-observer';
 import * as counties from '../data/locations';
 import styles from '../styles/Home.module.css';
 import { db as firestore } from '../lib/firebase.js';
 import { auth } from '../lib/firebase.js';
-import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot, where, limit, startAfter } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, doc, setDoc, getDoc, serverTimestamp, onSnapshot, where } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import { createOrGetChat } from '../lib/chat';
 
@@ -169,21 +168,8 @@ const isProfileComplete = (p) => {
     });
     return unsubscribe;
   }, []);  // Real-time profiles
-  const [hasMore, setHasMore] = useState(true);
-  const [lastDoc, setLastDoc] = useState(null);
-  const [isSlowNetwork, setIsSlowNetwork] = useState(false);
-  const profileLimit = isSlowNetwork ? 10 : 20;
-
-  // Slow network detection
   useEffect(() => {
-    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (connection) {
-      setIsSlowNetwork(['slow-2g', '2g', '3g'].includes(connection.effectiveType));
-    }
-  }, []);
-
-  useEffect(() => {
-    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(profileLimit));
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
       unsubscribeRef.current = onSnapshot(q, (snapshot) => {
         const data = snapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
         const profilesWithEffective = data.map(p => {
@@ -202,8 +188,6 @@ const isProfileComplete = (p) => {
           p.hidden !== true
         );
         setAllProfiles(sortProfiles(validProfiles));
-        if (snapshot.docs.length < profileLimit) setHasMore(false);
-        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
         setError(null);
       }, (err) => {
         console.error('Snapshot error:', err);
@@ -212,7 +196,7 @@ const isProfileComplete = (p) => {
     return () => {
       if (unsubscribeRef.current) unsubscribeRef.current();
     };
-  }, [profileLimit]);  // Real-time unread total
+  }, []);  // Real-time unread total
   useEffect(() => {
     if (!user?.uid) {
       setUnreadTotal(0);
@@ -320,35 +304,7 @@ return () => unsubscribe();  }, [user?.uid]);  // Location search filtering
       setProtectedFeature('Messaging');
       setShowLogin(true);
     }
-  };  const loadMore = useCallback(async () => {
-    if (!hasMore || !lastDoc) return;
-    const nextQ = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(profileLimit));
-    const nextSnapshot = await getDocs(nextQ);
-    const newData = nextSnapshot.docs.map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }));
-    const newProfilesWithEffective = newData.map(p => {
-      let effective = p.membership || 'Regular';
-      if (p.membershipExpiresAt) {
-        const expiresAt = new Date(p.membershipExpiresAt);
-        if (expiresAt < new Date()) {
-          effective = 'Regular';
-        }
-      }
-      return { ...p, effectiveMembership: effective };
-    });
-    const validNewProfiles = newProfilesWithEffective.filter(p => 
-      isProfileComplete(p) && 
-      p.active !== false && 
-      p.hidden !== true
-    );
-    setAllProfiles(prev => sortProfiles([...prev, ...validNewProfiles]));
-    if (nextSnapshot.docs.length < profileLimit) setHasMore(false);
-    setLastDoc(nextSnapshot.docs[nextSnapshot.docs.length - 1]);
-  }, [hasMore, lastDoc, profileLimit]);
-
-  const { ref: inViewRef, inView } = useInView();
-  useEffect(() => {
-    if (inView) loadMore();
-  }, [inView, loadMore]);  const handleGoogleAuth = async (customName = '') => {
+  };  const handleGoogleAuth = async (customName = '') => {
     setAuthError('');
     setAuthSuccess(''); // Clear previous success
     setLoginLoading(true);
@@ -606,7 +562,7 @@ return (
           className={styles.profileImage}
           loading="lazy"
           sizes="(max-width: 768px) 100vw, 150px"
-          quality={isSlowNetwork ? 50 : 75}
+          quality={75}
           placeholder={hasCustomPic ? "blur" : "empty"}
           blurDataURL={hasCustomPic ? blurData : undefined}
         />
@@ -758,28 +714,13 @@ return (
             {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-        <Suspense fallback={
-          <div className={styles.profiles} role="list">
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className={styles.skeletonCard}>
-                <div className={styles.skeletonImage}></div>
-                <div className={styles.skeletonInfo}>
-                  <div className={styles.skeletonText}></div>
-                  <div className={styles.skeletonTextSmall}></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        }>
-          <div className={styles.profiles} role="list">
-            {filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)}
-            {hasMore && <div ref={inViewRef} className={styles.loader}>Loading more...</div>}
-            {error && <p className={styles.noProfiles} style={{color:'red'}}>{error}</p>}
-            {filteredProfiles.length === 0 && !error && (
-              <p className={styles.noProfiles}>No ladies found. Complete your profile to appear in searches.</p>
-            )}
-          </div>
-        </Suspense>
+        <div className={styles.profiles} role="list">
+          {filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)}
+          {error && <p className={styles.noProfiles} style={{color:'red'}}>{error}</p>}
+          {filteredProfiles.length === 0 && !error && (
+            <p className={styles.noProfiles}>No ladies found. Complete your profile to appear in searches.</p>
+          )}
+        </div>
       </main>  {/* Full Login Modal */}
   {showLogin && (
     <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={closeLoginModal}>
@@ -879,7 +820,7 @@ return (
 }export async function getStaticProps() {
   let initialProfiles = [];
   try {
-    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'), limit(20));
+    const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
     let profiles = snapshot.docs
       .map(doc => ({ id: doc.id, ...convertTimestamps(doc.data()) }))
@@ -900,6 +841,6 @@ return (
   }
   return {
     props: { initialProfiles },
-    revalidate: 300,
+    revalidate: 60,
   };
 }
