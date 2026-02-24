@@ -1,7 +1,7 @@
-// /pages/api/send-message.js
-import { getFirestore, collection, addDoc, doc, updateDoc, increment, serverTimestamp } from 'firebase/firestore';
+// /pages/api/send-message.js (Modified to use FCM via Firebase Admin instead of OneSignal)
+import { getFirestore, collection, addDoc, doc, updateDoc, increment, serverTimestamp, getDoc } from 'firebase/firestore';
 import { app } from '../../lib/firebase'; // Adjust path to your firebase config
-import fetch from 'node-fetch';
+import { adminApp } from '../../lib/firebaseAdmin'; // New import for admin
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // STEP 1: Save message to Firestore
+    // STEP 1: Save message to Firestore (unchanged)
     const db = getFirestore(app);
     const payload = {
       text: messageText || '',
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
 
     await addDoc(collection(db, "privateChats", chatId, "messages"), payload);
 
-    // Update chat metadata
+    // Update chat metadata (unchanged)
     const chatRef = doc(db, "privateChats", chatId);
     await updateDoc(chatRef, {
       lastMessage: messageText || (audioUrl ? "Voice message" : imageUrl ? "Photo" : "Message"),
@@ -42,28 +42,30 @@ export default async function handler(req, res) {
       [`unreadCounts.${receiverUid}`]: increment(1),
     });
 
-    // STEP 2: Send OneSignal push to receiver
-    const response = await fetch('https://api.onesignal.com/notifications', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Basic ${process.env.ONESIGNAL_REST_API_KEY}`,
-      },
-      body: JSON.stringify({
-        app_id: process.env.ONESIGNAL_APP_ID,
-        include_external_user_ids: [receiverUid],
-        headings: { en: 'New Message 💬' },
-        contents: { en: `${senderName || 'Someone'} sent you a message: "${(messageText || '').slice(0, 50)}..."` },
+    // STEP 2: Send FCM push to receiver (replaces OneSignal)
+    const receiverSnap = await getDoc(doc(db, 'profiles', receiverUid));
+    const token = receiverSnap.data()?.fcmToken;
+
+    if (token) {
+      const messaging = adminApp.messaging();
+      await messaging.send({
+        token: token,
+        notification: {
+          title: 'New Message 💬',
+          body: `${senderName || 'Someone'} sent you a message: "${(messageText || '').slice(0, 50)}..."`
+        },
         data: {
           action: 'open_chat',
-          chatId: chatId,
+          chatId: chatId
         },
-        url: `https://www.meetconnect.co.ke/inbox/${chatId}`,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('OneSignal error:', await response.json());
+        webpush: {
+          fcm_options: {
+            link: `https://www.meetconnect.co.ke/inbox/${chatId}`
+          }
+        }
+      });
+    } else {
+      console.log('No FCM token for receiver');
     }
 
     return res.status(200).json({ success: true });

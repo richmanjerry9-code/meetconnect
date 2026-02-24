@@ -1,9 +1,15 @@
+// _app.js (Modified: Removed OneSignal, added FCM)
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
-import Script from 'next/script';
 import { useRouter } from 'next/router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import '../styles/globals.css';
+import { initializeApp } from 'firebase/app'; // If not already in lib/firebase
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { app } from '../lib/firebase'; // Your Firebase app init
+import Script from 'next/script';
+
+const VAPID_KEY = '2ObcUFEGxTlsOF09cuuTveFaBaGYuzEkGzEHLH1piiY'; // From Firebase Console
 
 // --- SUB-COMPONENT (inside Auth context) ---
 const AppContent = ({ Component, pageProps }) => {
@@ -16,7 +22,7 @@ const AppContent = ({ Component, pageProps }) => {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   // -------------------------------
-  // SERVICE WORKER + INSTALL LOGIC
+  // SERVICE WORKER + INSTALL LOGIC (unchanged, but removed Firebase SW unregister)
   // -------------------------------
   useEffect(() => {
     const isStandalone =
@@ -30,20 +36,7 @@ const AppContent = ({ Component, pageProps }) => {
       // Auto-subscribe or prompt for notifications if installed + logged in
       if (user && 'Notification' in window) {
         setTimeout(() => {
-          if (Notification.permission === 'granted') {
-            // Auto-subscribe if permission already granted in settings
-            if (window.OneSignal) {
-              window.OneSignalDeferred = window.OneSignalDeferred || [];
-              window.OneSignalDeferred.push(async function(OneSignal) {
-                await OneSignal.registerForPushNotifications();
-                await OneSignal.login(user.uid); // Ensure linked to user
-                console.log('Auto-subscribed to notifications (permission already granted)');
-              });
-            }
-          } else if (Notification.permission === 'default') {
-            handleEnableNotifications(); // Directly prompt without custom banner
-          }
-          // If 'denied', do nothing—respect user choice
+          handleEnableNotifications(); // Updated to FCM version
         }, 2000);
       }
     } else {
@@ -63,7 +56,7 @@ const AppContent = ({ Component, pageProps }) => {
   }, [user]);
 
   // -------------------------------
-  // GOOGLE ANALYTICS SPA TRACKING
+  // GOOGLE ANALYTICS SPA TRACKING (unchanged)
   // -------------------------------
   useEffect(() => {
     const handleRouteChange = (url) => {
@@ -80,38 +73,24 @@ const AppContent = ({ Component, pageProps }) => {
   }, [router.events]);
 
   // -------------------------------
-  // ONESIGNAL USER LINKING (with guard)
+  // FCM FOREGROUND MESSAGE HANDLER (new: replaces OneSignal click handler)
   // -------------------------------
   useEffect(() => {
-    if (user && window.OneSignal && !window.OneSignal.initialized) { // Guard against multiple inits
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.login(user.uid);
-      });
-    }
-  }, [user]);
-
-  // -------------------------------
-  // NOTIFICATION CLICK HANDLER
-  // -------------------------------
-  useEffect(() => {
-    if (window.OneSignal) {
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(async function(OneSignal) {
-        OneSignal.Notifications.addEventListener('click', (event) => {
-          const data = event.notification.data;
-          if (data && data.action === 'open_chat' && data.chatId) {
-            router.push(`/inbox/${data.chatId}`);
-          } else {
-            router.push('/inbox');
-          }
-        });
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      const messaging = getMessaging(app);
+      onMessage(messaging, (payload) => {
+        console.log('Foreground message received:', payload);
+        const data = payload.data || {};
+        if (data.action === 'open_chat' && data.chatId) {
+          router.push(`/inbox/${data.chatId}`);
+        }
+        // Optionally show an in-app toast here instead of system notification
       });
     }
   }, [router]);
 
   // -------------------------------
-  // INSTALL BUTTON HANDLER
+  // INSTALL BUTTON HANDLER (unchanged)
   // -------------------------------
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -125,35 +104,29 @@ const AppContent = ({ Component, pageProps }) => {
   };
 
   // -------------------------------
-  // ENABLE NOTIFICATIONS HANDLER
+  // ENABLE NOTIFICATIONS HANDLER (updated to FCM)
   // -------------------------------
   const handleEnableNotifications = async () => {
     if (!('Notification' in window)) return;
 
-    if (window.OneSignal) {
-      window.OneSignalDeferred = window.OneSignalDeferred || [];
-      window.OneSignalDeferred.push(async function(OneSignal) {
-        await OneSignal.showSlidedownPrompt();
-      });
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const messaging = getMessaging(app);
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token) {
+          await fetch('/api/save-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, uid: user.uid })
+          });
+          console.log('FCM token saved');
+        }
+      }
+    } catch (error) {
+      console.error('Notification permission error:', error);
     }
   };
-
-  // -------------------------------
-  // AUTO-UNREGISTER FIREBASE SW
-  // -------------------------------
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        registrations.forEach(reg => {
-          if (reg.active && reg.active.scriptURL.includes('firebase-messaging-sw.js')) { // More precise check
-            reg.unregister().then(() => {
-              console.log('Firebase SW unregistered successfully');
-            }).catch(err => console.error('Unregister error:', err));
-          }
-        });
-      }).catch(err => console.error('Get registrations error:', err));
-    }
-  }, []);
 
   // Extra log for banner visibility (temporary debug)
   useEffect(() => {
@@ -162,7 +135,7 @@ const AppContent = ({ Component, pageProps }) => {
 
   return (
     <>
-      {/* INSTALL BANNER */}
+      {/* INSTALL BANNER (unchanged) */}
       {showInstallButton && (
         <div style={{
           position: 'fixed',
@@ -234,7 +207,7 @@ const AppContent = ({ Component, pageProps }) => {
         </div>
       )}
 
-      {/* IOS INSTALL INSTRUCTIONS */}
+      {/* IOS INSTALL INSTRUCTIONS (unchanged) */}
       {showIOSInstructions && <IOSPopup onClose={() => setShowIOSInstructions(false)} />}
 
       <Component {...pageProps} />
@@ -243,7 +216,7 @@ const AppContent = ({ Component, pageProps }) => {
 };
 
 // -------------------------------
-// UI COMPONENTS
+// UI COMPONENTS (unchanged)
 // -------------------------------
 const IOSPopup = ({ onClose }) => (
   <div
@@ -296,7 +269,7 @@ const IOSPopup = ({ onClose }) => (
 );
 
 // -------------------------------
-// ROOT APP
+// ROOT APP (Modified: Removed OneSignal scripts)
 // -------------------------------
 export default function App({ Component, pageProps }) {
   return (
@@ -306,7 +279,7 @@ export default function App({ Component, pageProps }) {
         <link rel="manifest" href="/manifest.json" />
       </Head>
 
-      {/* Google Analytics */}
+      {/* Google Analytics (unchanged) */}
       <Script
         src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
         strategy="afterInteractive"
@@ -323,35 +296,9 @@ export default function App({ Component, pageProps }) {
         `}
       </Script>
 
-      {/* OneSignal SDK */}
-      <Script
-        src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js"
-        strategy="afterInteractive"
-      />
-
-      {/* OneSignal Init (Deferred) */}
-      <Script id="onesignal-init" strategy="afterInteractive">
-        {`
-          window.OneSignalDeferred = window.OneSignalDeferred || [];
-          OneSignalDeferred.push(async function(OneSignal) {
-            try {
-              await OneSignal.init({
-                appId: "afbf7304-c2f1-4750-ba3b-7dbd707926a7", // Verify in your OneSignal dashboard
-                safari_web_id: null, // Add if supporting Safari
-                notifyButton: { enable: true },
-                allowLocalhostAsSecureOrigin: true, // For dev testing
-                serviceWorkerPath: "OneSignalSDKWorker.js",
-                serviceWorkerParam: { scope: "/" }
-              });
-              console.log('OneSignal initialized successfully');
-            } catch (error) {
-              console.error('OneSignal init error:', error);
-            }
-          });
-        `}
-      </Script>
-
       <AppContent Component={Component} pageProps={pageProps} />
     </AuthProvider>
   );
 }
+
+
