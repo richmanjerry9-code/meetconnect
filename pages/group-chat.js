@@ -1,11 +1,10 @@
 // pages/group-chat.js
-"use client";  // For client-side FCM
+"use client";  // Note: This directive is for App Router; in Pages Router, it may not be needed or could cause issues—consider removing if using Pages Router strictly.
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import {
-  getFirestore,
   collection,
   doc,
   addDoc,
@@ -28,11 +27,9 @@ import styles from "styles/groupchat.module.css";
 import GroupChatHeader from "../lib/groupchat/GroupChatHeader";
 import GroupChatInput from "../lib/groupchat/GroupChatInput";
 import { uploadMedia } from "../lib/chat/";  // Import uploadMedia for consistency
-import { messaging } from "../lib/firebase";  // Import from lib/firebase.js if needed for FCM
-import { onMessage, getToken } from "firebase/messaging";
+import { getMessaging, onMessage, getToken } from "firebase/messaging";  // Import messaging utilities here (client-only)
+import { db } from "../lib/firebase";  // Import db from firebase.js to ensure app initialization
 import imageCompression from 'browser-image-compression';
-
-const db = getFirestore();
 
 // Replace with your actual VAPID key from Firebase Console
 const VAPID_KEY = 'YOUR_VAPID_KEY_HERE'; // Get from Firebase > Project Settings > Cloud Messaging > Web configuration
@@ -42,6 +39,7 @@ async function subscribeToTopic(topic) {
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
+      const messaging = getMessaging();  // Initialize messaging here (client-only)
       const token = await getToken(messaging, { vapidKey: VAPID_KEY });
       await fetch('/api/subscribeToTopic', {
         method: 'POST',
@@ -57,6 +55,7 @@ async function subscribeToTopic(topic) {
 // Helper function to unsubscribe from topic (server-side via API)
 async function unsubscribeFromTopic(topic) {
   try {
+    const messaging = getMessaging();  // Initialize messaging here (client-only)
     const token = await getToken(messaging, { vapidKey: VAPID_KEY });
     await fetch('/api/unsubscribeFromTopic', {
       method: 'POST',
@@ -104,6 +103,7 @@ export default function GroupChatPage() {
   useEffect(() => {
     if (!user) return;
 
+    const messaging = getMessaging();  // Initialize messaging here (client-only)
     const unsubscribe = onMessage(messaging, (payload) => {
       if (payload.data?.chatId === chatId) {
         // Handle group notification if needed
