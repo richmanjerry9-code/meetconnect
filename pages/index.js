@@ -98,39 +98,7 @@ const isProfileComplete = (p) => {
   const [unreadTotal, setUnreadTotal] = useState(0);
   const loginModalRef = useRef(null);
   const registerModalRef = useRef(null);
-  const unsubscribeRef = useRef(null);
-  const allProfilesRef = useRef(allProfiles);
-  useEffect(() => { allProfilesRef.current = allProfiles; }, [allProfiles]);  // Session storage restore
-  useEffect(() => {
-    const KEY = 'meetconnect_home_state_final_2025';
-    const saved = sessionStorage.getItem(KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (Date.now() - parsed.timestamp < 300000) {
-          setAllProfiles(sortProfiles(parsed.profiles));
-          setTimeout(() => window.scrollTo(0, parsed.scroll), 10);
-        } else {
-          sessionStorage.removeItem(KEY);
-        }
-      } catch (e) {
-        console.error('Invalid saved state:', e);
-        sessionStorage.removeItem(KEY);
-      }
-    }
-  }, []);  // Save scroll + profiles on navigation
-  useEffect(() => {
-    const KEY = 'meetconnect_home_state_final_2025';
-    const saveState = () => {
-      sessionStorage.setItem(KEY, JSON.stringify({
-        profiles: allProfilesRef.current,
-        scroll: window.scrollY,
-        timestamp: Date.now(),
-      }));
-    };
-    router.events.on('routeChangeStart', saveState);
-    return () => router.events.off('routeChangeStart', saveState);
-  }, [router]);  // Auth state
+  const unsubscribeRef = useRef(null);  // Auth state
   useEffect(() => {
     setUserLoading(true);
     const storedUser = localStorage.getItem('loggedInUser');
