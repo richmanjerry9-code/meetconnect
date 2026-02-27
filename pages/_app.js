@@ -1,76 +1,17 @@
-// _app.js
+// _app.js (Modified: Removed OneSignal, added FCM)
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import '../styles/globals.css';
+import { initializeApp } from 'firebase/app'; // If not already in lib/firebase
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
-import { getAuth } from 'firebase/auth';
-import { app } from '../lib/firebase';
+import { app } from '../lib/firebase'; // Your Firebase app init
 import Script from 'next/script';
 
-const VAPID_KEY = 'YOUR_FULL_VAPID_KEY_FROM_FIREBASE_CONSOLE';
+const VAPID_KEY = '2ObcUFEGxTlsOF09cuuTveFaBaGYuzEkGzEHLH1piiY'; // From Firebase Console
 
-// ── Register SW → get FCM token → save with auth header ───────────────────────
-async function registerSWAndGetToken(uid) {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    console.warn('Push not supported in this browser');
-    return;
-  }
-
-  try {
-    // 1. Register service worker
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-    console.log('SW registered:', registration.scope);
-
-    // 2. Wait until SW is active
-    await navigator.serviceWorker.ready;
-    console.log('SW ready');
-
-    // 3. Get FCM token
-    const messaging = getMessaging(app);
-    const token = await getToken(messaging, {
-      vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: registration,
-    });
-
-    if (!token) {
-      console.warn('No FCM token — check VAPID key and notification permission.');
-      return;
-    }
-    console.log('FCM token:', token);
-
-    // 4. Get Firebase ID token for server-side verification
-    const auth = getAuth(app);
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      console.warn('No authenticated user — cannot save FCM token.');
-      return;
-    }
-    const idToken = await currentUser.getIdToken();
-
-    // 5. POST to /api/save-token with Bearer header
-    const response = await fetch('/api/save-token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ token }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.error('Failed to save FCM token:', err);
-      return;
-    }
-    console.log('FCM token saved for uid:', uid);
-  } catch (err) {
-    console.error('FCM setup error:', err);
-  }
-}
-
-// ── Sub-component (inside Auth context) ───────────────────────────────────────
+// --- SUB-COMPONENT (inside Auth context) ---
 const AppContent = ({ Component, pageProps }) => {
   const { user } = useAuth();
   const router = useRouter();
@@ -80,20 +21,23 @@ const AppContent = ({ Component, pageProps }) => {
   const [isIOS, setIsIOS] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
-  // ── PWA install prompt + auto-subscribe on standalone ─────────────────────
+  // -------------------------------
+  // SERVICE WORKER + INSTALL LOGIC (unchanged, but removed Firebase SW unregister)
+  // -------------------------------
   useEffect(() => {
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       window.navigator.standalone;
 
+    console.log('Is app in standalone mode?', isStandalone); // Debug log
+
     if (isStandalone) {
-      setShowInstallButton(false);
-      if (user?.uid && 'Notification' in window) {
-        if (Notification.permission === 'granted') {
-          registerSWAndGetToken(user.uid);
-        } else if (Notification.permission === 'default') {
-          setTimeout(() => handleEnableNotifications(), 2000);
-        }
+      setShowInstallButton(false); // Explicitly ensure banner is hidden
+      // Auto-subscribe or prompt for notifications if installed + logged in
+      if (user && 'Notification' in window) {
+        setTimeout(() => {
+          handleEnableNotifications(); // Updated to FCM version
+        }, 2000);
       }
     } else {
       const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -105,75 +49,49 @@ const AppContent = ({ Component, pageProps }) => {
         setDeferredPrompt(e);
         setShowInstallButton(true);
       };
+
       window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     }
   }, [user]);
 
-  // ── Google Analytics SPA tracking ─────────────────────────────────────────
-  // FIX: Wait for gtag to be available before firing page_view events.
-  // Previously gtag was called before the afterInteractive script had loaded,
-  // meaning no hits were sent and GA4 showed 0 active users.
+  // -------------------------------
+  // GOOGLE ANALYTICS SPA TRACKING (unchanged)
+  // -------------------------------
   useEffect(() => {
-    const sendPageView = (url) => {
-      if (typeof window.gtag === 'function') {
-        window.gtag('event', 'page_view', {
+    const handleRouteChange = (url) => {
+      if (window.gtag) {
+        window.gtag('config', 'G-TBN1ZJECDJ', {
           page_path: url,
-          send_to: 'G-TBN1ZJECDJ',
         });
       }
     };
 
-    // Fire for the initial page load
-    sendPageView(window.location.pathname + window.location.search);
-
-    router.events.on('routeChangeComplete', sendPageView);
-    return () => router.events.off('routeChangeComplete', sendPageView);
+    handleRouteChange(window.location.pathname);
+    router.events.on('routeChangeComplete', handleRouteChange);
+    return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
 
-  // ── FCM foreground handler ─────────────────────────────────────────────────
+  // -------------------------------
+  // FCM FOREGROUND MESSAGE HANDLER (new: replaces OneSignal click handler)
+  // -------------------------------
   useEffect(() => {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-
-    let unsubscribe;
-    try {
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
       const messaging = getMessaging(app);
-      unsubscribe = onMessage(messaging, (payload) => {
-        console.log('[_app] Foreground message:', payload);
+      onMessage(messaging, (payload) => {
+        console.log('Foreground message received:', payload);
         const data = payload.data || {};
-        const notification = payload.notification || {};
-
         if (data.action === 'open_chat' && data.chatId) {
-          if (!router.pathname.includes(data.chatId)) {
-            const go = window.confirm(
-              ` ${notification.title || 'New message'}\n${notification.body || ''}\n\nOpen chat?`
-            );
-            if (go) router.push(`/inbox/${data.chatId}`);
-          }
+          router.push(`/inbox/${data.chatId}`);
         }
+        // Optionally show an in-app toast here instead of system notification
       });
-    } catch (err) {
-      console.error('onMessage setup error:', err);
     }
-
-    return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
   }, [router]);
 
-  // ── Request permission then register ──────────────────────────────────────
-  const handleEnableNotifications = async () => {
-    if (!('Notification' in window) || !user?.uid) return;
-    try {
-      const permission = await Notification.requestPermission();
-      console.log('Notification permission:', permission);
-      if (permission === 'granted') {
-        await registerSWAndGetToken(user.uid);
-      }
-    } catch (err) {
-      console.error('Notification permission error:', err);
-    }
-  };
-
-  // ── PWA install handler ────────────────────────────────────────────────────
+  // -------------------------------
+  // INSTALL BUTTON HANDLER (unchanged)
+  // -------------------------------
   const handleInstallClick = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
@@ -185,54 +103,174 @@ const AppContent = ({ Component, pageProps }) => {
     }
   };
 
+  // -------------------------------
+  // ENABLE NOTIFICATIONS HANDLER (updated to FCM)
+  // -------------------------------
+  const handleEnableNotifications = async () => {
+    if (!('Notification' in window)) return;
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        const messaging = getMessaging(app);
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        if (token) {
+          await fetch('/api/save-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token, uid: user.uid })
+          });
+          console.log('FCM token saved');
+        }
+      }
+    } catch (error) {
+      console.error('Notification permission error:', error);
+    }
+  };
+
+  // Extra log for banner visibility (temporary debug)
+  useEffect(() => {
+    console.log('Install banner visible?', showInstallButton);
+  }, [showInstallButton]);
+
   return (
     <>
+      {/* INSTALL BANNER (unchanged) */}
       {showInstallButton && (
         <div style={{
-          position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, width: '90%', maxWidth: '420px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '16px 20px', gap: '15px',
-          backgroundColor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(12px)',
-          borderRadius: '20px', boxShadow: '0 20px 40px -10px rgba(0,0,0,0.2)',
+          position: 'fixed',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          width: '90%',
+          maxWidth: '420px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '16px 20px',
+          gap: '15px',
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: '20px',
+          boxShadow: '0 20px 40px -10px rgba(0,0,0,0.2)',
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f2f2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>
-              
+            <div style={{
+              width: '48px',
+              height: '48px',
+              borderRadius: '12px',
+              background: '#f2f2f2',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '24px',
+            }}>
+              📱
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontWeight: 800, fontSize: 15 }}>Install App</span>
-              <span style={{ fontSize: 12, color: '#666' }}>Faster &amp; better experience</span>
+              <span style={{ fontWeight: 800, fontSize: '15px' }}>Install App</span>
+              <span style={{ fontSize: '12px', color: '#666' }}>Faster & better experience</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button onClick={handleInstallClick} style={{ background: 'linear-gradient(45deg, #ff4785, #9b5de5)', color: 'white', border: 'none', borderRadius: 30, padding: '10px 20px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handleInstallClick}
+              style={{
+                background: 'linear-gradient(45deg, #ff4785, #9b5de5)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '30px',
+                padding: '10px 20px',
+                fontWeight: 700,
+                fontSize: '13px',
+                cursor: 'pointer',
+              }}
+            >
               Get App
             </button>
-            <button onClick={() => setShowInstallButton(false)} style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999' }}>
+            <button
+              onClick={() => setShowInstallButton(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                fontSize: '22px',
+                cursor: 'pointer',
+                color: '#999',
+              }}
+            >
               &times;
             </button>
           </div>
         </div>
       )}
 
+      {/* IOS INSTALL INSTRUCTIONS (unchanged) */}
       {showIOSInstructions && <IOSPopup onClose={() => setShowIOSInstructions(false)} />}
+
       <Component {...pageProps} />
     </>
   );
 };
 
+// -------------------------------
+// UI COMPONENTS (unchanged)
+// -------------------------------
 const IOSPopup = ({ onClose }) => (
-  <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', paddingBottom: 20 }} onClick={onClose}>
-    <div style={{ backgroundColor: 'white', padding: 25, borderRadius: 20, width: '90%', maxWidth: 400, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+  <div
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      backgroundColor: 'rgba(0,0,0,0.7)',
+      zIndex: 9999,
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'flex-end',
+      paddingBottom: '20px',
+    }}
+    onClick={onClose}
+  >
+    <div
+      style={{
+        backgroundColor: 'white',
+        padding: '25px',
+        borderRadius: '20px',
+        width: '90%',
+        maxWidth: '400px',
+        textAlign: 'center',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
       <h3>Install App</h3>
-      <p>1. Tap <strong>Share</strong> ⍐<br />2. Tap <strong>Add to Home Screen</strong> ⊞</p>
-      <button onClick={onClose} style={{ marginTop: 10, padding: '10px 20px', border: 'none', background: '#eee', borderRadius: 10 }}>Close</button>
+      <p>
+        1. Tap <strong>Share</strong> ⍐
+        <br />
+        2. Tap <strong>Add to Home Screen</strong> ⊞
+      </p>
+      <button
+        onClick={onClose}
+        style={{
+          marginTop: '10px',
+          padding: '10px 20px',
+          border: 'none',
+          background: '#eee',
+          borderRadius: '10px',
+        }}
+      >
+        Close
+      </button>
     </div>
   </div>
 );
 
+// -------------------------------
+// ROOT APP (Modified: Removed OneSignal scripts)
+// -------------------------------
 export default function App({ Component, pageProps }) {
   return (
     <AuthProvider>
@@ -241,25 +279,22 @@ export default function App({ Component, pageProps }) {
         <link rel="manifest" href="/manifest.json" />
       </Head>
 
-      {/* FIX 1: Load the gtag.js library first */}
+      {/* Google Analytics (unchanged) */}
       <Script
         src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
         strategy="afterInteractive"
       />
-
-      {/* FIX 2: Use a proper template literal string (backticks inside {}) so the
-               script body is actually rendered. The previous version used bare {}
-               object syntax which silently produced no output, so gtag was never
-               defined and zero hits were sent to GA4. */}
-      <Script id="ga-init" strategy="afterInteractive">{`
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){ dataLayer.push(arguments); }
-        window.gtag = gtag;
-        gtag('js', new Date());
-        gtag('config', 'G-TBN1ZJECDJ', {
-          send_page_view: false
-        });
-      `}</Script>
+      <Script id="ga-init" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          window.gtag = gtag;
+          gtag('js', new Date());
+          gtag('config', 'G-TBN1ZJECDJ', {
+            send_page_view: false
+          });
+        `}
+      </Script>
 
       <AppContent Component={Component} pageProps={pageProps} />
     </AuthProvider>
