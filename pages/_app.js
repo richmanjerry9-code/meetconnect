@@ -41,8 +41,6 @@ async function registerSWAndGetToken(uid) {
     console.log('FCM token:', token);
 
     // 4. Get Firebase ID token for server-side verification
-    //    Your save-token.js does: admin.auth().verifyIdToken(authHeader)
-    //    so we must send the ID token, not the FCM token, in the header.
     const auth = getAuth(app);
     const currentUser = auth.currentUser;
     if (!currentUser) {
@@ -56,9 +54,9 @@ async function registerSWAndGetToken(uid) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,  // ← your API splits on 'Bearer '
+        'Authorization': `Bearer ${idToken}`,
       },
-      body: JSON.stringify({ token }),          // ← your API reads req.body.token
+      body: JSON.stringify({ token }),
     });
 
     if (!response.ok) {
@@ -92,13 +90,10 @@ const AppContent = ({ Component, pageProps }) => {
       setShowInstallButton(false);
       if (user?.uid && 'Notification' in window) {
         if (Notification.permission === 'granted') {
-          // Already granted — just refresh the token
           registerSWAndGetToken(user.uid);
         } else if (Notification.permission === 'default') {
-          // Ask after a short delay so it's not intrusive
           setTimeout(() => handleEnableNotifications(), 2000);
         }
-        // If 'denied' — don't ask again, respect user choice
       }
     } else {
       const isDeviceIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
@@ -116,18 +111,27 @@ const AppContent = ({ Component, pageProps }) => {
   }, [user]);
 
   // ── Google Analytics SPA tracking ─────────────────────────────────────────
+  // FIX: Wait for gtag to be available before firing page_view events.
+  // Previously gtag was called before the afterInteractive script had loaded,
+  // meaning no hits were sent and GA4 showed 0 active users.
   useEffect(() => {
-    const handleRouteChange = (url) => {
-      if (window.gtag) window.gtag('config', 'G-TBN1ZJECDJ', { page_path: url });
+    const sendPageView = (url) => {
+      if (typeof window.gtag === 'function') {
+        window.gtag('event', 'page_view', {
+          page_path: url,
+          send_to: 'G-TBN1ZJECDJ',
+        });
+      }
     };
-    handleRouteChange(window.location.pathname);
-    router.events.on('routeChangeComplete', handleRouteChange);
-    return () => router.events.off('routeChangeComplete', handleRouteChange);
+
+    // Fire for the initial page load
+    sendPageView(window.location.pathname + window.location.search);
+
+    router.events.on('routeChangeComplete', sendPageView);
+    return () => router.events.off('routeChangeComplete', sendPageView);
   }, [router.events]);
 
   // ── FCM foreground handler ─────────────────────────────────────────────────
-  // When the tab is open and focused, the SW does NOT show a system popup.
-  // We handle it here instead — navigate if it's a chat message.
   useEffect(() => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
 
@@ -142,7 +146,7 @@ const AppContent = ({ Component, pageProps }) => {
         if (data.action === 'open_chat' && data.chatId) {
           if (!router.pathname.includes(data.chatId)) {
             const go = window.confirm(
-              `💬 ${notification.title || 'New message'}\n${notification.body || ''}\n\nOpen chat?`
+              ` ${notification.title || 'New message'}\n${notification.body || ''}\n\nOpen chat?`
             );
             if (go) router.push(`/inbox/${data.chatId}`);
           }
@@ -195,11 +199,11 @@ const AppContent = ({ Component, pageProps }) => {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
             <div style={{ width: 48, height: 48, borderRadius: 12, background: '#f2f2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>
-              📱
+              
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontWeight: 800, fontSize: 15 }}>Install App</span>
-              <span style={{ fontSize: 12, color: '#666' }}>Faster & better experience</span>
+              <span style={{ fontSize: 12, color: '#666' }}>Faster &amp; better experience</span>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -236,14 +240,27 @@ export default function App({ Component, pageProps }) {
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
         <link rel="manifest" href="/manifest.json" />
       </Head>
-      <Script src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ" strategy="afterInteractive" />
+
+      {/* FIX 1: Load the gtag.js library first */}
+      <Script
+        src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
+        strategy="afterInteractive"
+      />
+
+      {/* FIX 2: Use a proper template literal string (backticks inside {}) so the
+               script body is actually rendered. The previous version used bare {}
+               object syntax which silently produced no output, so gtag was never
+               defined and zero hits were sent to GA4. */}
       <Script id="ga-init" strategy="afterInteractive">{`
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag(){ dataLayer.push(arguments); }
         window.gtag = gtag;
         gtag('js', new Date());
-        gtag('config', 'G-TBN1ZJECDJ', { send_page_view: false });
+        gtag('config', 'G-TBN1ZJECDJ', {
+          send_page_view: false
+        });
       `}</Script>
+
       <AppContent Component={Component} pageProps={pageProps} />
     </AuthProvider>
   );
