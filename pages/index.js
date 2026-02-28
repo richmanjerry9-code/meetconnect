@@ -12,8 +12,6 @@ import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, on
 import { createOrGetChat } from '../lib/chat';
 
 // ─── GLOBAL PAGE LOADING INDICATOR ────────────────────────────────────────────
-// Inject a slim top progress bar that fires on every route change
-// and a full-screen splash on first paint. No extra dependencies needed.
 const GlobalLoadingBar = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -67,7 +65,7 @@ const SkeletonCard = () => (
   </div>
 );
 
-// ─── SHIMMER KEYFRAME (injected once) ──────────────────────────────────────────
+// ─── SHIMMER KEYFRAME ──────────────────────────────────────────────────────────
 const ShimmerStyle = () => (
   <style>{`
     @keyframes shimmer {
@@ -81,7 +79,7 @@ const ShimmerStyle = () => (
   `}</style>
 );
 
-/**Custom hook for debouncing values. */
+/** Custom hook for debouncing values. */
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -160,9 +158,7 @@ function setCachedProfiles(data) {
 export default function Home({ initialProfiles = [] }) {
   const router = useRouter();
 
-  // Seed from SSG props immediately; upgrade from cache instantly, then live data
   const [allProfiles, setAllProfiles] = useState(() => {
-    // Try localStorage cache for instant paint on reload
     if (typeof window !== 'undefined') {
       const cached = getCachedProfiles();
       if (cached?.length) return cached;
@@ -170,13 +166,23 @@ export default function Home({ initialProfiles = [] }) {
     return initialProfiles;
   });
 
-  // Are we still waiting for the real-time snapshot to arrive?
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [error, setError] = useState(null);
   const [authError, setAuthError] = useState('');
   const [authSuccess, setAuthSuccess] = useState('');
-  const [user, setUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(true);
+
+  // ── User is seeded synchronously from localStorage so the header renders
+  //    instantly with the correct state — no shimmer skeleton needed.
+  const [user, setUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('loggedInUser');
+      if (stored) {
+        try { return JSON.parse(stored); } catch {}
+      }
+    }
+    return null;
+  });
+
   const [selectedCounty, setSelectedCounty] = useState('');
   const [selectedWard, setSelectedWard] = useState('');
   const [selectedArea, setSelectedArea] = useState('');
@@ -202,13 +208,9 @@ export default function Home({ initialProfiles = [] }) {
   const unsubscribeRef = useRef(null);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
+  // We no longer gate the header on Firebase initialising. The localStorage
+  // seed above gives us an instant render; Firebase then confirms or clears it.
   useEffect(() => {
-    setUserLoading(true);
-    // Optimistically restore user from localStorage so header renders immediately
-    const storedUser = localStorage.getItem('loggedInUser');
-    if (storedUser) {
-      try { setUser(JSON.parse(storedUser)); } catch {}
-    }
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
@@ -238,14 +240,12 @@ export default function Home({ initialProfiles = [] }) {
         setUser(null);
         localStorage.removeItem('loggedInUser');
       }
-      setUserLoading(false);
     });
     return unsubscribe;
   }, []);
 
   // ── Real-time profiles with instant cache fallback ───────────────────────────
   useEffect(() => {
-    // If we have no profiles yet (no SSG, no cache) show skeletons
     if (!allProfiles.length) setProfilesLoading(true);
 
     const q = query(collection(firestore, 'profiles'), orderBy('createdAt', 'desc'));
@@ -261,14 +261,13 @@ export default function Home({ initialProfiles = [] }) {
         const valid = withEffective.filter(p => isProfileComplete(p) && p.active !== false && p.hidden !== true);
         const sorted = sortProfiles(valid);
         setAllProfiles(sorted);
-        setCachedProfiles(sorted); // persist for next visit
+        setCachedProfiles(sorted);
         setProfilesLoading(false);
         setError(null);
       },
       (err) => {
         console.error('Snapshot error:', err);
         setProfilesLoading(false);
-        // Keep showing cached/SSG data even if snapshot fails
         if (!allProfiles.length) setError('Failed to load profiles. Please check your connection.');
       }
     );
@@ -565,14 +564,7 @@ export default function Home({ initialProfiles = [] }) {
   const btnHover  = (e, dis) => !dis && (e.target.style.transform = 'translateY(-2px)', e.target.style.boxShadow = '0 6px 15px rgba(0,0,0,0.2)');
   const btnOut    = (e, dis) => !dis && (e.target.style.transform = '', e.target.style.boxShadow = '');
 
-  // ── Determine what to show in the profiles grid ───────────────────────────────
-  // Show skeletons only when we truly have no data yet (no SSG, no cache, snapshot still loading)
   const showSkeletons = profilesLoading && allProfiles.length === 0;
-
-  // ── If auth is not even initialised yet, show a very lightweight shell ────────
-  // (This replaces the old full-page loading block that blocked everything)
-  // We no longer gate the whole UI on userLoading — only the header auth buttons
-  // will be slightly deferred, which is invisible to users.
 
   return (
     <div className={styles.container}>
@@ -589,7 +581,6 @@ export default function Home({ initialProfiles = [] }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href="https://yourdomain.com" />
-        {/* Preconnect to Firestore & auth for faster cold starts */}
         <link rel="preconnect" href="https://firestore.googleapis.com" />
         <link rel="preconnect" href="https://identitytoolkit.googleapis.com" />
         <link rel="preconnect" href="https://www.googleapis.com" />
@@ -603,10 +594,9 @@ export default function Home({ initialProfiles = [] }) {
           <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
             Inbox {unreadTotal > 0 && <span className={styles.unreadBadge}>{unreadTotal > 99 ? '99+' : unreadTotal}</span>}
           </button>
-          {/* Don't gate header on userLoading — show skeleton auth button briefly */}
-          {userLoading ? (
-            <div style={{ width: 72, height: 36, borderRadius: 8, background: 'linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.4s infinite' }} />
-          ) : user ? (
+          {/* No loading gate — user is seeded from localStorage synchronously so
+              this renders correctly on first paint with zero flicker. */}
+          {user ? (
             <Link href="/profile-setup">
               <button className={styles.button}>My Profile</button>
             </Link>
@@ -629,7 +619,6 @@ export default function Home({ initialProfiles = [] }) {
             aria-label="Search by location"
             style={{ backgroundColor: '#ffffff', color: '#000000', WebkitTextFillColor: '#000000', colorScheme: 'light' }}
           />
-          {/* Location autocomplete dropdown */}
           {filteredLocations.length > 0 && (
             <ul style={{ position: 'absolute', zIndex: 100, background: '#fff', border: '1px solid #ddd', borderRadius: 8, marginTop: 4, padding: 0, listStyle: 'none', width: '100%', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
               {filteredLocations.map((loc, i) => (
@@ -662,13 +651,11 @@ export default function Home({ initialProfiles = [] }) {
         </div>
 
         <div className={styles.profiles} role="list">
-          {/* ── Show skeletons only when we have zero data AND are still loading ── */}
           {showSkeletons
             ? [1,2,3,4,5,6].map(i => <SkeletonCard key={i} />)
             : filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)
           }
 
-          {/* ── Subtle "refreshing" indicator when we have stale data and live data is loading ── */}
           {profilesLoading && allProfiles.length > 0 && (
             <div style={{ width: '100%', textAlign: 'center', padding: '8px', color: '#ff69b4', fontSize: '0.8rem', opacity: 0.7 }}>
               Refreshing…
