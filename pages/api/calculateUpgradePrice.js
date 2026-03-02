@@ -1,6 +1,5 @@
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { Timestamp } from 'firebase-admin/firestore';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
 if (!getApps().length) {
@@ -26,7 +25,7 @@ const tierLevels = { Prime: 1, VIP: 2, VVIP: 3 };
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { level, duration, isMpesa = false } = req.body;
+  const { level, duration } = req.body;
   if (!level || !duration || !plans[level]?.[duration]) {
     return res.status(400).json({ error: 'Invalid plan' });
   }
@@ -42,17 +41,16 @@ export default async function handler(req, res) {
   }
 
   const uid = decoded.uid;
-  const profileRef = getFirestore().doc(`profiles/${uid}`);
-  const snap = await profileRef.get();
-  if (!snap.exists) return res.status(404).json({ error: 'Profile not found' });
+  const db = getFirestore();
+  const snap = await db.doc(`profiles/${uid}`).get();
+  const profile = snap.data() || {};
 
-  const profile = snap.data();
   const fullPrice = plans[level][duration];
-  const days = daysMap[duration];
-
   let credit = 0;
   let remainingDays = 0;
   let willExtend = false;
+
+  const currentTier = profile.membership || 'Regular';
   const now = Date.now();
 
   if (profile.membershipExpiresAt) {
@@ -62,45 +60,21 @@ export default async function handler(req, res) {
 
     remainingDays = Math.max(0, Math.floor((expires - now) / 86400000));
 
-    if (remainingDays > 0 && tierLevels[profile.membership] === tierLevels[level]) {
+    if (remainingDays > 0 && tierLevels[currentTier] === tierLevels[level]) {
       willExtend = true;
-    } else if (remainingDays > 0 && tierLevels[level] > tierLevels[profile.membership]) {
-      credit = Math.round(remainingDays * (tierDailyRates[profile.membership] || 42.86));
+    } else if (remainingDays > 0 && tierLevels[level] > tierLevels[currentTier]) {
+      credit = Math.round(remainingDays * (tierDailyRates[currentTier] || 42.86));
     }
   }
 
   const effectivePrice = Math.max(0, fullPrice - credit);
 
-  if (!isMpesa && (profile.fundingBalance || 0) < effectivePrice) {
-    return res.status(400).json({ error: 'Insufficient wallet balance' });
-  }
-
-  const newExpiresDate = willExtend
-    ? new Date(Math.max(now, profile.membershipExpiresAt?.toDate?.() || now) + days * 86400000)
-    : new Date(now + days * 86400000);
-
-  const updates = {
-    membership: level,
-    membershipExpiresAt: Timestamp.fromDate(newExpiresDate),
-  };
-
-  if (!isMpesa) {
-    updates.fundingBalance = (profile.fundingBalance || 0) - effectivePrice;
-  }
-
-  if (!profile.activationPaid) {
-    updates.activationPaid = true;
-    updates.hidden = false;
-    updates.regularLifetime = true;
-  }
-
-  await profileRef.update(updates);
-
   res.json({
-    success: true,
     effectivePrice,
     credit,
+    remainingDays,
+    fullPrice,
     willExtend,
-    activatedNow: !profile.activationPaid,
+    currentTier,
   });
 }

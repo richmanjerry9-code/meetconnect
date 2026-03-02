@@ -1,0 +1,42 @@
+/* styles/Feed.module.css */
+
+.feedContainer {
+  flex: 1;
+  overflow-y: scroll;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 12px 120px;
+  scrollbar-width: thin;
+  scrollbar-color: #ff69b4 transparent;
+}
+
+/* Beautiful scrollbar (visible on mouse hover and always on desktop) */
+.feedContainer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.feedContainer::-webkit-scrollbar-thumb {
+  background: linear-gradient(#ff69b4, #ff1493);
+  border-radius: 10px;
+}
+
+.feedContainer::-webkit-scrollbar-thumb:hover {
+  background: #ff1493;
+}
+
+/* Optional smooth fade-in for cards */
+.cardWrapper {
+  animation: fadeUp 0.5s ease forwards;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Make sure the whole page is flex */
+.mainWrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #0d000a;
+}
