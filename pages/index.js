@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -601,17 +600,6 @@ export default function Home({ initialProfiles = [] }) {
           </select>
         </div>
 
-        <div onClick={() => router.push('/feed')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(115deg, #ff69b4, #ff1493)', borderRadius: 12, padding: '12px 18px', marginBottom: 16, cursor: 'pointer', boxShadow: '0 4px 16px rgba(255,20,147,0.25)', animation: 'fadeIn 0.5s ease both' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 24 }}>📸</span>
-            <div>
-              <p style={{ color: '#fff', fontWeight: 700, margin: 0, fontSize: '0.9rem' }}>Browse the Photo Feed</p>
-              <p style={{ color: 'rgba(255,255,255,0.8)', margin: 0, fontSize: '0.75rem' }}>Posts, videos & exclusive content</p>
-            </div>
-          </div>
-          <span style={{ color: '#fff', fontSize: 20, opacity: 0.9 }}>›</span>
-        </div>
-
         <div className={styles.profiles} role="list">
           {showSkeletons ? [1,2,3,4,5,6].map(i => <SkeletonCard key={i} />) : filteredProfiles.map(p => <ProfileCard key={p.id} p={p} />)}
           {profilesLoading && allProfiles.length > 0 && <div style={{ width: '100%', textAlign: 'center', padding: '8px', color: '#ff69b4', fontSize: '0.8rem', opacity: 0.7 }}>Refreshing…</div>}
@@ -707,5 +695,3 @@ export async function getStaticProps() {
   } catch (err) { console.error('Error fetching homepage profiles:', err); }
   return { props: { initialProfiles }, revalidate: 60 };
 }
-
-

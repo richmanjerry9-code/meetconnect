@@ -1,4 +1,3 @@
-
 /* Home.module.css */
 
 .container {
@@ -91,7 +90,7 @@
   flex-shrink: 0;
 }
 
-.button {
+.button, .callButton {
   padding: 8px 16px;
   font-weight: 600;
   border: none;
@@ -101,10 +100,12 @@
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
   font-size: 0.88rem;
   white-space: nowrap;
+}
+
+.button {
   background: white;
   color: var(--primary-color);
   border: 1px solid rgba(255,71,133,0.25);
-  position: relative;
 }
 
 .button:hover {
@@ -114,17 +115,9 @@
 }
 
 .callButton {
-  padding: 8px 16px;
-  font-weight: 700;
-  border: none;
-  border-radius: 50px;
-  cursor: pointer;
-  font-size: 0.88rem;
-  white-space: nowrap;
   background: linear-gradient(115deg, #ff69b4, #ff1493);
   color: white;
   box-shadow: 0 4px 10px rgba(255,20,147,0.3);
-  transition: all 0.2s;
 }
 
 .callButton:hover {
@@ -178,37 +171,6 @@
   box-shadow: 0 4px 20px rgba(255, 71, 133, 0.15);
 }
 
-.dropdown {
-  position: absolute;
-  top: 110%;
-  left: 0;
-  right: 0;
-  background: white;
-  border-radius: 15px;
-  border: 1px solid #eee;
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: 100;
-  box-shadow: var(--shadow-soft);
-  display: flex;
-  flex-direction: column;
-  padding: 8px;
-  gap: 5px;
-}
-
-.dropdownItem {
-  padding: 10px 15px;
-  border-radius: 10px;
-  color: var(--text-dark);
-  font-size: 0.9rem;
-  transition: background 0.2s;
-  cursor: pointer;
-}
-.dropdownItem:hover {
-  background: var(--bg-gradient-start);
-  color: var(--primary-color);
-}
-
 /* --- Filters --- */
 .filters {
   display: grid;
@@ -245,11 +207,13 @@
   box-shadow: 0 0 0 2px rgba(255, 71, 133, 0.1);
 }
 
-/* --- Profiles Grid --- */
+/* ────────────────────────────────────────────────
+   PROFILES GRID & CARDS – REDUCED SIZE
+──────────────────────────────────────────────── */
 .profiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 25px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); /* was 260px */
+  gap: 20px; /* was 25px */
   padding: 10px;
   max-height: calc(100vh - 200px);
   overflow-y: auto;
@@ -261,14 +225,14 @@
 .profiles::-webkit-scrollbar-thumb { background: rgba(255, 71, 133, 0.3); border-radius: 10px; }
 .profiles::-webkit-scrollbar-thumb:hover { background: rgba(255, 71, 133, 0.6); }
 
-/* --- Profile Card --- */
+/* --- Profile Card (smaller) --- */
 .profileCard {
   background: var(--card-bg);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: var(--border-radius);
-  padding: 20px;
+  padding: 16px;                    /* was 20px */
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -285,16 +249,15 @@
   border-color: rgba(255, 71, 133, 0.3);
 }
 
-/* ── KEY FIX: imageContainer matches original — no fixed px size ── */
 .imageContainer {
   position: relative;
   display: inline-block;
-  margin: 0 auto 4px;
+  margin: 0 auto 8px;
 }
 
 .profileImage {
-  width: 110px;
-  height: 110px;
+  width: 96px;      /* was 110px */
+  height: 96px;     /* was 110px */
   border-radius: 50%;
   object-fit: cover;
   border: 3px solid white;
@@ -309,29 +272,29 @@
 
 .verifiedBadge {
   position: absolute;
-  bottom: 2px;
-  right: -4px;
+  bottom: 0;
+  right: -2px;
   background: linear-gradient(135deg, #00b894, #00cec9);
   color: white;
-  font-size: 0.6rem;
+  font-size: 0.58rem;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 1px 6px;
   border-radius: 8px;
   white-space: nowrap;
 }
 
-.profileInfo { margin-top: 15px; }
+.profileInfo { margin-top: 12px; }
 .profileInfo h3 {
-  margin: 5px 0;
+  margin: 4px 0;
   color: var(--text-dark);
-  font-size: 1.3rem;
+  font-size: 1.2rem;        /* was 1.3rem */
   font-weight: 700;
 }
 
 .location {
   color: var(--secondary-color);
-  margin: 8px 0 4px;
-  font-size: 0.9rem;
+  margin: 6px 0 4px;
+  font-size: 0.88rem;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -346,15 +309,15 @@
 /* --- Badges --- */
 .badge {
   display: inline-block;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-radius: 20px;
   color: white;
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-  margin-top: 8px;
+  margin-top: 6px;
 }
 .vvip  { background: linear-gradient(135deg, #ff416c, #ff4b2b); }
 .vip   { background: linear-gradient(135deg, #f093fb, #f5576c); }
@@ -364,29 +327,26 @@
 /* --- Summary --- */
 .profileSummary {
   background: rgba(255, 255, 255, 0.5);
-  padding: 12px;
+  padding: 10px;               /* was 12px */
   border-radius: 12px;
-  margin: 15px 0;
+  margin: 12px 0;              /* was 15px 0 */
   text-align: left;
-  font-size: 0.9rem;
+  font-size: 0.87rem;
   border: 1px solid rgba(255,255,255,0.8);
 }
-.profileSummary p { margin: 4px 0; color: var(--text-muted); }
+.profileSummary p { margin: 3px 0; color: var(--text-muted); }
 .profileSummary p:first-child { color: var(--primary-color); font-weight: 600; text-align: center; }
-
-.services { margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.serviceTag { background: #fdf2f7; color: var(--primary-color); border: 1px solid rgba(255, 71, 133, 0.2); padding: 6px 12px; border-radius: 15px; font-size: 0.75rem; font-weight: 600; }
 
 /* --- Actions --- */
 .messageButton {
   display: inline-block;
   background: var(--secondary-color);
   color: white;
-  padding: 8px 16px;
+  padding: 7px 14px;           /* smaller */
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: 0.83rem;
   font-weight: 600;
-  margin-top: 12px;
+  margin-top: 10px;            /* was 12px */
   transition: all 0.2s;
   box-shadow: 0 4px 10px rgba(155, 93, 229, 0.3);
   border: none;
@@ -394,16 +354,22 @@
 }
 .messageButton:hover { background: #8e44ad; transform: translateY(-2px); }
 
-.phoneLink { color: var(--primary-color); text-decoration: none; font-weight: 700; display: block; margin-top: 10px; transition: color 0.2s; cursor: pointer; }
+.phoneLink { 
+  color: var(--primary-color); 
+  text-decoration: none; 
+  font-weight: 700; 
+  display: block; 
+  margin-top: 8px; 
+  transition: color 0.2s; 
+  cursor: pointer; 
+}
 .phoneLink:hover { color: var(--primary-hover); }
 
-/* --- Modal --- */
+/* --- Modal, Footer, Skeleton (unchanged) --- */
 .modal { background: rgba(45, 52, 54, 0.7); backdrop-filter: blur(5px); position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; align-items: center; z-index: 1000; }
 .modalContent { background: white; padding: 30px; border-radius: 20px; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); animation: slideUp 0.3s ease-out; width: 90%; max-width: 340px; position: relative; }
 .close { color: var(--text-muted); font-weight: 300; transition: color 0.2s; position: absolute; top: 10px; right: 12px; cursor: pointer; font-size: 1.8rem; }
-.input { background: #f9f9f9; border: 1px solid #eee; padding: 15px; border-radius: 8px; transition: border 0.2s; width: 100%; margin: 10px 0; font-size: 1rem; }
 
-/* --- Footer --- */
 .footer { text-align: center; padding: 25px 0; background: rgba(255,255,255,0.6); border-top: 1px solid rgba(255, 71, 133, 0.1); margin-top: auto; }
 .footerLinks { display: flex; justify-content: center; gap: 25px; flex-wrap: wrap; }
 .footerLink { color: var(--text-muted); font-weight: 500; font-size: 0.9rem; transition: color 0.2s; }
@@ -424,13 +390,21 @@
   .title { font-size: 1.4rem; letter-spacing: -0.3px; }
   .header { gap: 8px; }
   .authButtons { gap: 3px; }
-  .button { padding: 7px 8px; font-size: 0.75rem; border-radius: 20px; }
-  .callButton { padding: 7px 8px; font-size: 0.75rem; border-radius: 20px; }
-  .btnLabel { display: inline; }
-  .btnIcon  { display: inline; }
+  .button, .callButton { padding: 7px 8px; font-size: 0.75rem; border-radius: 20px; }
+  .profiles {
+    grid-template-columns: repeat(auto-fill, minmax(205px, 1fr)); /* even tighter on mobile */
+    gap: 16px;
+  }
+  .profileImage {
+    width: 88px;
+    height: 88px;
+  }
 }
 
 @media (max-width: 360px) {
   .title { font-size: 1.2rem; }
   .button, .callButton { padding: 6px 7px; font-size: 0.7rem; }
+  .profiles {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  }
 }
