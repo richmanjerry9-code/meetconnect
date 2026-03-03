@@ -1,11 +1,12 @@
+
 /* Home.module.css */
 
 .container {
   --primary-color: #ff4785;
   --primary-hover: #e0356f;
   --secondary-color: #9b5de5;
-  --bg-gradient-start: #fff0f3;
-  --bg-gradient-end: #ffe3e3;
+  --bg-gradient-start: #e8ccd7;
+  --bg-gradient-end: #d7a3b4;
   --card-bg: rgba(255, 255, 255, 0.85);
   --text-dark: #2d3436;
   --text-muted: #636e72;
@@ -132,7 +133,7 @@
 }
 
 .btnLabel { display: inline; }
-.btnIcon  { display: none; }
+.btnIcon  { display: inline; }
 
 .unreadBadge {
   display: inline-flex;
@@ -420,16 +421,16 @@
 ═══════════════════════════════════════════════════ */
 @media (max-width: 520px) {
   .container { padding: 10px; }
-  .title { font-size: 1.25rem; letter-spacing: -0.3px; }
-  .header { gap: 6px; }
-  .authButtons { gap: 4px; }
-  .button { padding: 7px 10px; font-size: 0.75rem; border-radius: 20px; }
-  .callButton { padding: 7px 10px; font-size: 0.75rem; border-radius: 20px; }
-  .btnLabel { display: none; }
+  .title { font-size: 1.4rem; letter-spacing: -0.3px; }
+  .header { gap: 8px; }
+  .authButtons { gap: 3px; }
+  .button { padding: 7px 8px; font-size: 0.75rem; border-radius: 20px; }
+  .callButton { padding: 7px 8px; font-size: 0.75rem; border-radius: 20px; }
+  .btnLabel { display: inline; }
   .btnIcon  { display: inline; }
 }
 
 @media (max-width: 360px) {
-  .title { font-size: 1.05rem; }
-  .button, .callButton { padding: 6px 8px; font-size: 0.7rem; }
+  .title { font-size: 1.2rem; }
+  .button, .callButton { padding: 6px 7px; font-size: 0.7rem; }
 }

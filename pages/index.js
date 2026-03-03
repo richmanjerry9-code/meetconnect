@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useMemo, useCallback, memo, useRef, forwardRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -561,11 +562,11 @@ export default function Home({ initialProfiles = [] }) {
             <span>📸</span><span className={styles.btnLabel}> Feed</span>
           </button>
           <button onClick={() => handleAccessProtected('/inbox', 'Inbox')} className={styles.button}>
-            <span className={styles.btnLabel}>Inbox</span><span className={styles.btnIcon}>✉</span>
+            <span className={styles.btnLabel}>Inbox</span><span className={styles.btnIcon}></span>
             {unreadTotal > 0 && <span className={styles.unreadBadge}>{unreadTotal > 99 ? '99+' : unreadTotal}</span>}
           </button>
           {user
-            ? <Link href="/profile-setup"><button className={styles.button}><span className={styles.btnLabel}>My Profile</span><span className={styles.btnIcon}>👤</span></button></Link>
+            ? <Link href="/profile-setup"><button className={styles.button}><span className={styles.btnLabel}>My Profile</span><span className={styles.btnIcon}></span></button></Link>
             : <button onClick={() => { setPendingPath(null); setShowLogin(true); }} className={styles.callButton}>Login</button>
           }
         </div>
@@ -706,4 +707,5 @@ export async function getStaticProps() {
   } catch (err) { console.error('Error fetching homepage profiles:', err); }
   return { props: { initialProfiles }, revalidate: 60 };
 }
+
 
