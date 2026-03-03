@@ -22,7 +22,7 @@ const AppContent = ({ Component, pageProps }) => {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   // -------------------------------
-  // SERVICE WORKER + INSTALL LOGIC (unchanged, but removed Firebase SW unregister)
+  // SERVICE WORKER + INSTALL LOGIC (unchanged)
   // -------------------------------
   useEffect(() => {
     const isStandalone =
@@ -32,11 +32,10 @@ const AppContent = ({ Component, pageProps }) => {
     console.log('Is app in standalone mode?', isStandalone); // Debug log
 
     if (isStandalone) {
-      setShowInstallButton(false); // Explicitly ensure banner is hidden
-      // Auto-subscribe or prompt for notifications if installed + logged in
+      setShowInstallButton(false);
       if (user && 'Notification' in window) {
         setTimeout(() => {
-          handleEnableNotifications(); // Updated to FCM version
+          handleEnableNotifications();
         }, 2000);
       }
     } else {
@@ -56,7 +55,7 @@ const AppContent = ({ Component, pageProps }) => {
   }, [user]);
 
   // -------------------------------
-  // GOOGLE ANALYTICS SPA TRACKING (unchanged)
+  // GOOGLE ANALYTICS SPA TRACKING (FIXED — only this part changed)
   // -------------------------------
   useEffect(() => {
     const handleRouteChange = (url) => {
@@ -67,13 +66,13 @@ const AppContent = ({ Component, pageProps }) => {
       }
     };
 
-    handleRouteChange(window.location.pathname);
+    // Only listen to route changes (removed the old line that was breaking it)
     router.events.on('routeChangeComplete', handleRouteChange);
     return () => router.events.off('routeChangeComplete', handleRouteChange);
   }, [router.events]);
 
   // -------------------------------
-  // FCM FOREGROUND MESSAGE HANDLER (new: replaces OneSignal click handler)
+  // FCM FOREGROUND MESSAGE HANDLER
   // -------------------------------
   useEffect(() => {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -84,13 +83,12 @@ const AppContent = ({ Component, pageProps }) => {
         if (data.action === 'open_chat' && data.chatId) {
           router.push(`/inbox/${data.chatId}`);
         }
-        // Optionally show an in-app toast here instead of system notification
       });
     }
   }, [router]);
 
   // -------------------------------
-  // INSTALL BUTTON HANDLER (unchanged)
+  // INSTALL BUTTON HANDLER
   // -------------------------------
   const handleInstallClick = async () => {
     if (deferredPrompt) {
@@ -104,7 +102,7 @@ const AppContent = ({ Component, pageProps }) => {
   };
 
   // -------------------------------
-  // ENABLE NOTIFICATIONS HANDLER (updated to FCM)
+  // ENABLE NOTIFICATIONS HANDLER
   // -------------------------------
   const handleEnableNotifications = async () => {
     if (!('Notification' in window)) return;
@@ -128,14 +126,14 @@ const AppContent = ({ Component, pageProps }) => {
     }
   };
 
-  // Extra log for banner visibility (temporary debug)
+  // Extra log for banner visibility
   useEffect(() => {
     console.log('Install banner visible?', showInstallButton);
   }, [showInstallButton]);
 
   return (
     <>
-      {/* INSTALL BANNER (unchanged) */}
+      {/* INSTALL BANNER */}
       {showInstallButton && (
         <div style={{
           position: 'fixed',
@@ -207,7 +205,7 @@ const AppContent = ({ Component, pageProps }) => {
         </div>
       )}
 
-      {/* IOS INSTALL INSTRUCTIONS (unchanged) */}
+      {/* IOS INSTALL INSTRUCTIONS */}
       {showIOSInstructions && <IOSPopup onClose={() => setShowIOSInstructions(false)} />}
 
       <Component {...pageProps} />
@@ -216,7 +214,7 @@ const AppContent = ({ Component, pageProps }) => {
 };
 
 // -------------------------------
-// UI COMPONENTS (unchanged)
+// UI COMPONENTS
 // -------------------------------
 const IOSPopup = ({ onClose }) => (
   <div
@@ -269,7 +267,7 @@ const IOSPopup = ({ onClose }) => (
 );
 
 // -------------------------------
-// ROOT APP (Modified: Removed OneSignal scripts)
+// ROOT APP
 // -------------------------------
 export default function App({ Component, pageProps }) {
   return (
@@ -279,7 +277,7 @@ export default function App({ Component, pageProps }) {
         <link rel="manifest" href="/manifest.json" />
       </Head>
 
-      {/* Google Analytics (unchanged) */}
+      {/* Google Analytics (FIXED) */}
       <Script
         src="https://www.googletagmanager.com/gtag/js?id=G-TBN1ZJECDJ"
         strategy="afterInteractive"
@@ -290,9 +288,7 @@ export default function App({ Component, pageProps }) {
           function gtag(){dataLayer.push(arguments);}
           window.gtag = gtag;
           gtag('js', new Date());
-          gtag('config', 'G-TBN1ZJECDJ', {
-            send_page_view: false
-          });
+          gtag('config', 'G-TBN1ZJECDJ');   // ← fixed (no send_page_view: false)
         `}
       </Script>
 
