@@ -1,5 +1,5 @@
 // pages/group-chat.js
-"use client";  // Note: This directive is for App Router; in Pages Router, it may not be needed or could cause issues—consider removing if using Pages Router strictly.
+"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/router";
@@ -26,44 +26,46 @@ import { useAuth } from "../contexts/AuthContext";
 import styles from "styles/groupchat.module.css";
 import GroupChatHeader from "../lib/groupchat/GroupChatHeader";
 import GroupChatInput from "../lib/groupchat/GroupChatInput";
-import { uploadMedia } from "../lib/chat/";  // Import uploadMedia for consistency
-import { getMessaging, onMessage, getToken } from "firebase/messaging";  // Import messaging utilities here (client-only)
-import { db } from "../lib/firebase";  // Import db from firebase.js to ensure app initialization
-import imageCompression from 'browser-image-compression';
+import { uploadMedia } from "../lib/chat/";
+import { getMessaging, onMessage, getToken } from "firebase/messaging";
+import { db } from "../lib/firebase";
+import imageCompression from "browser-image-compression";
 
-// Replace with your actual VAPID key from Firebase Console
-const VAPID_KEY = 'YOUR_VAPID_KEY_HERE'; // Get from Firebase > Project Settings > Cloud Messaging > Web configuration
+const VAPID_KEY = "YOUR_VAPID_KEY_HERE";
 
-// Helper function to subscribe to topic (server-side via API)
 async function subscribeToTopic(topic) {
+  if (VAPID_KEY === "YOUR_VAPID_KEY_HERE" || !VAPID_KEY) {
+    console.warn("VAPID key not set – push notifications disabled");
+    return;
+  }
   try {
     const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      const messaging = getMessaging();  // Initialize messaging here (client-only)
+    if (permission === "granted") {
+      const messaging = getMessaging();
       const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-      await fetch('/api/subscribeToTopic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      await fetch("/api/subscribeToTopic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, topic }),
       });
     }
   } catch (err) {
-    console.error('Subscription failed:', err);
+    console.error("Subscription failed:", err);
   }
 }
 
-// Helper function to unsubscribe from topic (server-side via API)
 async function unsubscribeFromTopic(topic) {
+  if (VAPID_KEY === "YOUR_VAPID_KEY_HERE" || !VAPID_KEY) return;
   try {
-    const messaging = getMessaging();  // Initialize messaging here (client-only)
+    const messaging = getMessaging();
     const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-    await fetch('/api/unsubscribeFromTopic', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch("/api/unsubscribeFromTopic", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, topic }),
     });
   } catch (err) {
-    console.error('Unsubscription failed:', err);
+    console.error("Unsubscription failed:", err);
   }
 }
 
@@ -76,44 +78,38 @@ export default function GroupChatPage() {
   const [pinnedMessages, setPinnedMessages] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [isTyping, setIsTyping] = useState(false);  // Typing indicator
+  const [isTyping, setIsTyping] = useState(false);
   const [showJoinPrompt, setShowJoinPrompt] = useState(false);
   const [isMember, setIsMember] = useState(false);
   const [memberCount, setMemberCount] = useState(0);
-  const chatId = "main";  // Fixed group chat ID
+  const chatId = "main";
 
   // Handle browser back button for image modal
   useEffect(() => {
     if (selectedImage) {
       history.pushState({ modal: true }, "");
-      const handlePopState = () => {
-        setSelectedImage(null);
-      };
+      const handlePopState = () => setSelectedImage(null);
       window.addEventListener("popstate", handlePopState, { once: true });
       return () => {
         window.removeEventListener("popstate", handlePopState);
-        if (history.state?.modal) {
-          history.back();
-        }
+        if (history.state?.modal) history.back();
       };
     }
   }, [selectedImage]);
 
-  // CLEANED UP FCM: Only listen for foreground messages (optional for group)
+  // FCM foreground messages
   useEffect(() => {
     if (!user) return;
-
-    const messaging = getMessaging();  // Initialize messaging here (client-only)
+    const messaging = getMessaging();
     const unsubscribe = onMessage(messaging, (payload) => {
       if (payload.data?.chatId === chatId) {
         // Handle group notification if needed
       }
     });
-
     return () => unsubscribe();
   }, [user, chatId]);
 
-  // CHECK MEMBERSHIP + LOAD CHAT + LISTENERS (with Typing and Pinned)
+  // CHECK MEMBERSHIP + LOAD CHAT + LISTENERS
   useEffect(() => {
     if (!user) return;
 
@@ -124,13 +120,14 @@ export default function GroupChatPage() {
       try {
         const chatRef = doc(db, "groupChats", chatId);
         const snap = await getDoc(chatRef);
+
         if (!snap.exists()) {
-          await setDoc(chatRef, { 
-            createdAt: serverTimestamp(), 
-            typing: [], 
-            pinnedMessages: [], 
-            members: [], 
-            memberCount: 0 
+          await setDoc(chatRef, {
+            createdAt: serverTimestamp(),
+            typing: [],
+            pinnedMessages: [],
+            members: [],
+            memberCount: 0,
           });
           setShowJoinPrompt(true);
           setLoading(false);
@@ -148,28 +145,27 @@ export default function GroupChatPage() {
           return;
         }
 
-        // Subscribe to notifications if member
         await subscribeToTopic(`group_${chatId}`);
 
-        // MESSAGE LISTENER
+        // Message listener
         const q = query(
           collection(db, "groupChats", chatId, "messages"),
           orderBy("timestamp", "asc")
         );
 
         unsubMessages = onSnapshot(q, async (snapshot) => {
-          const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+          const msgs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-          const uids = [...new Set(msgs.map(m => m.senderId).filter(Boolean))];
-          const missing = uids.filter(uid => !profilesMap[uid]);
+          const uids = [...new Set(msgs.map((m) => m.senderId).filter(Boolean))];
+          const missing = uids.filter((uid) => !profilesMap[uid]);
 
           if (missing.length > 0) {
             const newMap = { ...profilesMap };
             await Promise.all(
-              missing.map(async uid => {
-                const snap = await getDoc(doc(db, "profiles", uid));
-                if (snap.exists()) {
-                  const p = snap.data();
+              missing.map(async (uid) => {
+                const s = await getDoc(doc(db, "profiles", uid));
+                if (s.exists()) {
+                  const p = s.data();
                   newMap[uid] = {
                     name: p.name || p.displayName || "User",
                     profilePic: p.photoURL || p.profilePic || "/default-profile.png",
@@ -186,14 +182,13 @@ export default function GroupChatPage() {
           setLoading(false);
         });
 
-        // CHAT LISTENER for pinned, typing, members
-        unsubChat = onSnapshot(chatRef, (snap) => {
-          const data = snap.data() || {};
-          setPinnedMessages(data.pinnedMessages || []);
-          const typingUsers = data.typing || [];
-          setIsTyping(typingUsers.length > 0);
-          setMemberCount(data.memberCount || 0);
-          setIsMember(data.members?.includes(user.uid) || false);
+        // Chat listener for pinned, typing, members
+        unsubChat = onSnapshot(chatRef, (s) => {
+          const d = s.data() || {};
+          setPinnedMessages(d.pinnedMessages || []);
+          setIsTyping((d.typing || []).length > 0);
+          setMemberCount(d.memberCount || 0);
+          setIsMember(d.members?.includes(user.uid) || false);
         });
 
         setLoading(false);
@@ -208,23 +203,18 @@ export default function GroupChatPage() {
     return () => {
       if (unsubMessages) unsubMessages();
       if (unsubChat) unsubChat();
-      if (isMember) {
-        unsubscribeFromTopic(`group_${chatId}`);
-      }
+      if (isMember) unsubscribeFromTopic(`group_${chatId}`);
     };
   }, [user, profilesMap]);
 
   // MARK AS SEEN
   useEffect(() => {
     if (!messages.length || !user || !chatId || !isMember) return;
-
     messages.forEach(async (msg) => {
       if (!msg.seenBy?.includes(user.uid)) {
         const msgRef = doc(db, "groupChats", chatId, "messages", msg.id);
         try {
-          await updateDoc(msgRef, {
-            seenBy: arrayUnion(user.uid),
-          });
+          await updateDoc(msgRef, { seenBy: arrayUnion(user.uid) });
         } catch (err) {
           console.error("Mark seen failed:", err);
         }
@@ -244,7 +234,6 @@ export default function GroupChatPage() {
       await subscribeToTopic(`group_${chatId}`);
       setShowJoinPrompt(false);
       setIsMember(true);
-      // Load will happen via onSnapshot
     } catch (err) {
       console.error("Join failed:", err);
     }
@@ -258,7 +247,7 @@ export default function GroupChatPage() {
       await updateDoc(chatRef, {
         members: arrayRemove(user.uid),
         memberCount: increment(-1),
-        typing: arrayRemove(user.uid), // Clean up if typing
+        typing: arrayRemove(user.uid),
       });
       await unsubscribeFromTopic(`group_${chatId}`);
       router.push("/inbox");
@@ -267,57 +256,53 @@ export default function GroupChatPage() {
     }
   };
 
-  // SEND MESSAGE (with upload support and viewOnce)
+  // SEND MESSAGE
   const handleSend = async (text = "", imageFile = null, audioBlob = null, viewOnce = false) => {
     if (!user || !isMember || (!text.trim() && !imageFile && !audioBlob)) return;
 
     try {
       let imageUrl = null;
       let audioUrl = null;
+
       if (imageFile) {
-        // Compress image before upload
-        const options = {
-          maxSizeMB: 1, // Max 1MB
-          maxWidthOrHeight: 1024, // Resize if larger
-          useWebWorker: true, // Offload to worker for speed
-        };
+        const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true };
         const compressedFile = await imageCompression(imageFile, options);
         imageUrl = await uploadMedia(compressedFile, "chatImages");
       }
       if (audioBlob) audioUrl = await uploadMedia(audioBlob, "chatAudio");
 
-      // ALWAYS get the chosen name from Firestore profile (NEVER email or Firebase name)
       let chosenName = "User";
       const profileSnap = await getDoc(doc(db, "profiles", user.uid));
       if (profileSnap.exists()) {
         const p = profileSnap.data();
-        chosenName = p.name || p.username || "User"; // ONLY profile name
+        chosenName = p.name || p.username || "User";
       }
 
-      const replyToObj = replyingTo ? {
-        id: replyingTo.id,
-        text: replyingTo.text,
-        senderName: replyingTo.senderName,
-        senderId: replyingTo.senderId
-      } : null;
+      const replyToObj = replyingTo
+        ? {
+            id: replyingTo.id,
+            text: replyingTo.text,
+            senderName: replyingTo.senderName,
+            senderId: replyingTo.senderId,
+          }
+        : null;
 
       const payload = {
         text: text.trim(),
         imageUrl: imageUrl || null,
         audioUrl: audioUrl || null,
         senderId: user.uid,
-        senderName: chosenName, // ONLY THIS NAME IS SAVED
+        senderName: chosenName,
         senderPhoto: user.photoURL || "/default-profile.png",
         timestamp: serverTimestamp(),
         seenBy: [user.uid],
         replyTo: replyToObj,
         deletedFor: [],
-        viewOnce: (imageUrl && viewOnce) ? true : false,
-        viewedBy: (imageUrl && viewOnce) ? [] : [],  // Do not add sender initially for view once
+        viewOnce: imageUrl && viewOnce ? true : false,
+        viewedBy: imageUrl && viewOnce ? [] : [],
       };
 
       await addDoc(collection(db, "groupChats", chatId, "messages"), payload);
-
       await updateDoc(doc(db, "groupChats", chatId), {
         lastMessage: text || (audioUrl ? "Voice message" : imageUrl ? "Photo" : "Message"),
         timestamp: serverTimestamp(),
@@ -329,7 +314,7 @@ export default function GroupChatPage() {
     }
   };
 
-  // TYPING HANDLER (called from GroupChatInput on input change)
+  // TYPING HANDLER
   const handleTyping = async (isTypingNow) => {
     if (!user || !isMember) return;
     const chatRef = doc(db, "groupChats", chatId);
@@ -342,30 +327,26 @@ export default function GroupChatPage() {
     }
   };
 
-  // DELETE MESSAGE (with lastMessage update)
+  // DELETE MESSAGE
   const handleDelete = async (messageId, forEveryone = false) => {
     const msgRef = doc(db, "groupChats", chatId, "messages", messageId);
     const chatRef = doc(db, "groupChats", chatId);
+
     if (forEveryone) {
       await deleteDoc(msgRef);
     } else {
       await updateDoc(msgRef, { deletedFor: arrayUnion(user.uid) });
     }
 
-    // Update lastMessage
     const q = query(
       collection(db, "groupChats", chatId, "messages"),
       orderBy("timestamp", "desc"),
       limit(1)
     );
-
     const snap = await getDocs(q);
 
     if (snap.empty) {
-      await updateDoc(chatRef, {
-        lastMessage: "",
-        timestamp: null,
-      });
+      await updateDoc(chatRef, { lastMessage: "", timestamp: null });
     } else {
       const lastMsg = snap.docs[0].data();
       await updateDoc(chatRef, {
@@ -379,31 +360,23 @@ export default function GroupChatPage() {
   const handlePin = async (messageId) => {
     if (!user) return;
     const chatRef = doc(db, "groupChats", chatId);
-
     try {
       if (pinnedMessages.includes(messageId)) {
-        await updateDoc(chatRef, {
-          pinnedMessages: arrayRemove(messageId),
-        });
+        await updateDoc(chatRef, { pinnedMessages: arrayRemove(messageId) });
       } else {
-        await updateDoc(chatRef, {
-          pinnedMessages: arrayUnion(messageId),
-        });
+        await updateDoc(chatRef, { pinnedMessages: arrayUnion(messageId) });
       }
     } catch (err) {
       console.error("Pin failed:", err);
     }
   };
 
-  // Handle image click for view once
+  // IMAGE CLICK (view once support)
   const handleImageClick = async (message) => {
     setSelectedImage(message.imageUrl);
-
     if (message.viewOnce && !message.viewedBy?.includes(user.uid)) {
       const msgRef = doc(db, "groupChats", chatId, "messages", message.id);
-      await updateDoc(msgRef, {
-        viewedBy: arrayUnion(user.uid),
-      });
+      await updateDoc(msgRef, { viewedBy: arrayUnion(user.uid) });
     }
   };
 
@@ -415,9 +388,21 @@ export default function GroupChatPage() {
     return (
       <div style={{ padding: "2rem", textAlign: "center", background: "#f9f9f9", borderRadius: "12px", maxWidth: "400px", margin: "auto" }}>
         <h2 style={{ marginBottom: "1rem" }}>Join MeetConnect Group Chat? 💕</h2>
-        <p style={{ marginBottom: "1.5rem", color: "#666" }}>Connect with others, share stories, and have fun in our community group chat. You'll receive notifications for new messages.</p>
-        <button onClick={handleJoin} style={{ margin: "0 10px", padding: "10px 20px", background: "#D81B60", color: "white", border: "none", borderRadius: "8px", cursor: "pointer" }}>Join Now</button>
-        <button onClick={() => router.push("/inbox")} style={{ margin: "0 10px", padding: "10px 20px", background: "#ccc", color: "#333", border: "none", borderRadius: "8px", cursor: "pointer" }}>Not Now</button>
+        <p style={{ marginBottom: "1.5rem", color: "#666" }}>
+          Connect with others, share stories, and have fun in our community group chat.
+        </p>
+        <button
+          onClick={handleJoin}
+          style={{ margin: "0 10px", padding: "10px 20px", background: "#D81B60", color: "white", border: "none", borderRadius: "8px", cursor: "pointer" }}
+        >
+          Join Now
+        </button>
+        <button
+          onClick={() => router.push("/inbox")}
+          style={{ margin: "0 10px", padding: "10px 20px", background: "#ccc", color: "#333", border: "none", borderRadius: "8px", cursor: "pointer" }}
+        >
+          Not Now
+        </button>
       </div>
     );
   }
@@ -432,7 +417,9 @@ export default function GroupChatPage() {
 
       <main style={{ flex: 1, overflow: "auto", padding: "1.25rem" }}>
         {loading && <div style={{ textAlign: "center", opacity: 0.6 }}>Loading...</div>}
-        {!loading && messages.length === 0 && <div style={{ textAlign: "center", opacity: 0.6 }}>No messages yet</div>}
+        {!loading && messages.length === 0 && (
+          <div style={{ textAlign: "center", opacity: 0.6 }}>No messages yet</div>
+        )}
 
         <GroupMessageList
           messages={messages}
@@ -451,8 +438,7 @@ export default function GroupChatPage() {
 
       {replyingTo && (
         <div className={styles.replyPreview}>
-          Replying to:{" "}
-          {replyingTo.text || "(Message)"}
+          Replying to: {replyingTo.text || "(Message)"}
           <button onClick={() => setReplyingTo(null)}>Cancel</button>
         </div>
       )}
@@ -460,10 +446,7 @@ export default function GroupChatPage() {
       <GroupChatInput onSend={handleSend} onTyping={handleTyping} />
 
       {selectedImage && (
-        <div
-          className={styles.imageModal}
-          onClick={() => setSelectedImage(null)}
-        >
+        <div className={styles.imageModal} onClick={() => setSelectedImage(null)}>
           <Image
             src={selectedImage}
             alt="Full size image"
@@ -474,7 +457,12 @@ export default function GroupChatPage() {
           <button
             className={styles.closeModal}
             onClick={() => setSelectedImage(null)}
-            style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', color: 'white', border: 'none', borderRadius: '50%', width: '30px', height: '30px', fontSize: '20px', cursor: 'pointer' }}
+            style={{
+              position: "absolute", top: "10px", right: "10px",
+              background: "rgba(0,0,0,0.7)", color: "white", border: "none",
+              borderRadius: "50%", width: "30px", height: "30px",
+              fontSize: "20px", cursor: "pointer",
+            }}
           >
             ×
           </button>
@@ -484,55 +472,112 @@ export default function GroupChatPage() {
   );
 }
 
+/* ==================== DATE HELPER ==================== */
+function getDateLabel(timestamp) {
+  if (!timestamp) return "Unknown";
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const checkDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const diffDays = Math.round((today - checkDate) / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays > 1 && diffDays < 7) {
+    return checkDate.toLocaleDateString("en-US", { weekday: "long" });
+  }
+
+  const dayName = checkDate.toLocaleDateString("en-US", { weekday: "long" });
+  const dayNum = checkDate.getDate();
+  const month = checkDate.toLocaleDateString("en-US", { month: "short" });
+  return `${dayName} ${dayNum} ${month} ${checkDate.getFullYear()}`;
+}
+
 /* ==================== MESSAGE LIST ==================== */
-function GroupMessageList({ messages = [], profilesMap = {}, currentUserId, onProfileClick, onDelete, onReply, onPin, pinnedMessages, onImageClick }) {
+function GroupMessageList({
+  messages = [],
+  profilesMap = {},
+  currentUserId,
+  onProfileClick,
+  onDelete,
+  onReply,
+  onPin,
+  pinnedMessages,
+  onImageClick,
+}) {
   const containerRef = useRef(null);
 
   useEffect(() => {
     containerRef.current?.scrollTo(0, containerRef.current.scrollHeight);
   }, [messages]);
 
+  // Filter deleted + sort by time
+  const visibleMessages = messages
+    .filter((m) => !m.deletedFor?.includes(currentUserId))
+    .sort((a, b) => (a.timestamp?.toDate?.()?.getTime() || 0) - (b.timestamp?.toDate?.()?.getTime() || 0));
+
+  // Group by date label
+  const grouped = visibleMessages.reduce((acc, msg) => {
+    const label = getDateLabel(msg.timestamp);
+    if (!acc[label]) acc[label] = [];
+    acc[label].push(msg);
+    return acc;
+  }, {});
+
   return (
     <div ref={containerRef} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {messages.map((m) => {
-        if (m.deletedFor?.includes(currentUserId)) return null;
-        const profile = profilesMap[m.senderId] || {};
-        return (
-          <GroupMessageItem
-            key={m.id}
-            message={m}
-            profile={profile}
-            isOwn={m.senderId === currentUserId}
-            onProfileClick={() => onProfileClick(m.senderId)}
-            onDelete={(forEveryone) => onDelete(m.id, forEveryone)}
-            onReply={() => onReply(m)}
-            onPin={() => onPin(m.id)}
-            isPinned={pinnedMessages.includes(m.id)}
-            onImageClick={onImageClick}
-            currentUserId={currentUserId}
-          />
-        );
-      })}
+      {Object.entries(grouped).map(([dateLabel, msgs]) => (
+        <div key={dateLabel}>
+          {/* WhatsApp-style date header */}
+          <div className={styles.dateHeader}>{dateLabel}</div>
+
+          {msgs.map((m) => {
+            const profile = profilesMap[m.senderId] || {};
+            return (
+              <GroupMessageItem
+                key={m.id}
+                message={m}
+                profile={profile}
+                isOwn={m.senderId === currentUserId}
+                onProfileClick={() => onProfileClick(m.senderId)}
+                onDelete={(forEveryone) => onDelete(m.id, forEveryone)}
+                onReply={() => onReply(m)}
+                onPin={() => onPin(m.id)}
+                isPinned={pinnedMessages.includes(m.id)}
+                onImageClick={onImageClick}
+                currentUserId={currentUserId}
+              />
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
 
 /* ==================== SINGLE MESSAGE ==================== */
-function GroupMessageItem({ message, profile = {}, isOwn, onProfileClick, onDelete, onReply, onPin, isPinned, onImageClick, currentUserId }) {
+function GroupMessageItem({
+  message,
+  profile = {},
+  isOwn,
+  onProfileClick,
+  onDelete,
+  onReply,
+  onPin,
+  isPinned,
+  onImageClick,
+  currentUserId,
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [touchStartX, setTouchStartX] = useState(null);
   const longPressTimer = useRef(null);
 
   const handleTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX);
-    // Start long press timer
-    longPressTimer.current = setTimeout(() => {
-      setMenuOpen(true);
-    }, 500); // 500ms for long press
+    longPressTimer.current = setTimeout(() => setMenuOpen(true), 500);
   };
 
   const handleTouchMove = () => {
-    // Cancel long press if moving
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
@@ -552,8 +597,8 @@ function GroupMessageItem({ message, profile = {}, isOwn, onProfileClick, onDele
 
   const senderName = profile.name || message.senderName || "User";
   const senderPic = profile.profilePic || "/default-profile.png";
-  const time = message.timestamp?.toDate?.()?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) || "";
-
+  const time =
+    message.timestamp?.toDate?.()?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) || "";
   const hasViewed = message.viewedBy?.includes(currentUserId);
 
   return (
@@ -570,78 +615,46 @@ function GroupMessageItem({ message, profile = {}, isOwn, onProfileClick, onDele
         </button>
       )}
 
-      <div className={`${styles.bubble} ${isOwn ? styles.ownBubble : styles.otherBubble}`} style={{ maxWidth: "78%" }}>
-        {/* Reply Preview */}
+      <div
+        className={`${styles.bubble} ${isOwn ? styles.ownBubble : styles.otherBubble}`}
+        style={{ maxWidth: "78%" }}
+      >
+        {/* Reply preview */}
         {message.replyTo && (
           <div style={{ background: "rgba(255,255,255,0.08)", padding: "8px", borderRadius: "8px", marginBottom: "8px", fontSize: "13px" }}>
             Replying to {message.replyTo.senderName || "someone"}: {message.replyTo.text?.slice(0, 50)}...
           </div>
         )}
 
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#D81B60" }}>{senderName}</div>
-          </div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#D81B60", marginBottom: 4 }}>
+          {senderName}
         </div>
 
         <div style={{ marginTop: 6 }}>
           {message.imageUrl && (
             <>
               {message.viewOnce && hasViewed ? (
-                <div style={{
-                  padding: "20px",
-                  textAlign: "center",
-                  color: "#888",
-                  fontStyle: "italic",
-                  background: "rgba(255,255,255,0.05)",
-                  borderRadius: "12px",
-                }}>
+                <div style={{ padding: "20px", textAlign: "center", color: "#888", fontStyle: "italic", background: "rgba(255,255,255,0.05)", borderRadius: "12px" }}>
                   This photo can no longer be viewed
                 </div>
               ) : message.viewOnce ? (
-                /* Blurred preview for view-once (for both sender and receivers who haven't opened yet) */
                 <div
                   onClick={() => onImageClick(message)}
-                  style={{
-                    position: "relative",
-                    width: "240px",
-                    height: "240px",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    cursor: "pointer",
-                    background: "#111",
-                  }}
+                  style={{ position: "relative", width: "240px", height: "240px", borderRadius: "12px", overflow: "hidden", cursor: "pointer", background: "#111" }}
                 >
                   <Image
                     src={message.imageUrl}
                     alt="View once preview"
                     fill
-                    style={{
-                      objectFit: "cover",
-                      filter: "blur(20px)",
-                      transform: "scale(1.1)",
-                    }}
+                    style={{ objectFit: "cover", filter: "blur(20px)", transform: "scale(1.1)" }}
                     loading="lazy"
                   />
-                  <div style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "8px",
-                    color: "white",
-                    zIndex: 1,
-                  }}>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "8px", color: "white", zIndex: 1 }}>
                     <div style={{ fontSize: "64px" }}>①</div>
-                    <div style={{ fontSize: "14px", background: "rgba(0,0,0,0.5)", padding: "4px 12px", borderRadius: "8px" }}>
-                      View once
-                    </div>
+                    <div style={{ fontSize: "14px", background: "rgba(0,0,0,0.5)", padding: "4px 12px", borderRadius: "8px" }}>View once</div>
                   </div>
                 </div>
               ) : (
-                /* Normal image display (non-view-once) */
                 <Image
                   src={message.imageUrl}
                   alt="sent"
@@ -655,11 +668,13 @@ function GroupMessageItem({ message, profile = {}, isOwn, onProfileClick, onDele
               )}
             </>
           )}
+
           {message.audioUrl && (
             <audio controls src={message.audioUrl} style={{ width: "100%", margin: "8px 0" }}>
               Your browser does not support audio.
             </audio>
           )}
+
           {message.text && <div className={styles.messageText}>{message.text}</div>}
         </div>
 
