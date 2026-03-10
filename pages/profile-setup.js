@@ -5,13 +5,15 @@ import Image from 'next/image';
 import * as locations from '../data/locations';
 import styles from '../styles/ProfileSetup.module.css';
 import { db, auth } from '../lib/firebase';
-import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs, arrayUnion, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc, setDoc, getDoc, onSnapshot, collection, query,
+  where, getDocs, arrayUnion, updateDoc, serverTimestamp,
+} from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import StkPushForm from '../components/StkPushForm';
 
 const ACTIVATION_FEE = 300;
 
-// Same key function used in feed.js — must match exactly
 const urlToKey = (url) => String(url).replace(/[^a-zA-Z0-9]/g, '_').slice(0, 400);
 
 export default function ProfileSetup() {
@@ -47,40 +49,31 @@ export default function ProfileSetup() {
   const [loading, setLoading] = useState(true);
   const [saveLoading, setSaveLoading] = useState(false);
   const [verificationRequested, setVerificationRequested] = useState(false);
-  // Activation modal
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [activationLocked, setActivationLocked] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState('idle');
   const [checkoutRequestID, setCheckoutRequestID] = useState(null);
   const pollingInterval = useRef(null);
-  // Receipt modal
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [receipt, setReceipt] = useState(null);
-  // Deactivation modal
   const [showDeactivationModal, setShowDeactivationModal] = useState(false);
-  // Membership modals & payment
   const [showModal, setShowModal] = useState(false);
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedDuration, setSelectedDuration] = useState('');
   const [showPaymentChoice, setShowPaymentChoice] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('wallet');
   const [upgradeLocked, setUpgradeLocked] = useState(false);
-  // Upgrade price preview (credit calculation)
-  const [upgradePreview, setUpgradePreview] = useState(null); // { effectivePrice, credit, remainingDays, fullPrice, willExtend }
+  const [upgradePreview, setUpgradePreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  // Add funds / withdraw
   const [showAddFundModal, setShowAddFundModal] = useState(false);
   const [addFundLocked, setAddFundLocked] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawLoading, setWithdrawLoading] = useState(false);
-  // Transactions
   const [showEarningsHistory, setShowEarningsHistory] = useState(false);
   const [transactions, setTransactions] = useState([]);
-  // My Subscriptions (as subscriber)
   const [showMySubscriptions, setShowMySubscriptions] = useState(false);
   const [mySubscriptions, setMySubscriptions] = useState([]);
-  // Create post states
   const [showCreatePostModal, setShowCreatePostModal] = useState(false);
   const [postFiles, setPostFiles] = useState([]);
   const [postPreviews, setPostPreviews] = useState([]);
@@ -88,7 +81,6 @@ export default function ProfileSetup() {
   const [postIsExclusive, setPostIsExclusive] = useState(false);
   const [postUploading, setPostUploading] = useState(false);
   const [showInappropriateBanner, setShowInappropriateBanner] = useState(false);
-  // Gallery & viewer
   const [showPostsModal, setShowPostsModal] = useState(false);
   const [showExclusiveModal, setShowExclusiveModal] = useState(false);
   const [showMediaViewer, setShowMediaViewer] = useState(false);
@@ -96,26 +88,21 @@ export default function ProfileSetup() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const touchStartX = useRef(0);
   const [mpesaPhone, setMpesaPhone] = useState('');
-  // Profile pic
   const [profilePicFile, setProfilePicFile] = useState(null);
   const [profilePicPreview, setProfilePicPreview] = useState('');
   const steps = ['Profile', 'Location', 'Bio', 'Media', 'Membership & Wallets'];
   const [activeStep, setActiveStep] = useState(0);
   const fileInputRef = useRef(null);
   const profilePicInputRef = useRef(null);
-  // Menu and deactivate
   const [showMenu, setShowMenu] = useState(false);
   const [deactivateReasons, setDeactivateReasons] = useState([]);
   const [otherReason, setOtherReason] = useState('');
   const reasons = ['Not interested anymore', 'Too expensive', 'Found alternative', 'Privacy concerns', 'Technical issues', 'Other'];
-  // Guards for snapshot writes
   const didBackfillCreatedAt = useRef(false);
   const didHandleExpiry = useRef(false);
-  // Receipts history
   const [showReceiptsHistory, setShowReceiptsHistory] = useState(false);
   const [receipts, setReceipts] = useState([]);
 
-  // ─── Plans (shared with API) ──────────────────────────────────────────────
   const plans = useMemo(() => ({
     Prime: { '7 Days': 300, '15 Days': 600, '30 Days': 1000 },
     VIP:   { '7 Days': 600, '15 Days': 1200, '30 Days': 2000 },
@@ -129,6 +116,7 @@ export default function ProfileSetup() {
     const user = JSON.parse(raw);
     setLoggedInUser(user);
     const profileRef = doc(db, 'profiles', user.id);
+
     const unsub = onSnapshot(profileRef, (snap) => {
       if (snap.exists()) {
         const data = snap.data();
@@ -168,7 +156,9 @@ export default function ProfileSetup() {
         setVerificationRequested(!!data.verificationRequested);
       } else {
         setFormData((prev) => ({ ...prev, username: user.username }));
-        setFundingBalance(0); setEarningsBalance(0); setMembership('Regular');
+        setFundingBalance(0);
+        setEarningsBalance(0);
+        setMembership('Regular');
       }
       setLoading(false);
     }, (err) => {
@@ -184,8 +174,16 @@ export default function ProfileSetup() {
         const txs = await Promise.all(snapshot.docs.map(async (d) => {
           const data = d.data();
           let userName = 'Unknown';
-          try { const s = await getDoc(doc(db, 'profiles', data.userId)); userName = s.exists() ? s.data().name || 'Unknown' : 'Unknown'; } catch {}
-          return { id: d.id, userName, amount: data.amount, duration: data.durationDays || data.duration, date: data.updatedAt ? data.updatedAt.toDate().toLocaleString() : '', expiresAt: data.expiresAt ? data.expiresAt.toDate().toLocaleString() : '' };
+          try {
+            const s = await getDoc(doc(db, 'profiles', data.userId));
+            userName = s.exists() ? s.data().name || 'Unknown' : 'Unknown';
+          } catch {}
+          return {
+            id: d.id, userName, amount: data.amount,
+            duration: data.durationDays || data.duration,
+            date: data.updatedAt ? data.updatedAt.toDate().toLocaleString() : '',
+            expiresAt: data.expiresAt ? data.expiresAt.toDate().toLocaleString() : '',
+          };
         }));
         setTransactions(txs.sort((a, b) => new Date(b.date) - new Date(a.date)));
       } catch (e) { console.error('Failed to fetch transactions', e); }
@@ -198,9 +196,18 @@ export default function ProfileSetup() {
         const subs = await Promise.all(snapshot.docs.map(async (d) => {
           const data = d.data();
           let creatorName = 'Unknown', creatorPic = '';
-          try { const s = await getDoc(doc(db, 'profiles', data.creatorId)); if (s.exists()) { creatorName = s.data().name || 'Unknown'; creatorPic = s.data().profilePic || ''; } } catch {}
+          try {
+            const s = await getDoc(doc(db, 'profiles', data.creatorId));
+            if (s.exists()) { creatorName = s.data().name || 'Unknown'; creatorPic = s.data().profilePic || ''; }
+          } catch {}
           const expiresAtDate = data.expiresAt ? data.expiresAt.toDate() : null;
-          return { id: d.id, creatorId: data.creatorId, creatorName, creatorPic, amount: data.amount, duration: data.durationDays || data.duration, date: data.updatedAt ? data.updatedAt.toDate().toLocaleString() : '', expiresAt: expiresAtDate ? expiresAtDate.toLocaleString() : '', isActive: expiresAtDate && expiresAtDate > new Date() };
+          return {
+            id: d.id, creatorId: data.creatorId, creatorName, creatorPic,
+            amount: data.amount, duration: data.durationDays || data.duration,
+            date: data.updatedAt ? data.updatedAt.toDate().toLocaleString() : '',
+            expiresAt: expiresAtDate ? expiresAtDate.toLocaleString() : '',
+            isActive: expiresAtDate && expiresAtDate > new Date(),
+          };
         }));
         setMySubscriptions(subs.sort((a, b) => new Date(b.date) - new Date(a.date)));
       } catch (e) { console.error('Failed to fetch my subscriptions', e); }
@@ -210,7 +217,10 @@ export default function ProfileSetup() {
       try {
         const q = query(collection(db, 'receipts'), where('userId', '==', user.id));
         const snapshot = await getDocs(q);
-        const recs = snapshot.docs.map(d => ({ id: d.id, ...d.data(), date: d.data().createdAt ? d.data().createdAt.toDate().toLocaleString() : '' }));
+        const recs = snapshot.docs.map((d) => ({
+          id: d.id, ...d.data(),
+          date: d.data().createdAt ? d.data().createdAt.toDate().toLocaleString() : '',
+        }));
         setReceipts(recs.sort((a, b) => new Date(b.date) - new Date(a.date)));
       } catch (e) { console.error('Failed to fetch receipts', e); }
     })();
@@ -258,9 +268,8 @@ export default function ProfileSetup() {
               phone: mpesaPhone || formData.phone,
               paymentMethod: 'M-Pesa',
               status: 'Payment Successful',
-              message: 'Your profile is now LIVE and visible to all gentlemen across Kenya! ✨ Enjoy your 7 days Prime bonus and start connecting today.',
+              message: 'Your profile is now LIVE and visible to all gentlemen across Kenya! 🌟 Enjoy your 7 days Prime bonus and start connecting today.',
             });
-            // Auto redirect to homepage after receipt
             setTimeout(() => router.push('/'), 2800);
           } else if (data.ResultCode !== '4999') {
             setPaymentStatus('failed');
@@ -287,23 +296,27 @@ export default function ProfileSetup() {
     if (f.length !== 12 || !f.startsWith('2547')) throw new Error('Invalid M-Pesa phone number. Use 07XXXXXXXX format.');
     return f;
   };
-  const shortenUserId = (id) => id ? id.slice(-10) : '';
+
+  const shortenUserId = (id) => (id ? id.slice(-10) : '');
+
   const isVideo = (urlOrFile) => {
     if (!urlOrFile) return false;
     if (typeof urlOrFile === 'object' && urlOrFile.type) return urlOrFile.type.startsWith('video/');
     return /\.(mp4|webm|ogg)(\?.*)?$/i.test(String(urlOrFile));
   };
+
   const getThumbnail = (url) => {
     if (!url) return '';
     try {
       if (/\bcloudinary\.com\b/i.test(url) && /\/video\/upload\//i.test(url)) {
-        return url.replace('/video/upload/', '/image/upload/c_thumb,w_200,h_200,g_center/').replace(/\.(mp4|webm|ogg)(\?.*)?$/i, '.jpg');
+        return url
+          .replace('/video/upload/', '/image/upload/c_thumb,w_200,h_200,g_center/')
+          .replace(/\.(mp4|webm|ogg)(\?.*)?$/i, '.jpg');
       }
     } catch {}
     return url;
   };
 
-  // Get Firebase ID token for authenticated API calls
   const getIdToken = async () => {
     const currentUser = auth.currentUser;
     if (!currentUser) throw new Error('Not authenticated');
@@ -320,7 +333,8 @@ export default function ProfileSetup() {
           if (current.includes(value)) return prev;
           if (current.length >= 4) { setError('You can select up to 4 nearby locations only.'); return prev; }
           return { ...prev, nearby: [...current, value] };
-        } else { return { ...prev, nearby: current.filter((v) => v !== value) }; }
+        }
+        return { ...prev, nearby: current.filter((v) => v !== value) };
       });
       return;
     }
@@ -331,11 +345,22 @@ export default function ProfileSetup() {
       setMpesaPhone(v);
       try { formatPhoneForMpesa(v); setError(''); } catch (err) { if (v.length > 0) setError(err.message); }
     }
-    if (name === 'county') { setFormData((prev) => ({ ...prev, county: v, ward: '', area: '', nearby: [] })); setSelectedWard(''); return; }
+    if (name === 'county') {
+      setFormData((prev) => ({ ...prev, county: v, ward: '', area: '', nearby: [] }));
+      setSelectedWard('');
+      return;
+    }
     setFormData((prev) => ({ ...prev, [name]: v }));
   };
-  const handleWardChange = (e) => { const ward = e.target.value; setSelectedWard(ward); setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] })); };
+
+  const handleWardChange = (e) => {
+    const ward = e.target.value;
+    setSelectedWard(ward);
+    setFormData((prev) => ({ ...prev, ward, area: '', nearby: [] }));
+  };
+
   const handleAreaChange = (e) => setFormData((prev) => ({ ...prev, area: e.target.value }));
+
   const handleImageUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -356,12 +381,17 @@ export default function ProfileSetup() {
     setPostPreviews((prev) => [...prev, ...allowed.map((f) => URL.createObjectURL(f))]);
     setError('');
   };
+
   const handleRemovePostPreview = (index) => {
-    setPostPreviews((prev) => { const url = prev[index]; if (url) URL.revokeObjectURL(url); return prev.filter((_, i) => i !== index); });
+    setPostPreviews((prev) => {
+      const url = prev[index];
+      if (url) URL.revokeObjectURL(url);
+      return prev.filter((_, i) => i !== index);
+    });
     setPostFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // ─── Create post — NOW SAVES CAPTIONS ────────────────────────────────────
+  // ─── Create post ──────────────────────────────────────────────────────────
   const handleCreatePost = async () => {
     if (!loggedInUser || postFiles.length === 0) return;
     setPostUploading(true);
@@ -379,7 +409,8 @@ export default function ProfileSetup() {
         const res = await fetch('/api/uploadPost', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || !data.url) {
-          if (data?.error === 'Inappropriate content detected') { setShowInappropriateBanner(true); } else { throw new Error(data.error || 'Upload failed'); }
+          if (data?.error === 'Inappropriate content detected') { setShowInappropriateBanner(true); }
+          else { throw new Error(data.error || 'Upload failed'); }
           return;
         }
         uploadedUrls.push(data.url);
@@ -387,26 +418,14 @@ export default function ProfileSetup() {
 
       const fieldToUpdate = postIsExclusive ? 'exclusivePics' : 'normalPics';
       const profileRef = doc(db, 'profiles', loggedInUser.id);
-
-      // Build caption updates: postCaptions.{urlKey} = caption
-      // Only save if caption is non-empty
       const captionUpdates = {};
       if (postCaption.trim()) {
-        uploadedUrls.forEach(url => {
+        uploadedUrls.forEach((url) => {
           captionUpdates[`postCaptions.${urlToKey(url)}`] = postCaption.trim();
         });
       }
-
-      await updateDoc(profileRef, {
-        [fieldToUpdate]: arrayUnion(...uploadedUrls),
-        ...captionUpdates,
-      });
-
-      setFormData((prev) => ({
-        ...prev,
-        [fieldToUpdate]: [...(prev[fieldToUpdate] || []), ...uploadedUrls],
-      }));
-
+      await updateDoc(profileRef, { [fieldToUpdate]: arrayUnion(...uploadedUrls), ...captionUpdates });
+      setFormData((prev) => ({ ...prev, [fieldToUpdate]: [...(prev[fieldToUpdate] || []), ...uploadedUrls] }));
       postPreviews.forEach((u) => URL.revokeObjectURL(u));
       setPostPreviews([]); setPostFiles([]); setPostCaption(''); setPostIsExclusive(false); setShowCreatePostModal(false);
       alert('Post created successfully!');
@@ -424,6 +443,7 @@ export default function ProfileSetup() {
     setFormData((p) => ({ ...p, normalPics: newList }));
     await setDoc(doc(db, 'profiles', loggedInUser.id), { normalPics: newList }, { merge: true });
   };
+
   const handleRemoveExclusivePic = async (index) => {
     const newList = (formData.exclusivePics || []).filter((_, i) => i !== index);
     setFormData((p) => ({ ...p, exclusivePics: newList }));
@@ -433,8 +453,11 @@ export default function ProfileSetup() {
   // ─── Media viewer ─────────────────────────────────────────────────────────
   const handleMediaClick = (gallery, index) => {
     if (!Array.isArray(gallery) || gallery.length === 0) return;
-    setSelectedGallery(gallery); setSelectedIndex(index || 0); setShowMediaViewer(true);
+    setSelectedGallery(gallery);
+    setSelectedIndex(index || 0);
+    setShowMediaViewer(true);
   };
+
   const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
   const handleTouchEnd = (e) => {
     const touchEndX = e.changedTouches[0].clientX;
@@ -463,37 +486,49 @@ export default function ProfileSetup() {
       case 2:
         if (formData.bio.trim().split(/\s+/).length > 100) errors.push('Bio must be 100 words or less.');
         return errors;
-      default: return [];
+      default:
+        return [];
     }
   };
+
   const isStepValid = (step) => getStepErrors(step).length === 0;
   const findInvalidStep = () => { for (let i = 0; i < 3; i++) { if (!isStepValid(i)) return i; } return -1; };
+
   const handleNextStep = () => {
     const errors = getStepErrors(activeStep);
     if (errors.length === 0) { setError(''); setActiveStep((s) => Math.min(s + 1, steps.length - 1)); }
     else setError(`Please fix: ${errors.join(', ')}`);
   };
+
   const handlePrevStep = () => setActiveStep((s) => Math.max(s - 1, 0));
 
   // ─── Save profile ─────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaveLoading(true); setError('');
+    setSaveLoading(true);
+    setError('');
     const invalidStep = findInvalidStep();
     if (invalidStep !== -1) {
       setActiveStep(invalidStep);
       setError(`Please fix in ${steps[invalidStep]}: ${getStepErrors(invalidStep).join(', ')}`);
-      setSaveLoading(false); return;
+      setSaveLoading(false);
+      return;
     }
     let profilePicUrl = formData.profilePic;
     if (profilePicFile) {
       try {
-        const fd = new FormData(); fd.append('image', profilePicFile);
+        const fd = new FormData();
+        fd.append('image', profilePicFile);
         const res = await fetch('/api/uploadProfilePic', { method: 'POST', body: fd });
         const data = await res.json();
         if (!res.ok || !data.url) { setError(data.error || 'Failed to upload image.'); setSaveLoading(false); return; }
         profilePicUrl = data.url;
-      } catch (err) { console.error('profile pic upload error', err); setError('Failed to process image.'); setSaveLoading(false); return; }
+      } catch (err) {
+        console.error('profile pic upload error', err);
+        setError('Failed to process image.');
+        setSaveLoading(false);
+        return;
+      }
     }
     try {
       await setDoc(doc(db, 'profiles', loggedInUser.id), {
@@ -508,11 +543,15 @@ export default function ProfileSetup() {
       localStorage.setItem('profileSaved', 'true');
       if (!formData.activationPaid) { setShowActivationModal(true); }
       else { alert('Successful! Your profile is now live!'); router.push('/'); }
-    } catch (err) { console.error('save profile failed', err); setError('Failed to save.'); }
-    finally { setSaveLoading(false); }
+    } catch (err) {
+      console.error('save profile failed', err);
+      setError('Failed to save.');
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
-  // ─── Membership upgrade — FIXED with auth token + credit preview ──────────
+  // ─── Membership upgrade ───────────────────────────────────────────────────
   const handleUpgrade = (level) => {
     setSelectedLevel(level);
     setSelectedDuration('');
@@ -525,8 +564,6 @@ export default function ProfileSetup() {
     setUpgradePreview(null);
     setPreviewLoading(true);
     setShowModal(false);
-
-    // Fetch credit preview from API
     try {
       const token = await getIdToken();
       const res = await fetch('/api/calculateUpgradePrice', {
@@ -537,10 +574,8 @@ export default function ProfileSetup() {
       if (res.ok) {
         const preview = await res.json();
         setUpgradePreview(preview);
-        // Auto-select payment method based on effective price
         setSelectedPaymentMethod(fundingBalance >= preview.effectivePrice ? 'wallet' : 'mpesa');
       } else {
-        // Fallback to full price if preview API fails
         setSelectedPaymentMethod(fundingBalance >= plans[selectedLevel][d] ? 'wallet' : 'mpesa');
       }
     } catch {
@@ -548,44 +583,31 @@ export default function ProfileSetup() {
     } finally {
       setPreviewLoading(false);
     }
-
     setShowPaymentChoice(true);
   };
 
   const handlePaymentMethodChange = (m) => setSelectedPaymentMethod(m);
 
-  // ─── Wallet upgrade — FIXED with auth token + isMpesa: false ─────────────
   const handleConfirmWalletUpgrade = async () => {
     setUpgradeLocked(true);
     const effectivePrice = upgradePreview?.effectivePrice ?? plans[selectedLevel][selectedDuration];
     const fullPrice = upgradePreview?.fullPrice ?? effectivePrice;
     const credit = upgradePreview?.credit ?? 0;
-
     const confirmMsg = credit > 0
       ? `Upgrade to ${selectedLevel} for ${selectedDuration}.\nFull price: KSh ${fullPrice}\nCredit for remaining days: KSh ${credit}\nYou pay: KSh ${effectivePrice}\n\nProceed?`
       : upgradePreview?.willExtend
       ? `Extend ${selectedLevel} by ${selectedDuration}. You pay: KSh ${effectivePrice}\n\nProceed?`
       : `Upgrade to ${selectedLevel} for ${selectedDuration}. You pay: KSh ${effectivePrice}\n\nProceed?`;
-
     if (!confirm(confirmMsg)) { setUpgradeLocked(false); return; }
-
     try {
       const token = await getIdToken();
       const res = await fetch('/api/upgradeMembership', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,   // ← FIXED: auth token
-        },
-        body: JSON.stringify({
-          level: selectedLevel,
-          duration: selectedDuration,
-          isMpesa: false,                        // ← wallet payment
-        }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ level: selectedLevel, duration: selectedDuration, isMpesa: false }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Upgrade failed');
-
       showPaymentReceipt({
         type: 'upgrade', title: 'Membership Upgrade Receipt',
         membership: selectedLevel, duration: selectedDuration,
@@ -609,7 +631,7 @@ export default function ProfileSetup() {
     }
   };
 
-  // ─── Other handlers (unchanged) ───────────────────────────────────────────
+  // ─── Other handlers ───────────────────────────────────────────────────────
   const handleRequestVerification = async () => {
     if (verificationRequested || formData.verified) { alert('Verification already requested or verified.'); return; }
     try {
@@ -618,7 +640,9 @@ export default function ProfileSetup() {
       alert('Request sent. Admin will review.');
     } catch { setError('Failed to request verification.'); }
   };
+
   const handleAddFund = () => setShowAddFundModal(true);
+
   const handleWithdraw = async () => {
     try {
       if (!formData.phone) throw new Error('Add phone first.');
@@ -627,25 +651,50 @@ export default function ProfileSetup() {
       const formattedPhone = formatPhoneForMpesa(formData.phone);
       if (!confirm(`Withdraw KSh ${amount} to ${formattedPhone}?`)) return;
       setWithdrawLoading(true);
-      const res = await fetch('/api/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount, phoneNumber: formattedPhone }) });
+      const res = await fetch('/api/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, phoneNumber: formattedPhone }),
+      });
       const data = await res.json();
       if (data.success) { alert('Withdrawal initiated!'); setShowWithdrawModal(false); setWithdrawAmount(''); }
       else alert('Failed: ' + (data.message || 'Error'));
     } catch (err) { alert(err.message || 'Failed. Try again.'); }
     finally { setWithdrawLoading(false); }
   };
+
   const handleViewCreatorProfile = (creatorId) => router.push(`/profiles/${creatorId}`);
-  const handleLogout = async () => { localStorage.removeItem('loggedInUser'); setLoggedInUser(null); await signOut(auth); router.push('/'); };
-  const handleReasonChange = (e, reason) => { const checked = e.target.checked; setDeactivateReasons((prev) => (checked ? [...prev, reason] : prev.filter((r) => r !== reason))); };
+
+  const handleLogout = async () => {
+    localStorage.removeItem('loggedInUser');
+    setLoggedInUser(null);
+    await signOut(auth);
+    router.push('/');
+  };
+
+  const handleReasonChange = (e, reason) => {
+    const checked = e.target.checked;
+    setDeactivateReasons((prev) => (checked ? [...prev, reason] : prev.filter((r) => r !== reason)));
+  };
+
   const handleDeactivateAccount = async () => {
     if (deactivateReasons.length === 0) { alert('Please select at least one reason.'); return; }
     if (!confirm('Deactivating your account will make your profile invisible. Reactivation will require the activation fee again.')) return;
     try {
-      await updateDoc(doc(db, 'profiles', loggedInUser.id), { hidden: true, activationPaid: false, membership: 'Regular', membershipExpiresAt: null });
+      await updateDoc(doc(db, 'profiles', loggedInUser.id), {
+        hidden: true, activationPaid: false, membership: 'Regular', membershipExpiresAt: null,
+      });
       handleLogout();
-    } catch (err) { console.error('Deactivate account failed', err); alert('Failed to deactivate. Please try again.'); }
+    } catch (err) {
+      console.error('Deactivate account failed', err);
+      alert('Failed to deactivate. Please try again.');
+    }
   };
-  const handleActivate = () => { if (!formData.activationPaid) { setShowActivationModal(true); setPaymentStatus('idle'); setActivationLocked(false); } };
+
+  const handleActivate = () => {
+    if (!formData.activationPaid) { setShowActivationModal(true); setPaymentStatus('idle'); setActivationLocked(false); }
+  };
+
   const handlePaymentInitiated = (requestId) => { setCheckoutRequestID(requestId); setPaymentStatus('initiated'); setActivationLocked(true); };
   const handlePaymentFailure = () => { setPaymentStatus('failed'); setActivationLocked(false); };
 
@@ -677,7 +726,10 @@ export default function ProfileSetup() {
           {showMenu && (
             <div className={styles.dropdown}>
               <ul>
-                <li onClick={() => { setShowMenu(false); formData.activationPaid ? setShowDeactivationModal(true) : setShowActivationModal(true); }}>
+                <li onClick={() => {
+                  setShowMenu(false);
+                  formData.activationPaid ? setShowDeactivationModal(true) : setShowActivationModal(true);
+                }}>
                   {formData.activationPaid ? 'Deactivate Account' : 'Activate Account'}
                 </li>
               </ul>
@@ -691,8 +743,11 @@ export default function ProfileSetup() {
 
           {/* Sidebar */}
           <aside className={`${styles.membershipSection} ${styles.premiumSidebar}`}>
-            <button onClick={() => router.push(`/view-profile/${loggedInUser?.id}`)} className={styles.upgradeButton}
-              style={{ marginBottom: '20px', background: 'linear-gradient(135deg, #ff69b4, #ff1493)', color: 'white', fontWeight: 'bold' }}>
+            <button
+              onClick={() => router.push(`/view-profile/${loggedInUser?.id}`)}
+              className={styles.upgradeButton}
+              style={{ marginBottom: '20px', background: 'linear-gradient(135deg, #ff69b4, #ff1493)', color: 'white', fontWeight: 'bold' }}
+            >
               👤 My Profile
             </button>
             <h2 className={styles.sectionTitle}>My Membership</h2>
@@ -711,8 +766,11 @@ export default function ProfileSetup() {
 
             <div className={styles.stepper}>
               {steps.map((s, idx) => (
-                <button key={s} onClick={() => { if (idx < activeStep || isStepValid(activeStep - 1)) setActiveStep(idx); }}
-                  className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}>
+                <button
+                  key={s}
+                  onClick={() => { if (idx < activeStep || isStepValid(activeStep - 1)) setActiveStep(idx); }}
+                  className={idx === activeStep ? styles.activeStep : idx < activeStep ? styles.completedStep : ''}
+                >
                   {s}
                 </button>
               ))}
@@ -721,20 +779,27 @@ export default function ProfileSetup() {
             {error && <p className={styles.error}>{error}</p>}
 
             <form onSubmit={handleSubmit} className={styles.profileForm}>
+
               {/* Step 0: Basics */}
               {activeStep === 0 && (
                 <div className={styles.stepContent}>
                   <h2>Basics</h2>
                   <label className={styles.label}>
                     Profile Picture (Required)
-                    <button type="button" onClick={() => profilePicInputRef.current.click()} className={styles.button}>Upload Profile Picture</button>
+                    <button type="button" onClick={() => profilePicInputRef.current.click()} className={styles.button}>
+                      Upload Profile Picture
+                    </button>
                     <input type="file" accept="image/*" onChange={handleImageUpload} ref={profilePicInputRef} style={{ display: 'none' }} />
                     {(profilePicPreview || formData.profilePic) && (
                       <Image src={profilePicPreview || formData.profilePic} alt="Profile preview" width={150} height={150} className={styles.profilePic} />
                     )}
                   </label>
-                  <label className={styles.label}>Name<input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required style={inputStyle} /></label>
-                  <label className={styles.label}>Phone (e.g., 0712345678)<input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required style={inputStyle} /></label>
+                  <label className={styles.label}>Name
+                    <input type="text" name="name" value={formData.name} onChange={handleChange} className={styles.input} required style={inputStyle} />
+                  </label>
+                  <label className={styles.label}>Phone (e.g., 0712345678)
+                    <input type="text" name="phone" value={formData.phone} onChange={handleChange} className={styles.input} required style={inputStyle} />
+                  </label>
                   <label className={styles.label}>Gender
                     <select name="gender" value={formData.gender} onChange={handleChange} className={styles.select} style={inputStyle}>
                       <option value="Female">Female</option>
@@ -749,8 +814,12 @@ export default function ProfileSetup() {
                       <option value="Other">Other</option>
                     </select>
                   </label>
-                  <label className={styles.label}>Age (18+)<input type="number" name="age" min="18" max="90" value={formData.age} onChange={handleChange} className={styles.input} required style={inputStyle} /></label>
-                  <label className={styles.label}>Nationality<input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} style={inputStyle} /></label>
+                  <label className={styles.label}>Age (18+)
+                    <input type="number" name="age" min="18" max="90" value={formData.age} onChange={handleChange} className={styles.input} required style={inputStyle} />
+                  </label>
+                  <label className={styles.label}>Nationality
+                    <input type="text" name="nationality" value={formData.nationality} onChange={handleChange} className={styles.input} style={inputStyle} />
+                  </label>
                 </div>
               )}
 
@@ -781,7 +850,13 @@ export default function ProfileSetup() {
                       <div className={styles.checkboxGroup}>
                         {areas.map((place) => (
                           <div key={place}>
-                            <input type="checkbox" value={place} checked={(formData.nearby || []).includes(place)} onChange={handleChange} name="nearby" />
+                            <input
+                              type="checkbox"
+                              value={place}
+                              checked={(formData.nearby || []).includes(place)}
+                              onChange={handleChange}
+                              name="nearby"
+                            />
                             <span>{place}</span>
                           </div>
                         ))}
@@ -835,8 +910,13 @@ export default function ProfileSetup() {
                     <button onClick={() => setShowEarningsHistory(true)} className={styles.historyButton}>View Purchases</button>
                   </div>
                   <button onClick={() => setShowReceiptsHistory(true)} className={styles.historyButton}>View Receipts</button>
-                  <button type="button" onClick={handleRequestVerification} className={styles.button} disabled={verificationRequested || formData.verified}>
-                    {formData.verified ? 'Verified' : verificationRequested ? 'Pending' : 'Request Verification'}
+                  <button
+                    type="button"
+                    onClick={handleRequestVerification}
+                    className={styles.button}
+                    disabled={verificationRequested || formData.verified}
+                  >
+                    {formData.verified ? 'Verified ✓' : verificationRequested ? 'Pending' : 'Request Verification'}
                   </button>
                 </div>
               )}
@@ -855,6 +935,7 @@ export default function ProfileSetup() {
                   <button type="button" onClick={handleActivate} className={styles.button}>Activate</button>
                 )}
               </div>
+
             </form>
           </div>
         </div>
@@ -864,8 +945,8 @@ export default function ProfileSetup() {
           <div className={styles.mediaViewerOverlay}>
             <div className={styles.viewerContainer} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
               <button className={styles.viewerClose} onClick={() => setShowMediaViewer(false)}>×</button>
-              <button className={styles.viewerLeft} onClick={() => setSelectedIndex(prev => prev > 0 ? prev - 1 : selectedGallery.length - 1)}>‹</button>
-              <button className={styles.viewerRight} onClick={() => setSelectedIndex(prev => prev < selectedGallery.length - 1 ? prev + 1 : 0)}>›</button>
+              <button className={styles.viewerLeft} onClick={() => setSelectedIndex((prev) => (prev > 0 ? prev - 1 : selectedGallery.length - 1))}>‹</button>
+              <button className={styles.viewerRight} onClick={() => setSelectedIndex((prev) => (prev < selectedGallery.length - 1 ? prev + 1 : 0))}>›</button>
               <div className={styles.viewerContent}>
                 {isVideo(selectedGallery[selectedIndex]) ? (
                   <video src={selectedGallery[selectedIndex]} controls autoPlay playsInline className={styles.viewerMedia} />
@@ -879,109 +960,78 @@ export default function ProfileSetup() {
           </div>
         )}
 
-        {/* ── CLEAN ACTIVATION MODAL ── */}
+        {/* ── Activation Modal ── */}
         {showActivationModal && (
           <div className={styles.modal}>
-            <div className={styles.modalContent} style={{ maxWidth: '460px' }}>
-              {/* Header */}
-              <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-                <div style={{ fontSize: '52px', lineHeight: 1 }}>🎉</div>
-                <h3 style={{ color: '#ff1493', margin: '12px 0 6px', fontSize: '1.65rem' }}>
-                  Activate Your Profile!
-                </h3>
-                <p style={{ fontSize: '1.25rem', fontWeight: '700', color: '#333' }}>
-                  KSh 300 <span style={{ fontSize: '1rem', fontWeight: '400' }}>one-time only</span>
-                </p>
-              </div>
+            <div className={styles.modalContent} style={{ maxWidth: '400px', textAlign: 'center' }}>
 
-              {/* Benefits */}
-              <div style={{
-                background: '#ffffff',
-                padding: '20px',
-                borderRadius: '16px',
-                marginBottom: '24px',
-                boxShadow: '0 4px 15px rgba(255, 20, 147, 0.08)'
+              {/* Title */}
+              <h3 style={{
+                color: '#ff1493',
+                fontSize: '1.6rem',
+                fontWeight: '800',
+                margin: '0 0 12px',
               }}>
-                <p style={{ margin: '0 0 14px', fontWeight: '600', color: '#222' }}>This will instantly:</p>
-                <ul style={{ paddingLeft: '22px', margin: 0, lineHeight: '1.65' }}>
-                  <li>✅ Make your profile visible to <strong>ALL gentlemen</strong> in Kenya</li>
-                  <li>✅ Give you <strong>lifetime visibility</strong> (no monthly fees)</li>
-                  <li>✅ Unlock <strong>7 Days Prime membership </strong></li>
-                  <li>✅ Let you start receiving messages & calls today</li>
-                </ul>
+                Activate Your Profile!
+              </h3>
+
+              {/* Subtitle note */}
+              <p style={{
+                fontSize: '0.85rem',
+                color: '#777',
+                margin: '0 0 32px',
+                lineHeight: '1.5',
+              }}>
+                Once your membership expires it reverts to regular membership till you update it to a higher membership again.
+              </p>
+
+              {/* Tier buttons */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                {[
+                  { level: 'Prime',  color: '#e91e8c', desc: '7 Days — KSh 300' },
+                  { level: 'VIP',    color: '#9c27b0', desc: '7 Days — KSh 600' },
+                  { level: 'VVIP',   color: '#f44336', desc: '7 Days — KSh 900' },
+                ].map(({ level, color, desc }) => (
+                  <button
+                    key={level}
+                    onClick={() => { setShowActivationModal(false); setPaymentStatus('idle'); handleUpgrade(level); }}
+                    style={{
+                      background: `linear-gradient(135deg, ${color}, ${color}cc)`,
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '14px 20px',
+                      fontSize: '1rem',
+                      fontWeight: '700',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      boxShadow: `0 4px 12px ${color}55`,
+                    }}
+                  >
+                    <span>Activate with {level}</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: '400', opacity: 0.9 }}>{desc}</span>
+                  </button>
+                ))}
               </div>
 
-              {/* Payment */}
-              {paymentStatus === 'initiated' ? (
-                <p style={{ textAlign: 'center', color: '#ff1493', fontWeight: 'bold', padding: '20px 0' }}>
-                  ⏳ Waiting for M-Pesa confirmation...<br />
-                  <small>Check your phone now</small>
-                </p>
-              ) : (
-                <StkPushForm
-                  initialPhone={mpesaPhone}
-                  initialAmount={ACTIVATION_FEE}
-                  readOnlyAmount={true}
-                  apiEndpoint="/api/stkpush"
-                  onInitiated={handlePaymentInitiated}
-                  onFailure={handlePaymentFailure}
-                  additionalBody={{
-                    userId: loggedInUser.id,
-                    type: 'activation',
-                    accountReference: `act_${loggedInUser.id.slice(0, 8)}`,
-                    transactionDesc: 'Profile Activation + 7 Days Prime Welcome'
-                  }}
-                />
-              )}
-
-              {paymentStatus === 'failed' && (
-                <p style={{ color: 'red', textAlign: 'center', margin: '12px 0' }}>
-                  Payment failed. Please try again.
-                </p>
-              )}
-
-              {/* Subtle higher plan upsell */}
-              <div style={{ marginTop: '32px', textAlign: 'center', borderTop: '1px solid #eee', paddingTop: '20px' }}>
-                <p style={{ fontSize: '0.92rem', color: '#555', marginBottom: '12px' }}>
-                  Want faster earnings & more visibility?
-                </p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <button
-                    onClick={() => { setShowActivationModal(false); setPaymentStatus('idle'); handleUpgrade('Prime'); }}
-                    className={styles.upgradeButton}
-                    disabled={activationLocked || paymentStatus === 'initiated'}
-                    style={{ fontSize: '0.92rem', padding: '10px 18px' }}
-                  >
-                    Activate with Prime
-                  </button>
-                  <button
-                    onClick={() => { setShowActivationModal(false); setPaymentStatus('idle'); handleUpgrade('VIP'); }}
-                    className={styles.upgradeButton}
-                    disabled={activationLocked || paymentStatus === 'initiated'}
-                    style={{ fontSize: '0.92rem', padding: '10px 18px' }}
-                  >
-                    Activate with VIP
-                  </button>
-                  <button
-                    onClick={() => { setShowActivationModal(false); setPaymentStatus('idle'); handleUpgrade('VVIP'); }}
-                    className={styles.upgradeButton}
-                    disabled={activationLocked || paymentStatus === 'initiated'}
-                    style={{ fontSize: '0.92rem', padding: '10px 18px' }}
-                  >
-                    Activate with VVIP
-                  </button>
-                </div>
-              </div>
-
-              {/* Later */}
+              {/* Maybe later */}
               <button
                 onClick={() => setShowActivationModal(false)}
-                className={styles.closeButton}
-                disabled={activationLocked || paymentStatus === 'initiated'}
-                style={{ marginTop: '20px' }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#aaa',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  padding: '4px',
+                }}
               >
                 Maybe later (profile stays hidden)
               </button>
+
             </div>
           </div>
         )}
@@ -993,7 +1043,11 @@ export default function ProfileSetup() {
               <h3>Upgrade to {selectedLevel}</h3>
               <div className={styles.durationOptions}>
                 {Object.keys(plans[selectedLevel] || {}).map((d) => (
-                  <button key={d} onClick={() => handleDurationSelect(d)} className={selectedDuration === d ? styles.selectedDuration : ''}>
+                  <button
+                    key={d}
+                    onClick={() => handleDurationSelect(d)}
+                    className={selectedDuration === d ? styles.selectedDuration : ''}
+                  >
                     {d} — KSh {plans[selectedLevel][d]}
                   </button>
                 ))}
@@ -1009,14 +1063,13 @@ export default function ProfileSetup() {
             <div className={styles.modalContent}>
               <h3>Payment for {selectedLevel} — {selectedDuration}</h3>
 
-              {/* ── Credit / price preview ── */}
               {previewLoading ? (
                 <p style={{ color: '#888', fontSize: '0.9rem' }}>Calculating price...</p>
               ) : upgradePreview ? (
                 <div style={{ background: '#fff8f0', border: '1px solid #ffcc88', borderRadius: 10, padding: '12px 16px', marginBottom: 14, fontSize: '0.9rem' }}>
                   {upgradePreview.willExtend ? (
                     <p style={{ margin: 0, color: '#555' }}>
-                      ✅ You already have <strong>{upgradePreview.remainingDays} days</strong> of {upgradePreview.currentTier} remaining — this will <strong>extend</strong> your membership.
+                      ⏳ You already have <strong>{upgradePreview.remainingDays} days</strong> of {upgradePreview.currentTier} remaining — this will <strong>extend</strong> your membership.
                     </p>
                   ) : upgradePreview.credit > 0 ? (
                     <>
@@ -1063,7 +1116,11 @@ export default function ProfileSetup() {
                     });
                     setShowPaymentChoice(false);
                   }}
-                  additionalBody={{ userId: loggedInUser.id, type: 'upgrade', level: selectedLevel, duration: selectedDuration, isMpesa: true, accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`, transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}` }}
+                  additionalBody={{
+                    userId: loggedInUser.id, type: 'upgrade', level: selectedLevel, duration: selectedDuration, isMpesa: true,
+                    accountReference: `upg_${shortenUserId(loggedInUser.id)}_${selectedLevel.slice(0, 3)}`,
+                    transactionDesc: `Upgrade to ${selectedLevel} for ${selectedDuration}`,
+                  }}
                 />
               )}
 
@@ -1072,7 +1129,10 @@ export default function ProfileSetup() {
                   {upgradeLocked ? 'Processing...' : 'Confirm'}
                 </button>
               )}
-              <button onClick={() => { setShowPaymentChoice(false); setUpgradePreview(null); }} className={styles.closeButton} disabled={upgradeLocked}>Close</button>
+
+              <button onClick={() => { setShowPaymentChoice(false); setUpgradePreview(null); }} className={styles.closeButton} disabled={upgradeLocked}>
+                Close
+              </button>
             </div>
           </div>
         )}
@@ -1102,7 +1162,9 @@ export default function ProfileSetup() {
               <h3>Withdraw</h3>
               <p>Available: KSh {earningsBalance}</p>
               <input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} min="1" max={earningsBalance} className={styles.input} style={inputStyle} />
-              <button onClick={handleWithdraw} className={styles.withdrawButton} disabled={withdrawLoading}>{withdrawLoading ? 'Processing...' : 'Withdraw'}</button>
+              <button onClick={handleWithdraw} className={styles.withdrawButton} disabled={withdrawLoading}>
+                {withdrawLoading ? 'Processing...' : 'Withdraw'}
+              </button>
               <button onClick={() => setShowWithdrawModal(false)} className={styles.closeButton} disabled={withdrawLoading}>Cancel</button>
             </div>
           </div>
@@ -1113,10 +1175,20 @@ export default function ProfileSetup() {
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>Purchase History</h3>
-              {transactions.length === 0 ? <p>No subscriptions.</p> : (
+              {transactions.length === 0 ? (
+                <p>No subscriptions.</p>
+              ) : (
                 <table className={styles.historyTable}>
-                  <thead><tr><th>User</th><th>Amount</th><th>Duration</th><th>Date</th><th>Expires</th></tr></thead>
-                  <tbody>{transactions.map((tx) => (<tr key={tx.id}><td>{tx.userName}</td><td>{tx.amount}</td><td>{tx.duration}</td><td>{tx.date}</td><td>{tx.expiresAt}</td></tr>))}</tbody>
+                  <thead>
+                    <tr><th>User</th><th>Amount</th><th>Duration</th><th>Date</th><th>Expires</th></tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map((tx) => (
+                      <tr key={tx.id}>
+                        <td>{tx.userName}</td><td>{tx.amount}</td><td>{tx.duration}</td><td>{tx.date}</td><td>{tx.expiresAt}</td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               )}
               <button onClick={() => setShowMySubscriptions(true)} className={styles.historyButton}>My Exclusive Subscriptions</button>
@@ -1130,11 +1202,17 @@ export default function ProfileSetup() {
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>My Exclusive Subscriptions</h3>
-              {mySubscriptions.length === 0 ? <p>No active subscriptions.</p> : (
+              {mySubscriptions.length === 0 ? (
+                <p>No active subscriptions.</p>
+              ) : (
                 <div className={styles.subscriptionList}>
                   {mySubscriptions.map((sub) => (
                     <div key={sub.id} className={styles.subscriptionItem} onClick={() => handleViewCreatorProfile(sub.creatorId)}>
-                      {sub.creatorPic ? (<Image src={sub.creatorPic} alt={sub.creatorName} width={50} height={50} className={styles.subProfilePic} />) : (<div className={styles.subPlaceholderPic}>No Pic</div>)}
+                      {sub.creatorPic ? (
+                        <Image src={sub.creatorPic} alt={sub.creatorName} width={50} height={50} className={styles.subProfilePic} />
+                      ) : (
+                        <div className={styles.subPlaceholderPic}>No Pic</div>
+                      )}
                       <div className={styles.subDetails}>
                         <h4>{sub.creatorName}</h4>
                         <p>Amount: KSh {sub.amount}</p>
@@ -1143,7 +1221,7 @@ export default function ProfileSetup() {
                         <p>Expires: {sub.expiresAt}</p>
                         <p>Status: {sub.isActive ? 'Active' : 'Expired'}</p>
                       </div>
-                      <button className={styles.viewButton}>View Profile & Exclusive Content</button>
+                      <button className={styles.viewButton}>View Profile &amp; Exclusive Content</button>
                     </div>
                   ))}
                 </div>
@@ -1158,10 +1236,20 @@ export default function ProfileSetup() {
           <div className={styles.modal}>
             <div className={styles.modalContent}>
               <h3>Receipt History</h3>
-              {receipts.length === 0 ? <p>No receipts.</p> : (
+              {receipts.length === 0 ? (
+                <p>No receipts.</p>
+              ) : (
                 <table className={styles.historyTable}>
-                  <thead><tr><th>Type</th><th>Membership</th><th>Amount</th><th>Date</th><th>Status</th></tr></thead>
-                  <tbody>{receipts.map((rec) => (<tr key={rec.id}><td>{rec.type}</td><td>{rec.membership || 'N/A'}</td><td>KSh {rec.amount}</td><td>{rec.date}</td><td>{rec.status}</td></tr>))}</tbody>
+                  <thead>
+                    <tr><th>Type</th><th>Membership</th><th>Amount</th><th>Date</th><th>Status</th></tr>
+                  </thead>
+                  <tbody>
+                    {receipts.map((rec) => (
+                      <tr key={rec.id}>
+                        <td>{rec.type}</td><td>{rec.membership || 'N/A'}</td><td>KSh {rec.amount}</td><td>{rec.date}</td><td>{rec.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               )}
               <button onClick={() => setShowReceiptsHistory(false)} className={styles.closeButton}>Close</button>
@@ -1230,7 +1318,13 @@ export default function ProfileSetup() {
                 <button onClick={handleCreatePost} disabled={postFiles.length === 0 || postUploading} className={styles.button}>
                   {postUploading ? 'Posting...' : 'Post'}
                 </button>
-                <button onClick={() => { postPreviews.forEach((u) => URL.revokeObjectURL(u)); setPostPreviews([]); setPostFiles([]); setPostCaption(''); setShowCreatePostModal(false); }} className={styles.closeButton}>
+                <button
+                  onClick={() => {
+                    postPreviews.forEach((u) => URL.revokeObjectURL(u));
+                    setPostPreviews([]); setPostFiles([]); setPostCaption(''); setShowCreatePostModal(false);
+                  }}
+                  className={styles.closeButton}
+                >
                   Cancel
                 </button>
               </div>
@@ -1289,13 +1383,13 @@ export default function ProfileSetup() {
           <div className={styles.modal}>
             <div className={styles.receiptModalContent}>
               <div className={styles.receiptHeader}>
-                <h2>✅ Payment Receipt</h2>
+                <h2>🧾 Payment Receipt</h2>
                 <p className={styles.receiptCompany}>Meet Connect</p>
                 <p className={styles.receiptTagline}>Official Transaction Receipt</p>
               </div>
               <div className={styles.receiptBody}>
                 <div className={styles.receiptRow}><span>Transaction ID</span><span className={styles.mono}>{receipt.reference}</span></div>
-                <div className={styles.receiptRow}><span>Date & Time</span><span>{receipt.date}</span></div>
+                <div className={styles.receiptRow}><span>Date &amp; Time</span><span>{receipt.date}</span></div>
                 <div className={styles.receiptRow}><span>Payment Method</span><span>{receipt.paymentMethod}</span></div>
                 <div className={styles.receiptRow}><span>Phone / Wallet</span><span>{receipt.phone}</span></div>
                 <div className={styles.receiptDivider} />
@@ -1324,6 +1418,7 @@ export default function ProfileSetup() {
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
